@@ -88,7 +88,7 @@ class Agent:
                 for target_name in self.relations:
                     self.relations[target_name]['trust'] -= 1
 
-            if name == "love_alienation" and emotion_value > 1:
+            if name == "kindness_alienation" and emotion_value > 1:
                 for target_name in self.relations:
                     self.relations[target_name]['trust'] += 1
                     self.relations[target_name]['affinity'] += 1
