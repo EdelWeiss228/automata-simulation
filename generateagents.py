@@ -2,7 +2,6 @@ import pandas as pd
 import random
 
 def generate_emotions():
-    emotion_values = ['очень позитивно', 'позитивно', 'нейтрально', 'негативно', 'очень негативно']
     return {
         "joy_sadness": random.randint(-3, 3),
         "fear_calm": random.randint(-3, 3),
@@ -53,7 +52,7 @@ def generate_agents(agent_count=1000):
 
     for i in range(agent_count):
         agent_name = i+1
-        emotions = generate_emotions()
+        emotion_dict = generate_emotions()
 
         sensitivity = random.uniform(0, 1)
         
@@ -61,7 +60,7 @@ def generate_agents(agent_count=1000):
         
         agent_data = {
             "name": agent_name,
-            **emotions,
+            "emotions": emotion_dict,
             "sensitivity": round(sensitivity, 2),
             "relationships": predicates
         }
@@ -69,11 +68,11 @@ def generate_agents(agent_count=1000):
 
     for i in range(agent_count, agent_count + 100):
         agent_name = i+1
-        emotions = generate_emotions()
+        emotion_dict = generate_emotions()
         sensitivity = random.uniform(0, 1)
         agent_data = {
             "name": agent_name,
-            **emotions,
+            "emotions": emotion_dict,
             "sensitivity": round(sensitivity, 2),
             "relationships": {}  
         }
