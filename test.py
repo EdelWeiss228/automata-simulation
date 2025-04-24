@@ -23,8 +23,8 @@ relations_data = {
 
 group = Collective(agents_data=agents_data, relations_data=relations_data)
 
-player = Player(name="Player1", group=group)
-group.add_player(player)
+# player = Player(name="Player1", group=group)
+# group.add_player(player)
 
 for day in range(1, 7):
     print(f"\nДень {day}:")

@@ -1,6 +1,8 @@
 import random
 from agent import Agent
 from player import Player
+import csv
+import os
 
 class Collective:
     def __init__(self, agents_data=None, relations_data=None, players_data=None):
@@ -10,6 +12,7 @@ class Collective:
         if agents_data:
             for agent_name, agent_initial_data in agents_data:
                 agent = Agent(agent_name, **agent_initial_data)  
+                agent.group = self
                 self.add_agent(agent)
 
         if relations_data:
@@ -20,6 +23,17 @@ class Collective:
             for player_data in players_data:
                 player = Player(**player_data)  
                 self.add_player(player)
+
+        # Установим нулевые отношения ко всем, кто ещё не добавлен в relations
+        for agent in self.agents.values():
+            for other_name in self.agents:
+                if other_name != agent.name and other_name not in agent.relations:
+                    agent.relations[other_name] = {
+                        'utility': 0,
+                        'affinity': 0,
+                        'trust': 0,
+                        'responsiveness': 0
+                    }
 
     def add_agent(self, agent):
         self.agents[agent.name] = agent
@@ -42,6 +56,7 @@ class Collective:
 
     def introduce_new_agent(self, new_agent):
         self.add_agent(new_agent)
+        new_agent.group = self
 
         for other_name, other_agent in self.agents.items():
             if other_name == new_agent.name:
@@ -58,6 +73,9 @@ class Collective:
             other_agent.update_relation(new_agent.name, utility=utility, affinity=affinity, trust=trust)
 
     def get_agent(self, name):
+        return self.agents.get(name)
+    
+    def get_agent_by_name(self, name):
         return self.agents.get(name)
 
     def update_relation(self, subject_name, object_name, utility, affinity, trust):
@@ -78,22 +96,119 @@ class Collective:
         }
 
     def make_interaction_decision(self):
+        interacted_agents = set()
+        decisions = []
         for agent in self.agents.values():
+            if agent.name in interacted_agents:
+                continue
             print(f"\n{agent.name} принимает решение о взаимодействии:")
-            candidates = sorted(agent.relations.items(), key=lambda x: (x[1]['affinity'], x[1]['utility']), reverse=True)
-            if candidates:
-                target, metrics = candidates[0]
-                print(f"{agent.name} предпочитает взаимодействовать с {target} (симпатия={metrics['affinity']}, выгода={metrics['utility']})")
+            # Classify relations into categories
+            mandatory = []
+            optional = []
+            avoid = []
+            for target_name, metrics in agent.relations.items():
+                category = agent.classify_relationship(target_name)
+                if category == "mandatory":
+                    mandatory.append((target_name, metrics))
+                elif category == "optional":
+                    optional.append((target_name, metrics))
+                else:
+                    avoid.append((target_name, metrics))
+            chosen = None
+            if mandatory:
+                # Choose highest affinity and utility among mandatory
+                chosen = max(mandatory, key=lambda x: (x[1]['affinity'], x[1]['utility']))
+            elif optional:
+                # Choose highest affinity and utility among optional
+                chosen = max(optional, key=lambda x: (x[1]['affinity'], x[1]['utility']))
             else:
-                print(f"{agent.name} никого не выбрал.")
+                print(f"{agent.name} решил отказаться от взаимодействия сегодня.")
+                # Decrease trust for all relations since agent refused interaction
+                for target_name in agent.relations.keys():
+                    agent.relations[target_name]['trust'] = agent.relations[target_name].get('trust', 0) - 1
+                # Inform other agents about refusal and update their relations accordingly
+                for other_agent in self.agents.values():
+                    if other_agent.name != agent.name and agent.name in other_agent.relations:
+                        other_agent.relations[agent.name]['trust'] = other_agent.relations[agent.name].get('trust', 0) - 1
+                decisions.append({'agent': agent.name, 'decision': 'refused', 'target': None, 'success': None})
+                continue
+            target, metrics = chosen
+            target_agent = self.get_agent(target)
+            # Проверка согласия цели на взаимодействие
+            if target_agent.classify_relationship(agent.name) == "avoid":
+                print(f"{target_agent.name} отказался взаимодействовать с {agent.name}.")
+                agent.relations[target]['trust'] = max(-10, agent.relations[target].get('trust', 0) - 2)
+                target_agent.relations[agent.name]['trust'] = max(-10, target_agent.relations[agent.name].get('trust', 0) - 2)
+                decisions.append({'agent': agent.name, 'decision': 'interaction_denied', 'target': target, 'success': False})
+                continue
+            print(f"{agent.name} предпочитает взаимодействовать с {target} (симпатия={metrics['affinity']}, выгода={metrics['utility']})")
+            success = (metrics['affinity'] > 0 and metrics['utility'] > 0)
+            if success:
+                print(f"Взаимодействие между {agent.name} и {target} прошло УСПЕШНО.")
+            else:
+                print(f"Взаимодействие между {agent.name} и {target} НЕУДАЧНО.")
+            # Оценка успешности взаимодействия
+            sensitivity = getattr(agent, "responsiveness", 1.0)
+
+            if success:
+                delta = int(2 * sensitivity)
+                agent.relations[target]['trust'] = min(10, agent.relations[target].get('trust', 0) + delta)
+                agent.relations[target]['affinity'] = min(10, agent.relations[target].get('affinity', 0) + int(1 * sensitivity))
+                agent.relations[target]['utility'] = min(10, agent.relations[target].get('utility', 0) + int(1 * sensitivity))
+                if target_agent.name in target_agent.relations:
+                    target_agent.relations[agent.name]['trust'] = min(10, target_agent.relations[agent.name].get('trust', 0) + delta)
+                    target_agent.relations[agent.name]['affinity'] = min(10, target_agent.relations[agent.name].get('affinity', 0) + int(1 * sensitivity))
+                    target_agent.relations[agent.name]['utility'] = min(10, target_agent.relations[agent.name].get('utility', 0) + int(1 * sensitivity))
+            else:
+                delta = int(1 * sensitivity)
+                agent.relations[target]['trust'] = max(-10, agent.relations[target].get('trust', 0) - delta)
+                if target_agent.name in target_agent.relations:
+                    target_agent.relations[agent.name]['trust'] = max(-10, target_agent.relations[agent.name].get('trust', 0) - delta)
+            decisions.append({'agent': agent.name, 'decision': 'interaction', 'target': target, 'success': success})
+            interacted_agents.add(agent.name)
+            interacted_agents.add(target)
+        # Increase trust by 1 for agents who were not interacted with
+        for agent in self.agents.values():
+            if agent.name not in interacted_agents:
+                for rel in agent.relations.values():
+                    rel['trust'] = rel.get('trust', 0) + 1
+        self._write_decisions_to_csv(decisions)
+
+    def _write_decisions_to_csv(self, decisions):
+        filename = "agent_decisions.csv"
+        file_exists = os.path.isfile(filename)
+        with open(filename, mode='a', newline='', encoding='utf-8') as csvfile:
+            fieldnames = ['agent', 'decision', 'target', 'success']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            if not file_exists:
+                writer.writeheader()
+            for decision in decisions:
+                writer.writerow(decision)
 
     def influence_emotions(self):
         for agent in self.agents.values():
             agent.influence_emotions()
 
+    def _write_agents_state_to_csv(self):
+        filename = "agents_state.csv"
+        file_exists = os.path.isfile(filename)
+        with open(filename, mode='a', newline='', encoding='utf-8') as csvfile:
+            fieldnames = ['agent', 'emotion', 'affinity', 'utility', 'trust']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            if not file_exists:
+                writer.writeheader()
+            for agent in self.agents.values():
+                for target_name, metrics in agent.relations.items():
+                    emotion_name, emotion_value = agent.get_primary_emotion()
+                    writer.writerow({
+                        'agent': agent.name,
+                        'emotion': f"{emotion_name}({emotion_value})",
+                        'affinity': metrics.get('affinity', 0),
+                        'utility': metrics.get('utility', 0),
+                        'trust': metrics.get('trust', 0)
+                    })
+
     def simulate_day(self, interactions_per_day: int = 1):
-        print("\n--- Симуляция дня ---")
-        
         if self.players:
             for player in self.players:
                 player.choose_emotion()
@@ -127,3 +242,4 @@ class Collective:
                             emotion_name, emotion_value = agent.get_primary_emotion()
                             print(f"\n{agent.name} выбирает взаимодействие с игроком. Его примарная эмоция: {emotion_name} с силой {emotion_value}.")
                             player.respond_to_agent(agent.name, emotion_name, emotion_value)
+        self._write_agents_state_to_csv()
