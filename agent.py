@@ -51,7 +51,6 @@ class Agent:
             new_responsiveness = self.limit_predicate_value(current + delta)
             self.relations[target_name]['responsiveness'] = new_responsiveness
 
-            # Влияние на affinity и trust на основе responsiveness
             if new_responsiveness < 0:
                 self.relations[target_name]['affinity'] = self.limit_predicate_value(self.relations[target_name]['affinity'] - 1 * self.sensitivity)
                 self.relations[target_name]['trust'] = self.limit_predicate_value(self.relations[target_name]['trust'] - 1 * self.sensitivity)
@@ -100,7 +99,6 @@ class Agent:
             
             if name == "joy_sadness" and emotion_value > 1:
                 for target_name in self.relations:
-                    # Влияние на affinity в зависимости от responsiveness
                     if self.relations[target_name]['responsiveness'] < 0:
                         self.relations[target_name]['affinity'] = self.limit_predicate_value(self.relations[target_name]['affinity'] - 1 * self.sensitivity)
                     else:
@@ -108,7 +106,6 @@ class Agent:
 
             if name == "anger_humility" and emotion_value < -1:
                 for target_name in self.relations:
-                    # Влияние на trust в зависимости от responsiveness
                     if self.relations[target_name]['responsiveness'] < 0:
                         self.relations[target_name]['trust'] = self.limit_predicate_value(self.relations[target_name]['trust'] - 1 * self.sensitivity)
                     else:
@@ -116,7 +113,6 @@ class Agent:
 
             if name == "fear_calm" and emotion_value < -1:
                 for target_name in self.relations:
-                    # Влияние на trust в зависимости от responsiveness
                     if self.relations[target_name]['responsiveness'] < 0:
                         self.relations[target_name]['trust'] = self.limit_predicate_value(self.relations[target_name]['trust'] - 1 * self.sensitivity)
                     else:
@@ -129,7 +125,6 @@ class Agent:
 
             if name == "disgust_acceptance" and emotion_value < -1:
                 for target_name in self.relations:
-                    # Влияние на affinity и utility в зависимости от responsiveness
                     if self.relations[target_name]['responsiveness'] < 0:
                         self.relations[target_name]['affinity'] = self.limit_predicate_value(self.relations[target_name]['affinity'] - 1 * self.sensitivity)
                         self.relations[target_name]['utility'] = self.limit_predicate_value(self.relations[target_name]['utility'] - 1 * self.sensitivity)
@@ -195,7 +190,7 @@ class Agent:
         utility = relation['utility']
         responsiveness = relation['responsiveness']
 
-        if responsiveness < -5:  # Если responsiveness слишком низкий
+        if responsiveness < -5:
             return "avoid"
         elif trust >= 5 and affinity >= 5 and responsiveness >= 0:
             return "mandatory"

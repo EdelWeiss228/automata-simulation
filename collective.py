@@ -22,7 +22,6 @@ class Collective:
                 player = Player(**player_data)  
                 self.add_player(player)
 
-        # Установим нулевые отношения ко всем, кто ещё не добавлен в relations
         for agent in self.agents.values():
             for other_name in self.agents:
                 if other_name != agent.name and other_name not in agent.relations:
@@ -99,7 +98,6 @@ class Collective:
             if agent.name in interacted_agents:
                 continue
             print(f"\n{agent.name} принимает решение о взаимодействии:")
-            # Classify relations into categories
             mandatory = []
             optional = []
             avoid = []
@@ -113,24 +111,19 @@ class Collective:
                     avoid.append((target_name, metrics))
             chosen = None
             if mandatory:
-                # Choose highest affinity and utility among mandatory
                 chosen = max(mandatory, key=lambda x: (x[1]['affinity'], x[1]['utility']))
             elif optional:
-                # Choose highest affinity and utility among optional
                 chosen = max(optional, key=lambda x: (x[1]['affinity'], x[1]['utility']))
             else:
                 print(f"{agent.name} решил отказаться от взаимодействия сегодня.")
-                # Decrease trust for all relations since agent refused interaction
                 for target_name in agent.relations.keys():
                     agent.relations[target_name]['trust'] = agent.relations[target_name].get('trust', 0) - 1
-                # Inform other agents about refusal and update their relations accordingly
                 for other_agent in self.agents.values():
                     if other_agent.name != agent.name and agent.name in other_agent.relations:
                         other_agent.relations[agent.name]['trust'] = other_agent.relations[agent.name].get('trust', 0) - 1
                 continue
             target, metrics = chosen
             target_agent = self.get_agent(target)
-            # Проверка согласия цели на взаимодействие
             if target_agent.classify_relationship(agent.name) == "avoid":
                 print(f"{target_agent.name} отказался взаимодействовать с {agent.name}.")
                 agent.relations[target]['trust'] = max(-10, agent.relations[target].get('trust', 0) - 2)
@@ -142,7 +135,6 @@ class Collective:
                 print(f"Взаимодействие между {agent.name} и {target} прошло УСПЕШНО.")
             else:
                 print(f"Взаимодействие между {agent.name} и {target} НЕУДАЧНО.")
-            # Оценка успешности взаимодействия
             sensitivity = getattr(agent, "responsiveness", 1.0)
 
             if success:
@@ -161,7 +153,6 @@ class Collective:
                     target_agent.relations[agent.name]['trust'] = max(-10, target_agent.relations[agent.name].get('trust', 0) - delta)
             interacted_agents.add(agent.name)
             interacted_agents.add(target)
-        # Increase trust by 1 for agents who were not interacted with
         for agent in self.agents.values():
             if agent.name not in interacted_agents:
                 for rel in agent.relations.values():

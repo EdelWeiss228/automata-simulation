@@ -1,25 +1,23 @@
 import pandas as pd
 import random
 
-# Функция для случайной генерации эмоций
 def generate_emotions():
     emotion_values = ['очень позитивно', 'позитивно', 'нейтрально', 'негативно', 'очень негативно']
     return {
-        "joy_sadness": random.choice(emotion_values),
-        "fear_calm": random.choice(emotion_values),
-        "anger_humility": random.choice(emotion_values),
-        "disgust_acceptance": random.choice(emotion_values),
-        "surprise_habit": random.choice(emotion_values),
-        "shame_confidence": random.choice(emotion_values),
-        "love_alienation": random.choice(emotion_values)
+        "joy_sadness": random.randint(-3, 3),
+        "fear_calm": random.randint(-3, 3),
+        "anger_humility": random.randint(-3, 3),
+        "disgust_acceptance": random.randint(-3, 3),
+        "surprise_habit": random.randint(-3, 3),
+        "shame_confidence": random.randint(-3, 3),
+        "love_alienation": random.randint(-3, 3)
     }
 
-# Функция для генерации отношений между агентами
 def generate_relationships(agent_count):
     relationships = {}
     for i in range(agent_count):
         relationships[i] = {}
-        interacting_agents = random.sample([j for j in range(agent_count) if j != i], 20)  # 20 случайных агентов для взаимодействия
+        interacting_agents = random.sample([j for j in range(agent_count) if j != i], 20)  
         for j in range(agent_count):
             if i != j:
                 if j in interacting_agents:
@@ -30,16 +28,15 @@ def generate_relationships(agent_count):
                         "responsiveness": random.randint(-10, 10)
                     }
                 else:
-                    relationships[i][j] = None  # Нет взаимодействия
+                    relationships[i][j] = None  
             else:
-                relationships[i][j] = None  # Агенты не могут взаимодействовать с собой
+                relationships[i][j] = None  
     return relationships
 
-# Функция для генерации предикатов для агента на основе его отношений
 def generate_predicates(agent_index, relationships, agent_count):
     predicates = {}
     interacting_agents = [j for j in range(agent_count) if j != agent_index and relationships[agent_index].get(j) is not None]
-    selected_agents = random.sample(interacting_agents, min(20, len(interacting_agents)))  # 20 случайных агентов с которыми есть взаимодействие
+    selected_agents = random.sample(interacting_agents, min(20, len(interacting_agents)))  
     for other_agent_index in selected_agents:
         relation = relationships[agent_index][other_agent_index]
         predicates[other_agent_index] = {
@@ -50,51 +47,45 @@ def generate_predicates(agent_index, relationships, agent_count):
         }
     return predicates
 
-# Генерация агентов с уникальными характеристиками
 def generate_agents(agent_count=1000):
     agents = {}
-    relationships = generate_relationships(agent_count)  # Генерация отношений между агентами
+    relationships = generate_relationships(agent_count)
 
     for i in range(agent_count):
-        agent_name = f"Agent_{i+1}"
+        agent_name = i+1
         emotions = generate_emotions()
 
-        # Генерация чувствительности от 0 до 1
         sensitivity = random.uniform(0, 1)
         
-        predicates = generate_predicates(i, relationships, agent_count)  # Генерация предикатов на основе отношений
+        predicates = generate_predicates(i, relationships, agent_count)  
         
         agent_data = {
             "name": agent_name,
             **emotions,
-            "sensitivity": sensitivity,  # Добавляем чувствительность
+            "sensitivity": round(sensitivity, 2),
             "relationships": predicates
         }
         agents[agent_name] = agent_data
 
-    # Добавим 100 агентов без отношений
     for i in range(agent_count, agent_count + 100):
-        agent_name = f"Agent_{i+1}"
+        agent_name = i+1
         emotions = generate_emotions()
         sensitivity = random.uniform(0, 1)
         agent_data = {
             "name": agent_name,
             **emotions,
-            "sensitivity": sensitivity,
-            "relationships": {}  # Нет отношений
+            "sensitivity": round(sensitivity, 2),
+            "relationships": {}  
         }
         agents[agent_name] = agent_data
     
     return agents
 
-# Сохранение данных в CSV
 def save_to_csv(agents):
-    # Преобразуем словарь в DataFrame
     agents_list = [data for name, data in agents.items()]
     agents_df = pd.DataFrame(agents_list)
     agents_df.to_csv('agents.csv', index=False)
     print("Данные агентов сохранены в agents.csv.")
 
-# Генерация агентов и сохранение в CSV
 agents = generate_agents()
 save_to_csv(agents)
