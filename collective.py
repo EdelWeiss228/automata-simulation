@@ -1,27 +1,40 @@
+"""
+Модуль collective.py содержит класс Collective, представляющий коллектив агентов и игроков.
+Класс управляет их взаимодействиями, отношениями и эмоциями в рамках симуляции.
+"""
+
 import random
 from agent import Agent
 from player import Player
 
+
 class Collective:
+    """
+    Класс, представляющий коллектив агентов и игроков,
+    управляющий их взаимодействиями и отношениями.
+    """
+
     def __init__(self, agents_data=None, relations_data=None, players_data=None):
+        """
+        Инициализация коллектива.
+        :param agents_data: данные агентов
+        :param relations_data: данные об отношениях
+        :param players_data: данные игроков
+        """
         self.agents = {}
         self.players = []
-
         if agents_data:
             for agent_name, agent_initial_data in agents_data:
-                agent = Agent(agent_name, **agent_initial_data)  
+                agent = Agent(agent_name, **agent_initial_data)
                 agent.group = self
                 self.add_agent(agent)
-
         if relations_data:
             for (subject_name, object_name), relation_data in relations_data.items():
                 self.update_relation(subject_name, object_name, **relation_data)
-
         if players_data:
             for player_data in players_data:
-                player = Player(**player_data)  
+                player = Player(**player_data)
                 self.add_player(player)
-
         for agent in self.agents.values():
             for other_name in self.agents:
                 if other_name != agent.name and other_name not in agent.relations:
@@ -29,128 +42,214 @@ class Collective:
                         'utility': 0,
                         'affinity': 0,
                         'trust': 0,
-                        'responsiveness': 0
+                        'responsiveness': 0,
                     }
 
     def add_agent(self, agent):
+        """Добавить агента в коллектив."""
         self.agents[agent.name] = agent
 
     def add_player(self, player):
+        """Добавить игрока в коллектив и инициализировать его отношения с агентами."""
         self.players.append(player)
-
-        primary_emotion_name, primary_emotion_value = player.get_primary_emotion()
-
+        _, primary_emotion_value = player.get_primary_emotion()
         if not hasattr(player, "relations"):
             player.relations = {}
-
         for agent_name, agent in self.agents.items():
-            utility = primary_emotion_value if random.random() > 0.5 else random.randint(-3, 3)
-            affinity = primary_emotion_value if random.random() > 0.5 else random.randint(-3, 3)
-            trust = primary_emotion_value if random.random() > 0.5 else random.randint(-3, 3)
-
-            player.relations[agent_name] = {'utility': utility, 'affinity': affinity, 'trust': trust}
-            agent.update_relation(player.name, utility=utility, affinity=affinity, trust=trust)
+            utility = (primary_emotion_value if random.random() > 0.5
+                       else random.randint(-3, 3))
+            affinity = (primary_emotion_value if random.random() > 0.5
+                       else random.randint(-3, 3))
+            trust = (primary_emotion_value if random.random() > 0.5
+                     else random.randint(-3, 3))
+            player.relations[agent_name] = {
+                'utility': utility,
+                'affinity': affinity,
+                'trust': trust
+            }
+            agent.update_relation(player.name, utility=utility,
+                                  affinity=affinity, trust=trust)
 
     def introduce_new_agent(self, new_agent):
+        """Ввести нового агента в коллектив и установить отношения с остальными."""
         self.add_agent(new_agent)
         new_agent.group = self
-
         for other_name, other_agent in self.agents.items():
             if other_name == new_agent.name:
                 continue
-
-            primary_emotion_name, primary_emotion_value = new_agent.get_primary_emotion() 
-
-            utility = primary_emotion_value if random.random() > 0.5 else random.randint(-3, 3)
-            affinity = primary_emotion_value if random.random() > 0.5 else random.randint(-3, 3)
-            trust = primary_emotion_value if random.random() > 0.5 else random.randint(-3, 3)
-
-            new_agent.update_relation(other_name, utility=utility, affinity=affinity, trust=trust)
-
-            other_agent.update_relation(new_agent.name, utility=utility, affinity=affinity, trust=trust)
+            _, primary_emotion_value = new_agent.get_primary_emotion()
+            utility = (primary_emotion_value if random.random() > 0.5
+                       else random.randint(-3, 3))
+            affinity = (primary_emotion_value if random.random() > 0.5
+                        else random.randint(-3, 3))
+            trust = (primary_emotion_value if random.random() > 0.5
+                     else random.randint(-3, 3))
+            new_agent.update_relation(other_name, utility=utility,
+                                      affinity=affinity, trust=trust)
+            other_agent.update_relation(new_agent.name, utility=utility,
+                                        affinity=affinity, trust=trust)
 
     def get_agent(self, name):
-        return self.agents.get(name)
-    
-    def get_agent_by_name(self, name):
+        """Получить агента по имени."""
         return self.agents.get(name)
 
-    def update_relation(self, subject_name, object_name, utility, affinity, trust):
+    def get_agent_by_name(self, name):
+        """Получить агента по имени (синоним get_agent)."""
+        return self.agents.get(name)
+
+    def update_relation(self, subject_name, object_name, **relations):
+        """Обновить отношения между агентами."""
         subject = self.get_agent(subject_name)
         if subject and object_name in self.agents:
-            subject.update_relation(object_name, utility, affinity, trust)
+            subject.update_relation(object_name, **relations)
 
     def describe_all_emotions(self):
+        """Получить описание эмоций всех агентов."""
         return {
             name: agent.describe_emotions()
             for name, agent in self.agents.items()
         }
 
     def describe_all_relations(self):
+        """Получить описание отношений всех агентов."""
         return {
             name: agent.describe_relations()
             for name, agent in self.agents.items()
         }
 
+    def _categorize_relationships(self, _agent):
+        """Классифицировать отношения агента на обязательные, опциональные и избегаемые."""
+        mandatory = []
+        optional = []
+        avoid = []
+        # The argument '_' is expected to be an agent
+        for target_name, metrics in _agent.relations.items():
+            category = _agent.classify_relationship(target_name)
+            if category == "mandatory":
+                mandatory.append((target_name, metrics))
+            elif category == "optional":
+                optional.append((target_name, metrics))
+            else:
+                avoid.append((target_name, metrics))
+        return mandatory, optional, avoid
+
+    def _choose_target(self, agent, mandatory, optional):
+        """Выбрать цель взаимодействия на основе обязательных и опциональных отношений."""
+        chosen = None
+        if mandatory:
+            chosen = max(
+                mandatory,
+                key=lambda x: (x[1]['affinity'], x[1]['utility'])
+            )
+        elif optional:
+            chosen = max(
+                optional,
+                key=lambda x: (x[1]['affinity'], x[1]['utility'])
+            )
+        return chosen
+
+    def _process_refusal(self, agent, target_agent):
+        """Обработать отказ взаимодействия между агентами."""
+        print(
+            f"{target_agent.name} отказался взаимодействовать с {agent.name}."
+        )
+        agent.relations[target_agent.name]['trust'] = max(
+            -10, agent.relations[target_agent.name].get('trust', 0) - 2
+        )
+        target_agent.relations[agent.name]['trust'] = max(
+            -10, target_agent.relations[agent.name].get('trust', 0) - 2
+        )
+
+    def _process_interaction_result(self, agent, target_agent, success):
+        """Обработать результат взаимодействия и обновить отношения."""
+        sensitivity = getattr(agent, "responsiveness", 1.0)
+        if success:
+            delta = int(2 * sensitivity)
+            agent.relations[target_agent.name]['trust'] = min(
+                10, agent.relations[target_agent.name].get('trust', 0) + delta
+            )
+            agent.relations[target_agent.name]['affinity'] = min(
+                10, agent.relations[target_agent.name].get('affinity', 0) +
+                int(1 * sensitivity)
+            )
+            agent.relations[target_agent.name]['utility'] = min(
+                10, agent.relations[target_agent.name].get('utility', 0) +
+                int(1 * sensitivity)
+            )
+            if target_agent.name in target_agent.relations:
+                target_agent.relations[agent.name]['trust'] = min(
+                    10, target_agent.relations[agent.name].get('trust', 0) + delta
+                )
+                target_agent.relations[agent.name]['affinity'] = min(
+                    10, target_agent.relations[agent.name].get('affinity', 0) +
+                    int(1 * sensitivity)
+                )
+                target_agent.relations[agent.name]['utility'] = min(
+                    10, target_agent.relations[agent.name].get('utility', 0) +
+                    int(1 * sensitivity)
+                )
+        else:
+            delta = int(1 * sensitivity)
+            agent.relations[target_agent.name]['trust'] = max(
+                -10, agent.relations[target_agent.name].get('trust', 0) - delta
+            )
+            if target_agent.name in target_agent.relations:
+                target_agent.relations[agent.name]['trust'] = max(
+                    -10, target_agent.relations[agent.name].get('trust', 0) - delta
+                )
+
+
+    def influence_emotions(self):
+        """
+        Placeholder method for influencing emotions.
+        This stub is present to satisfy calls in simulate_day and should be implemented as needed.
+        """
+
+
     def make_interaction_decision(self):
+        """
+        Каждый агент принимает решение о взаимодействии на основе своих отношений.
+        Использует вспомогательные методы для упрощения логики.
+        """
         interacted_agents = set()
         for agent in self.agents.values():
             if agent.name in interacted_agents:
                 continue
             print(f"\n{agent.name} принимает решение о взаимодействии:")
-            mandatory = []
-            optional = []
-            avoid = []
-            for target_name, metrics in agent.relations.items():
-                category = agent.classify_relationship(target_name)
-                if category == "mandatory":
-                    mandatory.append((target_name, metrics))
-                elif category == "optional":
-                    optional.append((target_name, metrics))
-                else:
-                    avoid.append((target_name, metrics))
-            chosen = None
-            if mandatory:
-                chosen = max(mandatory, key=lambda x: (x[1]['affinity'], x[1]['utility']))
-            elif optional:
-                chosen = max(optional, key=lambda x: (x[1]['affinity'], x[1]['utility']))
-            else:
+            mandatory, optional, _ = self._categorize_relationships(agent)
+            chosen = self._choose_target(agent, mandatory, optional)
+            if not chosen:
                 print(f"{agent.name} решил отказаться от взаимодействия сегодня.")
                 for target_name in agent.relations.keys():
-                    agent.relations[target_name]['trust'] = agent.relations[target_name].get('trust', 0) - 1
+                    agent.relations[target_name]['trust'] = (
+                        agent.relations[target_name].get('trust', 0) - 1
+                    )
                 for other_agent in self.agents.values():
-                    if other_agent.name != agent.name and agent.name in other_agent.relations:
-                        other_agent.relations[agent.name]['trust'] = other_agent.relations[agent.name].get('trust', 0) - 1
+                    if (other_agent.name != agent.name and
+                            agent.name in other_agent.relations):
+                        other_agent.relations[agent.name]['trust'] = (
+                            other_agent.relations[agent.name].get('trust', 0) - 1
+                        )
                 continue
             target, metrics = chosen
             target_agent = self.get_agent(target)
             if target_agent.classify_relationship(agent.name) == "avoid":
-                print(f"{target_agent.name} отказался взаимодействовать с {agent.name}.")
-                agent.relations[target]['trust'] = max(-10, agent.relations[target].get('trust', 0) - 2)
-                target_agent.relations[agent.name]['trust'] = max(-10, target_agent.relations[agent.name].get('trust', 0) - 2)
+                self._process_refusal(agent, target_agent)
                 continue
-            print(f"{agent.name} предпочитает взаимодействовать с {target} (симпатия={metrics['affinity']}, выгода={metrics['utility']})")
+            print(
+                f"{agent.name} предпочитает взаимодействовать с {target} "
+                f"(симпатия={metrics['affinity']}, выгода={metrics['utility']})"
+            )
             success = (metrics['affinity'] > 0 and metrics['utility'] > 0)
             if success:
-                print(f"Взаимодействие между {agent.name} и {target} прошло УСПЕШНО.")
+                print(
+                    f"Взаимодействие между {agent.name} и {target} прошло УСПЕШНО."
+                )
             else:
-                print(f"Взаимодействие между {agent.name} и {target} НЕУДАЧНО.")
-            sensitivity = getattr(agent, "responsiveness", 1.0)
-
-            if success:
-                delta = int(2 * sensitivity)
-                agent.relations[target]['trust'] = min(10, agent.relations[target].get('trust', 0) + delta)
-                agent.relations[target]['affinity'] = min(10, agent.relations[target].get('affinity', 0) + int(1 * sensitivity))
-                agent.relations[target]['utility'] = min(10, agent.relations[target].get('utility', 0) + int(1 * sensitivity))
-                if target_agent.name in target_agent.relations:
-                    target_agent.relations[agent.name]['trust'] = min(10, target_agent.relations[agent.name].get('trust', 0) + delta)
-                    target_agent.relations[agent.name]['affinity'] = min(10, target_agent.relations[agent.name].get('affinity', 0) + int(1 * sensitivity))
-                    target_agent.relations[agent.name]['utility'] = min(10, target_agent.relations[agent.name].get('utility', 0) + int(1 * sensitivity))
-            else:
-                delta = int(1 * sensitivity)
-                agent.relations[target]['trust'] = max(-10, agent.relations[target].get('trust', 0) - delta)
-                if target_agent.name in target_agent.relations:
-                    target_agent.relations[agent.name]['trust'] = max(-10, target_agent.relations[agent.name].get('trust', 0) - delta)
+                print(
+                    f"Взаимодействие между {agent.name} и {target} НЕУДАЧНО."
+                )
+            self._process_interaction_result(agent, target_agent, success)
             interacted_agents.add(agent.name)
             interacted_agents.add(target)
         for agent in self.agents.values():
@@ -158,43 +257,68 @@ class Collective:
                 for rel in agent.relations.values():
                     rel['trust'] = rel.get('trust', 0) + 1
 
-    def influence_emotions(self):
-        for agent in self.agents.values():
-            agent.influence_emotions()
+    def _process_player_emotions_and_interactions(self):
+        """Обработка выбора эмоций и взаимодействий игроков."""
+        for player in self.players:
+            player.choose_emotion()
+            player.choose_interaction(self.agents)
 
-    def simulate_day(self, interactions_per_day: int = 1):
-        print("\n--- Симуляция дня ---")
-        
-        if self.players:
-            for player in self.players:
-                player.choose_emotion()
-                player.choose_interaction(self.agents)
-
+    def _agents_react_to_relations_and_emotions(self):
+        """Агенты реагируют на отношения и эмоции."""
         for agent in self.agents.values():
             agent.react_to_relations()
             agent.react_to_emotions()
-        
+
+    def _apply_player_emotional_influence(self):
+        """Применение влияния эмоций игроков на агентов."""
         for player in self.players:
-            for target_name, target_data in player.relations.items():
+            for target_name in player.relations.keys():
                 target_agent = self.get_agent(target_name)
                 if target_agent:
-                    target_agent.automaton.adjust_emotion(player.current_emotion, random.randint(-5, 5))
+                    target_agent.automaton.adjust_emotion(
+                        player.current_emotion, random.randint(-5, 5)
+                    )
+
+    def _agents_react_again(self):
+        """Повторная реакция агентов на отношения и эмоции после влияния игроков."""
         for agent in self.agents.values():
             agent.react_to_relations()
             agent.react_to_emotions()
 
-        self.influence_emotions()
-
-        for _ in range(interactions_per_day):
-            self.make_interaction_decision()
-
+    def _agents_interact_with_players(self):
+        """Агенты выбирают взаимодействие с игроками на основе отношений."""
         for agent in self.agents.values():
-            candidates = sorted(agent.relations.items(), key=lambda x: (x[1]['affinity'], x[1]['utility']), reverse=True)
+            candidates = sorted(
+                agent.relations.items(),
+                key=lambda x: (x[1]['affinity'], x[1]['utility']),
+                reverse=True
+            )
             if candidates:
-                target_name, metrics = candidates[0]
+                target_name, _ = candidates[0]
                 if any(player.name == target_name for player in self.players):
                     for player in self.players:
                         if player.name == target_name:
                             emotion_name, emotion_value = agent.get_primary_emotion()
-                            print(f"\n{agent.name} выбирает взаимодействие с игроком. Его примарная эмоция: {emotion_name} с силой {emotion_value}.")
-                            player.respond_to_agent(agent.name, emotion_name, emotion_value)
+                            print(
+                                f"\n{agent.name} выбирает взаимодействие с игроком. "
+                                f"Его примарная эмоция: {emotion_name} с силой "
+                                f"{emotion_value}."
+                            )
+                            player.respond_to_agent(agent.name, emotion_name,
+                                                    emotion_value)
+
+    def simulate_day(self, interactions_per_day: int = 1):
+        """
+        Симуляция дня с эмоциями, реакциями и взаимодействиями агентов и игроков.
+        Логика метода разбита на вспомогательные функции.
+        """
+        print("\n--- Симуляция дня ---")
+        if self.players:
+            self._process_player_emotions_and_interactions()
+        self._agents_react_to_relations_and_emotions()
+        self._apply_player_emotional_influence()
+        self._agents_react_again()
+        self.influence_emotions()
+        for _ in range(interactions_per_day):
+            self.make_interaction_decision()
+        self._agents_interact_with_players()
