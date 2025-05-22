@@ -13,11 +13,15 @@ class Agent:
         emotion_effects=None,
         emotion_coefficients=None,
         sensitivity=1,
+        archetype=None,
     ):
         self.name = name
         self.automaton = EmotionAutomaton()
+        if archetype:
+            self.automaton.set_archetype(archetype)
         self.relations = {}
         self.sensitivity = sensitivity
+        self.archetype = archetype or self.automaton.get_archetype()
 
         self.emotion_effects = emotion_effects or {
             "joy_sadness": {"affinity": 1, "trust": 1},
@@ -98,7 +102,7 @@ class Agent:
     def get_primary_emotion(self):
         """Определяет основную эмоцию по максимальному модулю значения."""
         max_name = None
-        max_value = 0
+        max_value = float("-inf")
         for name, pair in self.automaton.pairs.items():
             if abs(pair.value) > abs(max_value):
                 max_value = pair.value
@@ -206,7 +210,7 @@ class Agent:
         """Влияет на эмоции других агентов на основе основной эмоции и отношений."""
         primary_emotion_name, primary_emotion_value = self.get_primary_emotion()
 
-        if primary_emotion_value == 0:
+        if primary_emotion_value is None or primary_emotion_value == 0:
             return
 
         total_intensity = sum(abs(pair.value) for pair in self.automaton.pairs.values())
@@ -214,9 +218,8 @@ class Agent:
             return
 
         dynamic_weight_primary = abs(primary_emotion_value) / total_intensity
-        dynamic_weight_secondary = (
-            1 - dynamic_weight_primary
-        ) / (len(self.automaton.pairs) - 1)
+        secondary_count = max(1, len(self.automaton.pairs) - 1)
+        dynamic_weight_secondary = (1 - dynamic_weight_primary) / secondary_count
 
         for target_name, relation in self.relations.items():
             affinity = self.limit_predicate_value(relation["affinity"])
