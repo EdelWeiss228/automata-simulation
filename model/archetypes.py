@@ -15,10 +15,11 @@ class ArchetypeEnum(Enum):
 
 
 class Archetype:
-    def __init__(self, name, weights, description):
+    def __init__(self, name, weights, description, refusal_chance=0.3):
         self.name = name
         self.weights = weights
         self.description = description
+        self.refusal_chance = refusal_chance
 
 
 ARCHETYPE_WEIGHTS = {
@@ -33,7 +34,8 @@ ARCHETYPE_WEIGHTS = {
             'surprise_habit': 0.8,
             'shame_confidence': 0.7,
             'love_alienation': 1.0
-        }
+        },
+        refusal_chance=0.2
     ),
     ArchetypeEnum.ENIGMATA: Archetype(
         name='Enigmata',
@@ -46,7 +48,8 @@ ARCHETYPE_WEIGHTS = {
             'surprise_habit': 1.2,
             'shame_confidence': 0.6,
             'love_alienation': 1.0
-        }
+        },
+        refusal_chance=0.7
     ),
     ArchetypeEnum.HARMONY: Archetype(
         name='Harmony',
@@ -59,7 +62,8 @@ ARCHETYPE_WEIGHTS = {
             'surprise_habit': 0.9,
             'shame_confidence': 1.1,
             'love_alienation': 1.5
-        }
+        },
+        refusal_chance=0.1
     ),
     ArchetypeEnum.HUNT: Archetype(
         name='Hunt',
@@ -72,7 +76,8 @@ ARCHETYPE_WEIGHTS = {
             'surprise_habit': 1.0,
             'shame_confidence': 1.3,
             'love_alienation': 0.8
-        }
+        },
+        refusal_chance=0.3
     ),
     ArchetypeEnum.ELATION: Archetype(
         name='Elation',
@@ -85,7 +90,8 @@ ARCHETYPE_WEIGHTS = {
             'surprise_habit': 1.8,
             'shame_confidence': 0.8,
             'love_alienation': 1.2
-        }
+        },
+        refusal_chance=0.5
     ),
     ArchetypeEnum.PRESERVATION: Archetype(
         name='Preservation',
@@ -98,7 +104,8 @@ ARCHETYPE_WEIGHTS = {
             'surprise_habit': 0.8,
             'shame_confidence': 1.4,
             'love_alienation': 1.6
-        }
+        },
+        refusal_chance=0.15
     ),
     ArchetypeEnum.NIHILITY: Archetype(
         name='Nihility',
@@ -111,7 +118,8 @@ ARCHETYPE_WEIGHTS = {
             'surprise_habit': 1.1,
             'shame_confidence': 0.6,
             'love_alienation': 0.7
-        }
+        },
+        refusal_chance=0.6
     ),
     ArchetypeEnum.TRAILBLAZE: Archetype(
         name='Trailblaze',
@@ -124,7 +132,8 @@ ARCHETYPE_WEIGHTS = {
             'surprise_habit': 1.0,
             'shame_confidence': 1.0,
             'love_alienation': 1.0
-        }
+        },
+        refusal_chance=0.25
     ),
     ArchetypeEnum.REMEMBRANCE: Archetype(
         name='Remembrance',
@@ -137,6 +146,7 @@ ARCHETYPE_WEIGHTS = {
             'surprise_habit': 0.9,
             'shame_confidence': 1.5,
             'love_alienation': 1.3
-        }
+        },
+        refusal_chance=0.2
     )
 }

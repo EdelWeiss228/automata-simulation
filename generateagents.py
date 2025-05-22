@@ -2,7 +2,7 @@ import pandas as pd
 import random
 import os
 import uuid
-from archetypes import ArchetypeEnum
+from kursa4.model.archetypes import ArchetypeEnum
 
 def generate_emotions():
     return {

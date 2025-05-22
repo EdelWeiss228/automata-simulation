@@ -149,10 +149,27 @@ class Collective:
         return chosen
 
     def _process_refusal(self, agent, target_agent):
-        """Обработать отказ взаимодействия между агентами."""
-        print(
-            f"{target_agent.name} отказался взаимодействовать с {agent.name}."
-        )
+        """Обработать отказ взаимодействия между агентами (безопасно обновляет отношения)."""
+        print(f"{target_agent.name} отказался взаимодействовать с {agent.name}.")
+
+        # Инициализация при необходимости
+        if target_agent.name not in agent.relations:
+            agent.relations[target_agent.name] = {
+                'trust': 0, 'affinity': 0, 'utility': 0, 'responsiveness': 0
+            }
+        else:
+            for key in ['trust', 'affinity', 'utility', 'responsiveness']:
+                agent.relations[target_agent.name].setdefault(key, 0)
+
+        if agent.name not in target_agent.relations:
+            target_agent.relations[agent.name] = {
+                'trust': 0, 'affinity': 0, 'utility': 0, 'responsiveness': 0
+            }
+        else:
+            for key in ['trust', 'affinity', 'utility', 'responsiveness']:
+                target_agent.relations[agent.name].setdefault(key, 0)
+
+        # Обновление доверия
         agent.relations[target_agent.name]['trust'] = max(
             -10, agent.relations[target_agent.name].get('trust', 0) - 2
         )
@@ -162,6 +179,23 @@ class Collective:
 
     def _process_interaction_result(self, agent, target_agent, success):
         """Обработать результат взаимодействия и обновить отношения."""
+        # Инициализация при необходимости
+        if target_agent.name not in agent.relations:
+            agent.relations[target_agent.name] = {
+                'trust': 0, 'affinity': 0, 'utility': 0, 'responsiveness': 0
+            }
+        else:
+            for key in ['trust', 'affinity', 'utility', 'responsiveness']:
+                agent.relations[target_agent.name].setdefault(key, 0)
+
+        if agent.name not in target_agent.relations:
+            target_agent.relations[agent.name] = {
+                'trust': 0, 'affinity': 0, 'utility': 0, 'responsiveness': 0
+            }
+        else:
+            for key in ['trust', 'affinity', 'utility', 'responsiveness']:
+                target_agent.relations[agent.name].setdefault(key, 0)
+
         sensitivity = getattr(agent, "responsiveness", 1.0)
         if success:
             delta = int(2 * sensitivity)
@@ -209,8 +243,9 @@ class Collective:
     def make_interaction_decision(self):
         """
         Каждый агент принимает решение о взаимодействии на основе своих отношений.
-        Использует вспомогательные методы для упрощения логики.
+        Возвращает список взаимодействий (agent_from, agent_to, status).
         """
+        interactions = []
         interacted_agents = set()
         for agent in self.agents.values():
             if agent.name in interacted_agents:
@@ -233,14 +268,21 @@ class Collective:
                 continue
             target, metrics = chosen
             target_agent = self.get_agent(target)
-            if target_agent is not None and target_agent.classify_relationship(agent.name) == "avoid":
-                self._process_refusal(agent, target_agent)
-                continue
+            if target_agent is not None:
+                refusal_chance = getattr(agent.archetype, "refusal_chance", 0.3)
+                if random.random() < refusal_chance:
+                    self._process_refusal(agent, target_agent)
+                    interactions.append((agent.name, target, "refusal"))
+                    continue
+                if target_agent.classify_relationship(agent.name) == "avoid":
+                    self._process_refusal(agent, target_agent)
+                    interactions.append((agent.name, target, "refusal"))
+                    continue
             print(
                 f"{agent.name} предпочитает взаимодействовать с {target} "
                 f"(симпатия={metrics['affinity']}, выгода={metrics['utility']})"
             )
-            success = (metrics['affinity'] > 0 and metrics['utility'] > 0)
+            success = random.random() < 0.5
             if success:
                 print(
                     f"Взаимодействие между {agent.name} и {target} прошло УСПЕШНО."
@@ -252,10 +294,13 @@ class Collective:
             self._process_interaction_result(agent, target_agent, success)
             interacted_agents.add(agent.name)
             interacted_agents.add(target)
+            status = "success" if success else "fail"
+            interactions.append((agent.name, target, status))
         for agent in self.agents.values():
             if agent.name not in interacted_agents:
                 for rel in agent.relations.values():
                     rel['trust'] = rel.get('trust', 0) + 1
+        return interactions
 
     def _process_player_emotions_and_interactions(self):
         """Обработка выбора эмоций и взаимодействий игроков."""
@@ -322,3 +367,11 @@ class Collective:
         for _ in range(interactions_per_day):
             self.make_interaction_decision()
         self._agents_interact_with_players()
+
+    def remove_agent(self, agent_name):
+        """Удалить агента из коллектива и очистить его упоминания из отношений других агентов."""
+        if agent_name in self.agents:
+            del self.agents[agent_name]
+            for other_agent in self.agents.values():
+                if agent_name in other_agent.relations:
+                    del other_agent.relations[agent_name]

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 """Модуль описывает класс Agent и его поведение в симуляции."""
 
-from emotion_automaton import EmotionAutomaton, EmotionAxis
-from collective import Collective
+if TYPE_CHECKING:
+    from collective import Collective
+
+from model.emotion_automaton import EmotionAutomaton, EmotionAxis
+
 
 class Agent:
     """Класс, представляющий агента с эмоциями и отношениями."""
@@ -12,10 +15,10 @@ class Agent:
     def __init__(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
         name,
-        initial_emotions=None,
+        emotions=None,
         emotion_effects=None,
         emotion_coefficients=None,
-        sensitivity=1,
+        sensitivity: float = 1.0,
         archetype=None,
     ):
         self.name = name
@@ -46,9 +49,9 @@ class Agent:
             "shame_confidence": 1,
             "surprise_habit": 1,
         }
-
-        if initial_emotions:
-            for emotion_name, value in initial_emotions.items():
+        self.emotions = emotions
+        if emotions:
+            for emotion_name, value in emotions.items():
                 self.automaton.set_emotion(emotion_name, value)
 
     def limit_predicate_value(self, value, min_value=-10, max_value=10):
@@ -307,3 +310,6 @@ class Agent:
         """Пассивно уменьшает чувствительность к другим агентам со временем."""
         for target_name in self.relations:
             self.update_responsiveness(target_name, -1 * self.sensitivity)
+    def get_emotions(self):
+        """Возвращает числовые значения эмоций."""
+        return {axis.value: pair.value for axis, pair in self.automaton.pairs.items()}

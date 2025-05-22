@@ -1,6 +1,6 @@
 from typing import Union
-from emotion_pair import EmotionPair
-from archetypes import Archetype, ArchetypeEnum, ARCHETYPE_WEIGHTS
+from model.emotion_pair import EmotionPair
+from model.archetypes import Archetype, ArchetypeEnum, ARCHETYPE_WEIGHTS
 from enum import Enum
 
 class EmotionAxis(str, Enum):
