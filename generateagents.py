@@ -1,5 +1,8 @@
 import pandas as pd
 import random
+import os
+import uuid
+from archetypes import ArchetypeEnum
 
 def generate_emotions():
     return {
@@ -55,14 +58,15 @@ def generate_agents(agent_count=1000):
         emotion_dict = generate_emotions()
 
         sensitivity = random.uniform(0, 1)
-        
+        archetype = random.choice(list(ArchetypeEnum))
         predicates = generate_predicates(i, relationships, agent_count)  
         
         agent_data = {
             "name": agent_name,
             "emotions": emotion_dict,
             "sensitivity": round(sensitivity, 2),
-            "relationships": predicates
+            "relationships": predicates,
+            "archetype": archetype
         }
         agents[agent_name] = agent_data
 
@@ -70,20 +74,26 @@ def generate_agents(agent_count=1000):
         agent_name = i+1
         emotion_dict = generate_emotions()
         sensitivity = random.uniform(0, 1)
+        archetype = random.choice(list(ArchetypeEnum))
         agent_data = {
             "name": agent_name,
             "emotions": emotion_dict,
             "sensitivity": round(sensitivity, 2),
-            "relationships": {}  
+            "relationships": {},  
+            "archetype": archetype
         }
         agents[agent_name] = agent_data
     
     return agents
 
 def save_to_csv(agents):
-    agents_list = [data for name, data in agents.items()]
+    agents_list = []
+    for data in agents.values():
+        agent_copy = data.copy()
+        agent_copy["archetype"] = agent_copy["archetype"].name
+        agents_list.append(agent_copy)
     agents_df = pd.DataFrame(agents_list)
-    agents_df.to_csv('agents.csv', index=False)
+    agents_df.to_csv("agents.csv", index=False)
     print("Данные агентов сохранены в agents.csv.")
 
 agents = generate_agents()

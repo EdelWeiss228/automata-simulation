@@ -1,7 +1,10 @@
+from __future__ import annotations
+
+from typing import Optional
 """Модуль описывает класс Agent и его поведение в симуляции."""
 
-from emotion_automaton import EmotionAutomaton
-
+from emotion_automaton import EmotionAutomaton, EmotionAxis
+from collective import Collective
 
 class Agent:
     """Класс, представляющий агента с эмоциями и отношениями."""
@@ -22,6 +25,7 @@ class Agent:
         self.relations = {}
         self.sensitivity = sensitivity
         self.archetype = archetype or self.automaton.get_archetype()
+        self.group: Optional["Collective"] = None  # Указатель на коллектив, устанавливается позже
 
         self.emotion_effects = emotion_effects or {
             "joy_sadness": {"affinity": 1, "trust": 1},
@@ -102,7 +106,7 @@ class Agent:
     def get_primary_emotion(self):
         """Определяет основную эмоцию по максимальному модулю значения."""
         max_name = None
-        max_value = float("-inf")
+        max_value = 0
         for name, pair in self.automaton.pairs.items():
             if abs(pair.value) > abs(max_value):
                 max_value = pair.value
@@ -118,17 +122,17 @@ class Agent:
             t = self.limit_predicate_value(t)
             u = self.limit_predicate_value(u)
 
-            self.automaton.adjust_emotion("joy_sadness", a * self.sensitivity)
-            self.automaton.adjust_emotion("love_alienation", a * self.sensitivity)
+            self.automaton.adjust_emotion(EmotionAxis.JOY_SADNESS, a * self.sensitivity)
+            self.automaton.adjust_emotion(EmotionAxis.LOVE_ALIENATION, a * self.sensitivity)
 
-            self.automaton.adjust_emotion("disgust_acceptance", u * self.sensitivity)
+            self.automaton.adjust_emotion(EmotionAxis.DISGUST_ACCEPTANCE, u * self.sensitivity)
 
             if t < 0:
                 self.automaton.adjust_emotion(
-                    "fear_calm", -abs(t) * self.sensitivity
+                    EmotionAxis.FEAR_CALM, -abs(t) * self.sensitivity
                 )
                 self.automaton.adjust_emotion(
-                    "anger_humility", -abs(t) * self.sensitivity
+                    EmotionAxis.ANGER_HUMILITY, -abs(t) * self.sensitivity
                 )
 
     def _adjust_affinity_based_on_responsiveness(self, target_name, delta):
@@ -172,28 +176,24 @@ class Agent:
         for name, pair in self.automaton.pairs.items():
             emotion_value = pair.value
 
-            if name == "joy_sadness" and emotion_value > 1:
+            if name == EmotionAxis.JOY_SADNESS and emotion_value > 1:
                 for target_name, relation in self.relations.items():
                     self._adjust_affinity_based_on_responsiveness(target_name, 1)
 
-            elif name == "anger_humility" and emotion_value < -1:
+            elif name == EmotionAxis.ANGER_HUMILITY and emotion_value < -1:
                 for target_name, relation in self.relations.items():
                     self._adjust_trust_based_on_responsiveness(target_name, 1)
 
-            elif name == "fear_calm" and emotion_value < -1:
+            elif name == EmotionAxis.FEAR_CALM and emotion_value < -1:
                 for target_name, relation in self.relations.items():
                     self._adjust_trust_based_on_responsiveness(target_name, 1)
 
-            elif name == "love_alienation" and emotion_value > 1:
+            elif name == EmotionAxis.LOVE_ALIENATION and emotion_value > 1:
                 for target_name, relation in self.relations.items():
-                    relation["trust"] = self.limit_predicate_value(
-                        relation["trust"] + 1 * self.sensitivity
-                    )
-                    relation["affinity"] = self.limit_predicate_value(
-                        relation["affinity"] + 1 * self.sensitivity
-                    )
+                    self._adjust_trust_based_on_responsiveness(target_name, 1)
+                    self._adjust_affinity_based_on_responsiveness(target_name, 1)
 
-            elif name == "disgust_acceptance" and emotion_value < -1:
+            elif name == EmotionAxis.DISGUST_ACCEPTANCE and emotion_value < -1:
                 for target_name, relation in self.relations.items():
                     self._adjust_utility_and_affinity_based_on_responsiveness(target_name, 1)
 
@@ -229,6 +229,12 @@ class Agent:
                 + trust
                 + self.limit_predicate_value(relation["utility"])
             ) / 3
+
+            # Check relationship classification for avoid
+            if self.group is not None:
+                target_agent = self.group.get_agent_by_name(target_name)
+                if target_agent is not None and target_agent.classify_relationship(self.name) == "avoid":
+                    continue
 
             try:
                 target_agent = self.get_agent(target_name)
@@ -292,6 +298,10 @@ class Agent:
     def get_emotion_states(self):
         """Возвращает состояния всех эмоций в описательном виде."""
         return {name: pair.describe() for name, pair in self.automaton.pairs.items()}
+
+    def get_archetype(self):
+        """Возвращает архетип агента."""
+        return self.archetype
 
     def decay_responsiveness_passive(self):
         """Пассивно уменьшает чувствительность к другим агентам со временем."""

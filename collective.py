@@ -233,7 +233,7 @@ class Collective:
                 continue
             target, metrics = chosen
             target_agent = self.get_agent(target)
-            if target_agent.classify_relationship(agent.name) == "avoid":
+            if target_agent is not None and target_agent.classify_relationship(agent.name) == "avoid":
                 self._process_refusal(agent, target_agent)
                 continue
             print(

@@ -1,7 +1,8 @@
-from enum import Enum
+from typing import Union
 from emotion_pair import EmotionPair
+from archetypes import Archetype, ArchetypeEnum, ARCHETYPE_WEIGHTS
+from enum import Enum
 
-# Определения перечислений осей и архетипов
 class EmotionAxis(str, Enum):
     JOY_SADNESS = 'joy_sadness'
     FEAR_CALM = 'fear_calm'
@@ -11,140 +12,66 @@ class EmotionAxis(str, Enum):
     SHAME_CONFIDENCE = 'shame_confidence'
     LOVE_ALIENATION = 'love_alienation'
 
-
-class Archetype(str, Enum):
-    SAGE = 'мудрец'
-    REBEL = 'бунтарь'
-    HARMONIZER = 'гармонист'
-    WARRIOR = 'воин'
-    TRICKSTER = 'трикстер'
-    GUARDIAN = 'страж'
-    QUIET = 'тихоня'
-    TRAILBLAZER = 'путеводитель'
-    MEMORY = 'память'
-
-# Класс EmotionAutomaton моделирует эмоциональные состояния агента на основе архетипа.
-# Каждый архетип задает веса для 7 эмоциональных осей.
-
 class EmotionAutomaton:
-    # Весовые коэффициенты по эмоциональным осям для каждого архетипа (пути)
-    ARCHETYPE_WEIGHTS = {
-        # 1. Мудрец — путь знания
-        Archetype.SAGE: {
-            EmotionAxis.JOY_SADNESS: 0.9,
-            EmotionAxis.FEAR_CALM: 1.4,
-            EmotionAxis.ANGER_HUMILITY: 0.6,
-            EmotionAxis.DISGUST_ACCEPTANCE: 1.2,
-            EmotionAxis.SURPRISE_HABIT: 0.8,
-            EmotionAxis.SHAME_CONFIDENCE: 0.7,
-            EmotionAxis.LOVE_ALIENATION: 1.0,
-        },
-        # 2. Бунтарь — путь разрушения
-        Archetype.REBEL: {
-            EmotionAxis.JOY_SADNESS: 1.2,
-            EmotionAxis.FEAR_CALM: 0.6,
-            EmotionAxis.ANGER_HUMILITY: 1.8,
-            EmotionAxis.DISGUST_ACCEPTANCE: 1.4,
-            EmotionAxis.SURPRISE_HABIT: 1.2,
-            EmotionAxis.SHAME_CONFIDENCE: 0.6,
-            EmotionAxis.LOVE_ALIENATION: 1.0,
-        },
-        # 3. Гармонист — путь гармонии
-        Archetype.HARMONIZER: {
-            EmotionAxis.JOY_SADNESS: 1.1,
-            EmotionAxis.FEAR_CALM: 1.2,
-            EmotionAxis.ANGER_HUMILITY: 0.5,
-            EmotionAxis.DISGUST_ACCEPTANCE: 1.4,
-            EmotionAxis.SURPRISE_HABIT: 0.9,
-            EmotionAxis.SHAME_CONFIDENCE: 1.1,
-            EmotionAxis.LOVE_ALIENATION: 1.5,
-        },
-        # 4. Воин — путь охоты
-        Archetype.WARRIOR: {
-            EmotionAxis.JOY_SADNESS: 1.0,
-            EmotionAxis.FEAR_CALM: 0.7,
-            EmotionAxis.ANGER_HUMILITY: 1.6,
-            EmotionAxis.DISGUST_ACCEPTANCE: 0.8,
-            EmotionAxis.SURPRISE_HABIT: 1.0,
-            EmotionAxis.SHAME_CONFIDENCE: 1.3,
-            EmotionAxis.LOVE_ALIENATION: 0.8,
-        },
-        # 5. Трикстер — путь радости
-        Archetype.TRICKSTER: {
-            EmotionAxis.JOY_SADNESS: 1.5,
-            EmotionAxis.FEAR_CALM: 0.9,
-            EmotionAxis.ANGER_HUMILITY: 0.9,
-            EmotionAxis.DISGUST_ACCEPTANCE: 1.1,
-            EmotionAxis.SURPRISE_HABIT: 1.8,
-            EmotionAxis.SHAME_CONFIDENCE: 0.8,
-            EmotionAxis.LOVE_ALIENATION: 1.2,
-        },
-        # 6. Страж — путь сохранения
-        Archetype.GUARDIAN: {
-            EmotionAxis.JOY_SADNESS: 0.9,
-            EmotionAxis.FEAR_CALM: 1.0,
-            EmotionAxis.ANGER_HUMILITY: 0.7,
-            EmotionAxis.DISGUST_ACCEPTANCE: 1.3,
-            EmotionAxis.SURPRISE_HABIT: 0.8,
-            EmotionAxis.SHAME_CONFIDENCE: 1.4,
-            EmotionAxis.LOVE_ALIENATION: 1.6,
-        },
-        # 7. Тихоня — путь небытия
-        Archetype.QUIET: {
-            EmotionAxis.JOY_SADNESS: 1.0,
-            EmotionAxis.FEAR_CALM: 1.1,
-            EmotionAxis.ANGER_HUMILITY: 0.8,
-            EmotionAxis.DISGUST_ACCEPTANCE: 1.5,
-            EmotionAxis.SURPRISE_HABIT: 0.7,
-            EmotionAxis.SHAME_CONFIDENCE: 1.2,
-            EmotionAxis.LOVE_ALIENATION: 1.3,
-        },
-        # 8. Путеводитель — путь вдохновения
-        Archetype.TRAILBLAZER: {
-            EmotionAxis.JOY_SADNESS: 1.4,
-            EmotionAxis.FEAR_CALM: 0.9,
-            EmotionAxis.ANGER_HUMILITY: 0.7,
-            EmotionAxis.DISGUST_ACCEPTANCE: 1.2,
-            EmotionAxis.SURPRISE_HABIT: 1.6,
-            EmotionAxis.SHAME_CONFIDENCE: 0.9,
-            EmotionAxis.LOVE_ALIENATION: 1.4,
-        },
-        # 9. Память — путь памяти
-        Archetype.MEMORY: {
-            EmotionAxis.JOY_SADNESS: 1.1,
-            EmotionAxis.FEAR_CALM: 1.3,
-            EmotionAxis.ANGER_HUMILITY: 0.6,
-            EmotionAxis.DISGUST_ACCEPTANCE: 1.1,
-            EmotionAxis.SURPRISE_HABIT: 0.7,
-            EmotionAxis.SHAME_CONFIDENCE: 1.5,
-            EmotionAxis.LOVE_ALIENATION: 1.2,
-        },
-    }
+    """
+    Класс, моделирующий эмоциональные состояния агента на основе выбранного архетипа.
+    Архетип задает веса для 7 эмоциональных осей, влияющие на восприятие изменений эмоций.
+    """
 
-    def __init__(self, archetype: Archetype = Archetype.SAGE):
-        self.archetype = archetype
-        self.weights = self.ARCHETYPE_WEIGHTS.get(archetype, {})
+    def __init__(self, archetype: Union[Archetype, ArchetypeEnum] = ArchetypeEnum.ERUDITION):
+        # Если передан элемент Enum, получить объект Archetype из словаря
+        if isinstance(archetype, ArchetypeEnum):
+            archetype_obj = ARCHETYPE_WEIGHTS[archetype]
+        else:
+            archetype_obj = archetype
+        
+        self.archetype = archetype_obj
+        self.weights = archetype_obj.weights
         self.pairs = {axis: EmotionPair(axis.value) for axis in EmotionAxis}
 
-    def adjust_emotion(self, axis: EmotionAxis, delta):
+    def adjust_emotion(self, axis: EmotionAxis, delta: float):
+        """Корректирует эмоцию по оси с учетом веса архетипа."""
         if axis in self.pairs:
             weight = self.weights.get(axis, 1)
             self.pairs[axis].adjust(delta * weight)
 
-    def set_emotion(self, axis: EmotionAxis, value):
+    def set_emotion(self, axis: EmotionAxis, value: float):
+        """Устанавливает значение эмоции по оси."""
         if axis in self.pairs:
             self.pairs[axis].set(value)
 
-    def get_emotion_description(self, axis: EmotionAxis):
+    def get_emotion_description(self, axis: EmotionAxis) -> str:
+        """Возвращает текстовое описание эмоции по оси."""
         if axis in self.pairs:
             return self.pairs[axis].describe()
         return "неизвестная эмоция"
 
-    def describe_all(self):
+    def describe_all(self) -> dict:
+        """Возвращает словарь с описаниями всех эмоций по осям."""
         return {axis: pair.describe() for axis, pair in self.pairs.items()}
 
-    def get_archetype(self):
+    def get_archetype(self) -> Archetype:
+        """Возвращает текущий архетип автомата."""
         return self.archetype
 
-    def get_archetype_weights(self):
+    def get_archetype_weights(self) -> dict:
+        """Возвращает веса эмоций, соответствующие текущему архетипу."""
         return self.weights
+
+    def set_archetype(self, archetype: Union[Archetype, ArchetypeEnum]):
+        """
+        Устанавливает новый архетип,
+        обновляет веса эмоций и пересчитывает текущие значения эмоций с учетом новых весов.
+        """
+        if isinstance(archetype, ArchetypeEnum):
+            archetype_obj = ARCHETYPE_WEIGHTS[archetype]
+        else:
+            archetype_obj = archetype
+
+        self.archetype = archetype_obj
+        self.weights = archetype_obj.weights
+        for axis, pair in self.pairs.items():
+            original_value = pair.value
+            weight = self.weights.get(axis, 1)
+            # Пересчитываем значение эмоции с учетом нового веса
+            pair.set(original_value * weight)
