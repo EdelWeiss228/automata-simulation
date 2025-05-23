@@ -134,18 +134,23 @@ class Collective:
         return mandatory, optional, avoid
 
     def _choose_target(self, agent, mandatory, optional):
-        """Выбрать цель взаимодействия на основе обязательных и опциональных отношений."""
+        """Выбрать цель взаимодействия на основе обязательных и опциональных отношений, учитывая responsiveness и trust."""
+        def priority_score(metrics):
+            # Если responsiveness < 0, его вклад увеличивается в 1.5 раза
+            responsiveness = metrics.get('responsiveness', 0)
+            multiplier = 1 if responsiveness < 0 else 1
+            alpha = 1.5
+            return (
+                metrics.get('affinity', 0) +
+                metrics.get('utility', 0) +
+                alpha * metrics.get('trust', 0) +
+                multiplier * responsiveness
+            )
         chosen = None
         if mandatory:
-            chosen = max(
-                mandatory,
-                key=lambda x: (x[1]['affinity'], x[1]['utility'])
-            )
+            chosen = max(mandatory, key=lambda x: priority_score(x[1]))
         elif optional:
-            chosen = max(
-                optional,
-                key=lambda x: (x[1]['affinity'], x[1]['utility'])
-            )
+            chosen = max(optional, key=lambda x: priority_score(x[1]))
         return chosen
 
     def _process_refusal(self, agent, target_agent):
@@ -169,12 +174,29 @@ class Collective:
             for key in ['trust', 'affinity', 'utility', 'responsiveness']:
                 target_agent.relations[agent.name].setdefault(key, 0)
 
-        # Обновление доверия
+        # Обновление предиката responsiveness вместо trust
+        sensitivity = getattr(agent, 'sensitivity', 1)
+        responsiveness_factor = getattr(agent, 'responsiveness', 1)
+        decrement = round(0.5 * sensitivity * responsiveness_factor)
+        agent.relations[target_agent.name]['responsiveness'] = max(
+            -10, agent.relations[target_agent.name].get('responsiveness', 0) - decrement
+        )
+        target_agent.relations[agent.name]['responsiveness'] = max(
+            -10, target_agent.relations[agent.name].get('responsiveness', 0) - decrement
+        )
+
+        # Дополнительно понижаем trust и affinity при отказе
         agent.relations[target_agent.name]['trust'] = max(
-            -10, agent.relations[target_agent.name].get('trust', 0) - 2
+            -10, agent.relations[target_agent.name].get('trust', 0) - round(0.5 * sensitivity)
+        )
+        agent.relations[target_agent.name]['affinity'] = max(
+            -10, agent.relations[target_agent.name].get('affinity', 0) - round(0.5 * sensitivity)
         )
         target_agent.relations[agent.name]['trust'] = max(
-            -10, target_agent.relations[agent.name].get('trust', 0) - 2
+            -10, target_agent.relations[agent.name].get('trust', 0) - round(0.5 * sensitivity)
+        )
+        target_agent.relations[agent.name]['affinity'] = max(
+            -10, target_agent.relations[agent.name].get('affinity', 0) - round(0.5 * sensitivity)
         )
 
     def _process_interaction_result(self, agent, target_agent, success):
@@ -222,6 +244,15 @@ class Collective:
                     10, target_agent.relations[agent.name].get('utility', 0) +
                     int(1 * sensitivity)
                 )
+            # Увеличиваем responsiveness у обоих агентов (максимум 10)
+            increment = round(getattr(agent, 'sensitivity', 1))
+            agent.relations[target_agent.name]['responsiveness'] = min(
+                10, agent.relations[target_agent.name].get('responsiveness', 0) + increment
+            )
+            if target_agent.name in target_agent.relations:
+                target_agent.relations[agent.name]['responsiveness'] = min(
+                    10, target_agent.relations[agent.name].get('responsiveness', 0) + increment
+                )
         else:
             delta = int(1 * sensitivity)
             agent.relations[target_agent.name]['trust'] = max(
@@ -230,6 +261,15 @@ class Collective:
             if target_agent.name in target_agent.relations:
                 target_agent.relations[agent.name]['trust'] = max(
                     -10, target_agent.relations[agent.name].get('trust', 0) - delta
+                )
+            # Увеличиваем responsiveness у обоих агентов (максимум 10)
+            increment = round(getattr(agent, 'sensitivity', 1))
+            agent.relations[target_agent.name]['responsiveness'] = min(
+                10, agent.relations[target_agent.name].get('responsiveness', 0) + increment
+            )
+            if target_agent.name in target_agent.relations:
+                target_agent.relations[agent.name]['responsiveness'] = min(
+                    10, target_agent.relations[agent.name].get('responsiveness', 0) + increment
                 )
 
 
@@ -246,15 +286,16 @@ class Collective:
         Возвращает список взаимодействий (agent_from, agent_to, status).
         """
         interactions = []
-        interacted_agents = set()
+        # Убрали interacted_agents, чтобы все агенты могли выбирать независимо
         for agent in self.agents.values():
-            if agent.name in interacted_agents:
-                continue
             print(f"\n{agent.name} принимает решение о взаимодействии:")
             mandatory, optional, _ = self._categorize_relationships(agent)
             chosen = self._choose_target(agent, mandatory, optional)
             if not chosen:
                 print(f"{agent.name} решил отказаться от взаимодействия сегодня.")
+                for target_name in agent.relations.keys():
+                    # Логируем отказ от взаимодействия с каждым партнёром
+                    interactions.append((agent.name, target_name, "refusal"))
                 for target_name in agent.relations.keys():
                     agent.relations[target_name]['trust'] = (
                         agent.relations[target_name].get('trust', 0) - 1
@@ -269,8 +310,12 @@ class Collective:
             target, metrics = chosen
             target_agent = self.get_agent(target)
             if target_agent is not None:
-                refusal_chance = getattr(agent.archetype, "refusal_chance", 0.3)
-                if random.random() < refusal_chance:
+                # Новый блок отказа с учетом responsiveness
+                responsiveness = agent.relations[target].get("responsiveness", 0)
+                base_chance = getattr(agent.archetype, "refusal_chance", 0.3)
+                dynamic_modifier = max(0.1, 1 - responsiveness / 10)
+                final_chance = min(1, base_chance * dynamic_modifier)
+                if random.random() < final_chance:
                     self._process_refusal(agent, target_agent)
                     interactions.append((agent.name, target, "refusal"))
                     continue
@@ -292,14 +337,14 @@ class Collective:
                     f"Взаимодействие между {agent.name} и {target} НЕУДАЧНО."
                 )
             self._process_interaction_result(agent, target_agent, success)
-            interacted_agents.add(agent.name)
-            interacted_agents.add(target)
+            # Убрали отметку об "interacted_agents"
             status = "success" if success else "fail"
             interactions.append((agent.name, target, status))
+        # В этом блоке тоже не надо отмечать, кто не взаимодействовал, так как все участвуют
         for agent in self.agents.values():
-            if agent.name not in interacted_agents:
-                for rel in agent.relations.values():
-                    rel['trust'] = rel.get('trust', 0) + 1
+            # Можно убрать или оставить по необходимости
+            for rel in agent.relations.values():
+                rel['trust'] = rel.get('trust', 0) + 1
         return interactions
 
     def _process_player_emotions_and_interactions(self):
@@ -366,6 +411,13 @@ class Collective:
         self.influence_emotions()
         for _ in range(interactions_per_day):
             self.make_interaction_decision()
+        # Нормализация отношений перед взаимодействием с игроками
+        for agent in self.agents.values():
+            for rel in agent.relations.values():
+                for key in ['trust', 'affinity', 'responsiveness', 'utility']:
+                    if rel[key] < 0:
+                        rel[key] += 1
+                    rel[key] = min(10, max(-10, rel[key]))
         self._agents_interact_with_players()
 
     def remove_agent(self, agent_name):

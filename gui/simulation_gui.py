@@ -10,7 +10,7 @@ from model.emotion_automaton import ArchetypeEnum
 import random
 
 NODE_RADIUS = 20
-CANVAS_SIZE = 600
+CANVAS_SIZE = 500
 
 
 
@@ -18,7 +18,7 @@ class SimulationGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Симуляция агентов")
-        self.geometry(f"{CANVAS_SIZE + 300}x{CANVAS_SIZE + 50}")
+        self.geometry(f"{CANVAS_SIZE + 300}x{CANVAS_SIZE + 210}")
 
         self.collective = Collective()
         self.agent_nodes = {}
@@ -27,16 +27,33 @@ class SimulationGUI(tk.Tk):
         self.selected_agent_name = None
         self.auto_running = False
         self.current_date = datetime.date(2025, 1, 1)
+        self.simulation_started = False
+
+        self.first_log_states = True
+        self.first_log_interactions = True
 
         self.create_widgets()
         self.place_agents_initial()
 
     def create_widgets(self):
-        # Canvas для отображения графа
-        self.canvas = tk.Canvas(self, width=CANVAS_SIZE, height=CANVAS_SIZE, bg='white')
-        self.canvas.grid(row=0, column=0, rowspan=10, padx=10, pady=10)
+        # Canvas для отображения графа с запасом снизу
+        self.canvas = tk.Canvas(self, width=CANVAS_SIZE, height=CANVAS_SIZE + 150, bg='white')
+        self.canvas.grid(row=0, column=0, padx=10, pady=10)  # УБРАЛ rowspan=10
 
-        # Панель управления
+        # Новый фрейм для управления симуляцией под canvas
+        self.simulation_control_frame = tk.Frame(self)
+        self.simulation_control_frame.grid(row=1, column=0, pady=(0,10))
+
+        self.btn_simulate = tk.Button(self.simulation_control_frame, text="Симулировать день", command=self.simulate_day)
+        self.btn_simulate.pack(side=tk.LEFT, padx=5)
+
+        self.btn_auto = tk.Button(self.simulation_control_frame, text="Автосимуляция", command=self.toggle_autosim)
+        self.btn_auto.pack(side=tk.LEFT, padx=5)
+
+        self.btn_restart = tk.Button(self.simulation_control_frame, text="Перезапуск симуляции", command=self.restart_simulation)
+        self.btn_restart.pack(side=tk.LEFT, padx=5)
+
+        # Панель управления справа
         self.control_frame = tk.Frame(self)
         self.control_frame.grid(row=0, column=1, sticky='n')
         self.control_frame.config(width=280)
@@ -56,24 +73,39 @@ class SimulationGUI(tk.Tk):
         self.day_label = tk.Label(self.control_frame, text=f"День симуляции: {self.day_counter}")
         self.day_label.pack(pady=3)
 
-        # Кнопки
+        # --- Кнопки управления агентами ---
         self.btn_add = tk.Button(self.control_frame, text="Добавить агента", command=self.add_agent_dialog)
         self.btn_add.pack(pady=3)
+
+        self.btn_add_random = tk.Button(self.control_frame, text="Добавить случайного агента", command=self.add_random_agent)
+        self.btn_add_random.pack(pady=3)
+
+        frame_n_add = tk.Frame(self.control_frame)
+        frame_n_add.pack(pady=3)
+
+        self.n_entry = tk.Entry(frame_n_add, width=5)
+        self.n_entry.insert(0, "5")
+        self.n_entry.pack(side=tk.LEFT)
+
+        self.btn_add_multiple = tk.Button(frame_n_add, text="Добавить несколько агентов", command=self.add_multiple_random_agents, width=18)
+        self.btn_add_multiple.pack(side=tk.LEFT, padx=2)
 
         self.btn_remove = tk.Button(self.control_frame, text="Удалить агента", command=self.remove_selected_agent)
         self.btn_remove.pack(pady=3)
 
         self.btn_details = tk.Button(self.control_frame, text="Подробнее", command=self.show_agent_details)
         self.btn_details.pack(pady=3)
+        # --- Конец кнопок управления агентами ---
 
-        self.btn_simulate = tk.Button(self.control_frame, text="Симулировать день", command=self.simulate_day)
-        self.btn_simulate.pack(pady=3)
+    def add_multiple_random_agents(self):
+        try:
+            count = int(self.n_entry.get())
+        except ValueError:
+            messagebox.showerror("Ошибка", "Введите корректное число агентов")
+            return
 
-        self.btn_auto = tk.Button(self.control_frame, text="Автосимуляция", command=self.toggle_autosim)
-        self.btn_auto.pack(pady=3)
-
-        self.btn_add_random = tk.Button(self.control_frame, text="Добавить случайного агента", command=self.add_random_agent)
-        self.btn_add_random.pack(pady=3)
+        for _ in range(count):
+            self.add_random_agent()
 
     def place_agents_initial(self):
         # Если уже есть агенты в collective, разместить их
@@ -146,6 +178,9 @@ class SimulationGUI(tk.Tk):
         self.edges.clear()
 
     def simulate_day(self):
+        if not self.simulation_started:
+            self.log_states_to_csv()
+        self.simulation_started = True
         self.clear_edges()
         # Запускаем логику симуляции: каждый агент принимает решение хотя бы раз
         # Для наглядности - будем сохранять взаимодействия (source, target, success)
@@ -170,6 +205,9 @@ class SimulationGUI(tk.Tk):
         # Увеличить счетчик дней и обновить метку
         self.day_counter += 1
         self.day_label.config(text=f"День симуляции: {self.day_counter}")
+
+        self.log_interactions_to_csv(interactions)
+        self.log_states_to_csv()  # Добавлен вызов сохранения состояния после дня
 
     def show_agent_details(self):
         if self.selected_agent_name is None:
@@ -230,3 +268,45 @@ class SimulationGUI(tk.Tk):
 
         self.collective.add_agent(new_agent)
         self.add_agent_node(new_agent.name)
+
+    def log_states_to_csv(self):
+        import csv
+        import os
+        mode = "w" if self.first_log_states else "a"
+        with open("agent_states.csv", mode, newline='', encoding="utf-8") as f:
+            writer = csv.writer(f)
+            if self.first_log_states:
+                writer.writerow(["Дата", "Имя агента", "Эмоции", "Предикаты"])
+            for agent in self.collective.agents.values():
+                emotion_str = "; ".join(f"{k}:{v}" for k, v in agent.get_emotions().items())
+                pred_strs = []
+                for target, preds in agent.relations.items():
+                    pred_str = f"{target}=" + ",".join(f"{k}:{v}" for k, v in preds.items())
+                    pred_strs.append(pred_str)
+                writer.writerow([self.current_date.isoformat(), agent.name, emotion_str, " | ".join(pred_strs)])
+        self.first_log_states = False
+
+    def log_interactions_to_csv(self, interactions):
+        import csv
+        import os
+        mode = "w" if self.first_log_interactions else "a"
+        with open("interaction_log.csv", mode, newline='', encoding="utf-8") as f:
+            writer = csv.writer(f)
+            if self.first_log_interactions:
+                writer.writerow(["Дата", "Источник", "Цель", "Успех"])
+            for a_from, a_to, success in interactions:
+                writer.writerow([self.current_date.isoformat(), a_from, a_to, success])
+        self.first_log_interactions = False
+    def restart_simulation(self):
+        self.collective = Collective()
+        self.agent_nodes.clear()
+        self.edges.clear()
+        self.canvas.delete("all")
+        self.agent_listbox.delete(0, tk.END)
+        self.day_counter = 0
+        self.current_date = datetime.date(2025, 1, 1)
+        self.simulation_started = False
+        self.first_log_states = True
+        self.first_log_interactions = True
+        self.date_label.config(text=f"Дата: {self.current_date.strftime('%d %b %Y')}")
+        self.day_label.config(text=f"День симуляции: {self.day_counter}")
