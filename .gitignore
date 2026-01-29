@@ -24,6 +24,7 @@ pdf/
 .DS_Store
 .vscode/
 .idea/
+.git 2/
 
 # Research & Tests (as per user request)
 tests/
