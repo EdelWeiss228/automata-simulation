@@ -1,4 +1,8 @@
 """Модуль, описывающий игрока и его взаимодействие с агентами."""
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .collective import Collective
 
 class Player:
     """Класс игрока, управляющего эмоциями и взаимодействиями с агентами."""
@@ -6,7 +10,7 @@ class Player:
         """Инициализация объекта игрока."""
         self.name = name
         self.group = group
-        self.emotions = ['joy_sadness', 'anger_humility', 'fear_calm', 'love_alienation',
+        self.emotions = ['joy_sadness', 'anger_humility', 'fear_calm', 'openness_alienation',
                          'disgust_acceptance', 'shame_confidence', 'surprise_habit']
         self.current_emotion = 'joy_sadness'
         self.emotion_value = 0
@@ -71,11 +75,21 @@ class Player:
             f"{self.name} взаимодействует с {target_agent.name} в эмоции "
             f"{self.current_emotion} с величиной {emotion_value}."
         )
+        
+        sensitivity = getattr(target_agent, 'sensitivity', 1.0)
+        delta = emotion_value * sensitivity
 
         target_agent.automaton.adjust_emotion(self.current_emotion, emotion_value)
-        target_agent.relations[self.name]['affinity'] += emotion_value
-        target_agent.relations[self.name]['trust'] += emotion_value
-        target_agent.relations[self.name]['utility'] += emotion_value
+        
+        target_agent.relations[self.name]['affinity'] = target_agent.limit_predicate_value(
+            target_agent.relations[self.name]['affinity'] + delta
+        )
+        target_agent.relations[self.name]['trust'] = target_agent.limit_predicate_value(
+            target_agent.relations[self.name]['trust'] + delta
+        )
+        target_agent.relations[self.name]['utility'] = target_agent.limit_predicate_value(
+            target_agent.relations[self.name]['utility'] + delta
+        )
 
         print(f"Отношения с {target_agent.name} обновлены!")
 
@@ -93,9 +107,13 @@ class Player:
         response_value = emotion_value
 
         if agent_name in self.relations:
-            self.relations[agent_name]['affinity'] += response_value
-            self.relations[agent_name]['trust'] += response_value
-            self.relations[agent_name]['utility'] += response_value
+            # У игрока нет метода limit_predicate_value, но он есть у агентов коллектива
+            # Для игрока границы тоже должны быть [-10, 10]
+            def limit(v): return max(-10, min(10, v))
+            
+            self.relations[agent_name]['affinity'] = limit(self.relations[agent_name]['affinity'] + response_value)
+            self.relations[agent_name]['trust'] = limit(self.relations[agent_name]['trust'] + response_value)
+            self.relations[agent_name]['utility'] = limit(self.relations[agent_name]['utility'] + response_value)
             print(f"Отношения с {agent_name} обновлены на основе ответа игрока!")
         else:
             print(f"Неизвестный агент: {agent_name}. Отношения не обновлены.")

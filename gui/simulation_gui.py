@@ -5,30 +5,35 @@ from gui.agent_add_dialog import AgentAddDialog
 from gui.agent_state_dialog import AgentStateDialog
 from gui.agent_node import AgentNode
 from gui.interaction_edge import InteractionEdge
-from collective import Collective
-from model.emotion_automaton import ArchetypeEnum
+from model.collective import Collective
+from model.university_collective import UniversityCollective
+from gui.university_gui import UniversityGUI
+from core.agent_factory import AgentFactory
+from core.data_logger import DataLogger
+from gui.color_utils import get_emotion_color
 import random
+import math
 
 NODE_RADIUS = 20
-CANVAS_SIZE = 500
-
-
+INITIAL_CANVAS_SIZE = 600
+SPACING = 3 * NODE_RADIUS  # 60 пикселей между центрами
 
 class SimulationGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Симуляция агентов")
-        self.geometry(f"{CANVAS_SIZE + 300}x{CANVAS_SIZE + 210}")
-
+        # Увеличиваем размер окна
+        self.geometry(f"{INITIAL_CANVAS_SIZE + 350}x{INITIAL_CANVAS_SIZE + 250}")
+        
         self.collective = Collective()
         self.agent_nodes = {}
         self.edges = []
 
         self.selected_agent_name = None
         self.auto_running = False
-        self.current_date = datetime.date(2025, 1, 1)
         self.simulation_started = False
 
+        self.logger = DataLogger()
         self.first_log_states = True
         self.first_log_interactions = True
 
@@ -36,13 +41,30 @@ class SimulationGUI(tk.Tk):
         self.place_agents_initial()
 
     def create_widgets(self):
-        # Canvas для отображения графа с запасом снизу
-        self.canvas = tk.Canvas(self, width=CANVAS_SIZE, height=CANVAS_SIZE + 150, bg='white')
-        self.canvas.grid(row=0, column=0, padx=10, pady=10)  # УБРАЛ rowspan=10
+        # Настройка сетки главного окна
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
 
-        # Новый фрейм для управления симуляцией под canvas
+        # --- Фрейм для Canvas с прокруткой ---
+        self.canvas_frame = tk.Frame(self)
+        self.canvas_frame.grid(row=0, column=0, padx=10, pady=10, sticky='nsew')
+        
+        self.canvas_frame.grid_rowconfigure(0, weight=1)
+        self.canvas_frame.grid_columnconfigure(0, weight=1)
+
+        self.canvas = tk.Canvas(self.canvas_frame, bg='white', scrollregion=(0, 0, INITIAL_CANVAS_SIZE, INITIAL_CANVAS_SIZE))
+        
+        self.h_scroll = tk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
+        self.v_scroll = tk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
+        
+        self.canvas.configure(xscrollcommand=self.h_scroll.set, yscrollcommand=self.v_scroll.set)
+        
+        self.canvas.grid(row=0, column=0, sticky='nsew')
+        self.v_scroll.grid(row=0, column=1, sticky='ns')
+        self.h_scroll.grid(row=1, column=0, sticky='ew')
+
         self.simulation_control_frame = tk.Frame(self)
-        self.simulation_control_frame.grid(row=1, column=0, pady=(0,10))
+        self.simulation_control_frame.grid(row=1, column=0, pady=(0, 10), sticky='ew')
 
         self.btn_simulate = tk.Button(self.simulation_control_frame, text="Симулировать день", command=self.simulate_day)
         self.btn_simulate.pack(side=tk.LEFT, padx=5)
@@ -53,49 +75,64 @@ class SimulationGUI(tk.Tk):
         self.btn_restart = tk.Button(self.simulation_control_frame, text="Перезапуск симуляции", command=self.restart_simulation)
         self.btn_restart.pack(side=tk.LEFT, padx=5)
 
-        # Панель управления справа
+        # --- Панель управления справа ---
         self.control_frame = tk.Frame(self)
-        self.control_frame.grid(row=0, column=1, sticky='n')
-        self.control_frame.config(width=280)
+        self.control_frame.grid(row=0, column=1, rowspan=2, sticky='ns', padx=10, pady=10)
+        self.control_frame.config(width=300)
 
         # Список агентов
         tk.Label(self.control_frame, text="Агенты:").pack()
-        self.agent_listbox = tk.Listbox(self.control_frame, height=20)
-        self.agent_listbox.pack()
+        self.agent_listbox = tk.Listbox(self.control_frame, height=25, width=30)
+        self.agent_listbox.pack(fill=tk.Y, expand=True)
         self.agent_listbox.bind('<<ListboxSelect>>', self.on_agent_select)
 
-        # Метка даты
-        self.date_label = tk.Label(self.control_frame, text=f"Дата: {self.current_date.strftime('%d %b %Y')}")
+        # Метки информации
+        self.date_label = tk.Label(self.control_frame, text=f"Дата: {self.collective.current_date.strftime('%d %b %Y')}")
         self.date_label.pack(pady=3)
-
-        # Метка количества дней симуляции
-        self.day_counter = 0
-        self.day_label = tk.Label(self.control_frame, text=f"День симуляции: {self.day_counter}")
+        self.day_label = tk.Label(self.control_frame, text=f"День симуляции: {self.collective.current_step}")
         self.day_label.pack(pady=3)
 
-        # --- Кнопки управления агентами ---
-        self.btn_add = tk.Button(self.control_frame, text="Добавить агента", command=self.add_agent_dialog)
-        self.btn_add.pack(pady=3)
-
-        self.btn_add_random = tk.Button(self.control_frame, text="Добавить случайного агента", command=self.add_random_agent)
-        self.btn_add_random.pack(pady=3)
+        # Кнопки
+        tk.Button(self.control_frame, text="Добавить агента", command=self.add_agent_dialog).pack(pady=3, fill=tk.X)
+        tk.Button(self.control_frame, text="Добавить случайного агента", command=self.add_random_agent).pack(pady=3, fill=tk.X)
 
         frame_n_add = tk.Frame(self.control_frame)
-        frame_n_add.pack(pady=3)
-
+        frame_n_add.pack(pady=3, fill=tk.X)
         self.n_entry = tk.Entry(frame_n_add, width=5)
         self.n_entry.insert(0, "5")
         self.n_entry.pack(side=tk.LEFT)
+        tk.Button(frame_n_add, text="Добавить N агентов", command=self.add_multiple_random_agents).pack(side=tk.LEFT, padx=2, fill=tk.X, expand=True)
 
-        self.btn_add_multiple = tk.Button(frame_n_add, text="Добавить несколько агентов", command=self.add_multiple_random_agents, width=18)
-        self.btn_add_multiple.pack(side=tk.LEFT, padx=2)
+        tk.Button(self.control_frame, text="Удалить агента", command=self.remove_selected_agent).pack(pady=3, fill=tk.X)
+        tk.Button(self.control_frame, text="Подробнее", command=self.show_agent_details).pack(pady=3, fill=tk.X)
+        tk.Button(self.control_frame, text="V3: Загрузить Университет", command=self.load_university, bg='lightblue').pack(pady=10, fill=tk.X)
 
-        self.btn_remove = tk.Button(self.control_frame, text="Удалить агента", command=self.remove_selected_agent)
-        self.btn_remove.pack(pady=3)
+    def load_university(self):
+        """Переключает на масштабную симуляцию университета."""
+        if messagebox.askyesno("Подтверждение", "Это создаст 1875 агентов и может занять некоторое время. Продолжить?"):
+            self.collective = UniversityCollective()
+            self.restart_gui_for_new_collective()
+            messagebox.showinfo("Готово", "Университет загружен. 5 факультетов, 25 потоков, 75 групп.")
+            
+            # Открываем новое окно с картой
+            self.open_university_map()
 
-        self.btn_details = tk.Button(self.control_frame, text="Подробнее", command=self.show_agent_details)
-        self.btn_details.pack(pady=3)
-        # --- Конец кнопок управления агентами ---
+    def open_university_map(self):
+        """Открывает детализированную карту университета."""
+        if isinstance(self.collective, UniversityCollective):
+            self.uni_map_window = UniversityGUI(self, self.collective)
+        else:
+            messagebox.showwarning("Внимание", "Карта доступна только в режиме Университета (V3).")
+
+    def restart_gui_for_new_collective(self):
+        """Очищает GUI и перерисовывает ноды для текущего коллектива."""
+        self.agent_nodes.clear()
+        self.edges.clear()
+        self.canvas.delete("all")
+        self.agent_listbox.delete(0, tk.END)
+        self.canvas.config(scrollregion=(0, 0, INITIAL_CANVAS_SIZE, INITIAL_CANVAS_SIZE))
+        self.place_agents_initial()
+        self.simulation_started = False
 
     def add_multiple_random_agents(self):
         try:
@@ -103,41 +140,104 @@ class SimulationGUI(tk.Tk):
         except ValueError:
             messagebox.showerror("Ошибка", "Введите корректное число агентов")
             return
-
         for _ in range(count):
             self.add_random_agent()
 
     def place_agents_initial(self):
-        # Если уже есть агенты в collective, разместить их
         for agent_name in self.collective.agents.keys():
             self.add_agent_node(agent_name)
 
-    def add_agent_node(self, agent_name):
-        max_attempts = 100
-        x, y = None, None
+    def get_next_grid_position(self):
+        """
+        Находит случайную свободную позицию в 'активной зоне' сетки.
+        Если находит, возвращает координаты.
+        """
+        # Определяем примерное количество необходимых ячеек с запасом
+        idx = len(self.agent_nodes)
+        n_agents = idx + 1
+        
+        # Оцениваем нужный размер поля (columns x rows)
+        # Хотим примерно квадратную или прямоугольную область
+        # S ~ n_agents * 2 (чтобы было 50% заполнение, для "воздуха")
+        target_cells = max(50, n_agents * 2) 
+        columns = 10 # Фиксированная ширина для удобства скролла
+        
+        # Пытаемся найти случайное свободное место
+        max_attempts = 50
+        margin = NODE_RADIUS + 20
+        cell_size = SPACING + 20
+        
         for _ in range(max_attempts):
-            x = random.randint(NODE_RADIUS + 10, CANVAS_SIZE - NODE_RADIUS - 10)
-            y = random.randint(NODE_RADIUS + 10, CANVAS_SIZE - NODE_RADIUS - 10)
-
-            # Проверяем пересечения с уже добавленными узлами
+            # Выбираем случайную колонку и ряд в разумных пределах
+            # Ряд может расти вниз по мере добавления
+            max_row = (n_agents // columns) + 5 # +5 рядов запаса вниз
+            
+            c = random.randint(0, columns - 1)
+            r = random.randint(0, max_row)
+            
+            # Проверяем, не занята ли ячейка (простая проверка по расстоянию до всех других)
+            candidate_x = margin + c * cell_size
+            candidate_y = margin + r * cell_size
+            
             collision = False
             for node in self.agent_nodes.values():
-                dx = node.x - x
-                dy = node.y - y
-                dist = (dx**2 + dy**2)**0.5
-                if dist < NODE_RADIUS * 2 + 10:  # 10 пикселей дополнительный отступ
+                dist = ((node.x - candidate_x)**2 + (node.y - candidate_y)**2)**0.5
+                if dist < NODE_RADIUS: # Если попали почти в ту же точку
                     collision = True
                     break
-
+            
             if not collision:
-                break
+                return candidate_x, candidate_y
+                
+        # Если не повезло с рандомом — ставим в первое свободное место последовательно (fallback)
+        # Это старая логика, чтобы точно не зависнуть
+        for r in range(1000):
+            for c in range(columns):
+                candidate_x = margin + c * cell_size
+                candidate_y = margin + r * cell_size
+                
+                collision = False
+                for node in self.agent_nodes.values():
+                    dist = ((node.x - candidate_x)**2 + (node.y - candidate_y)**2)**0.5
+                    if dist < NODE_RADIUS:
+                        collision = True
+                        break
+                
+                if not collision:
+                    return candidate_x, candidate_y
+        
+        return 0, 0 # Should not happen
+
+    def add_agent_node(self, agent_name):
+        x, y = self.get_next_grid_position()
+        
+        # Проверяем, нужно ли расширить canvas
+        current_scroll = self.canvas.cget("scrollregion")
+        if current_scroll:
+            try:
+                # scrollregion возвращает строку "x1 y1 x2 y2"
+                val = list(map(int, current_scroll.split()))
+                max_w, max_h = val[2], val[3]
+            except:
+                max_w, max_h = INITIAL_CANVAS_SIZE, INITIAL_CANVAS_SIZE
         else:
-            # Если не нашли свободное место, кладём без проверки
-            if x is None or y is None:
-                x = CANVAS_SIZE // 2
-                y = CANVAS_SIZE // 2
+            max_w, max_h = INITIAL_CANVAS_SIZE, INITIAL_CANVAS_SIZE
+            
+        new_w = max(max_w, x + NODE_RADIUS + 50)
+        new_h = max(max_h, y + NODE_RADIUS + 50)
+        
+        if new_w > max_w or new_h > max_h:
+            self.canvas.config(scrollregion=(0, 0, new_w, new_h))
 
         node = AgentNode(self.canvas, x, y, agent_name)
+        
+        # Сразу красим, если агент уже со старыми эмоциями
+        agent = self.collective.get_agent(agent_name)
+        if agent:
+             emotion_name, value = agent.get_primary_emotion()
+             color = get_emotion_color(emotion_name, value)
+             node.set_color(color)
+        
         self.agent_nodes[agent_name] = node
         self.agent_listbox.insert(tk.END, agent_name)
 
@@ -150,7 +250,6 @@ class SimulationGUI(tk.Tk):
             self.selected_agent_name = None
 
     def add_agent_dialog(self):
-        # Всплывающее окно для добавления агента
         dialog = AgentAddDialog(self, self.collective)
         self.wait_window(dialog.top)
         if dialog.agent_added:
@@ -162,16 +261,19 @@ class SimulationGUI(tk.Tk):
             messagebox.showwarning("Внимание", "Выберите агента для удаления")
             return
         self.collective.remove_agent(self.selected_agent_name)
-        # Удалить визуально
+        
         node = self.agent_nodes.pop(self.selected_agent_name)
         node.delete()
-        # Удалить из списка
+        
+        # Обновляем Listbox
         idx = self.agent_listbox.get(0, tk.END).index(self.selected_agent_name)
         self.agent_listbox.delete(idx)
         self.selected_agent_name = None
-        # Удалить все ребра и перерисовать (без них)
+        
         self.clear_edges()
-
+        # Пересчитываем позиции? Пока сложно, оставим дырки или можно перестроить всё.
+        # Для простоты можно оставить дырку, новые агенты встанут в конец.
+        
     def clear_edges(self):
         for edge in self.edges:
             edge.delete()
@@ -179,35 +281,40 @@ class SimulationGUI(tk.Tk):
 
     def simulate_day(self):
         if not self.simulation_started:
-            self.log_states_to_csv()
+            self.logger.log_agent_states("agent_states.csv", self.collective.current_date, self.collective.agents, self.first_log_states)
+            self.first_log_states = False
+        
         self.simulation_started = True
         self.clear_edges()
-        # Запускаем логику симуляции: каждый агент принимает решение хотя бы раз
-        # Для наглядности - будем сохранять взаимодействия (source, target, success)
-        interactions = []
-        # Вызовем collective.make_interaction_decision(), предполагая, что он возвращает список взаимодействий
-        # Формат взаимодействия: (agent_from_name, agent_to_name, success)
+        
         try:
-            interactions = self.collective.make_interaction_decision()
+            interactions = self.collective.perform_full_day_cycle(interactive=False)
         except Exception as e:
             messagebox.showerror("Ошибка симуляции", f"Произошла ошибка при симуляции: {e}")
             return
 
-        # Отобразим ребра по результатам взаимодействий
-        for agent_from, agent_to, success in interactions:
+        # Логирование
+        self.logger.log_interactions("interaction_log.csv", self.collective.current_date, interactions, self.first_log_interactions)
+        self.first_log_interactions = False
+        
+        self.logger.log_agent_states("agent_states.csv", self.collective.current_date, self.collective.agents, self.first_log_states)
+        self.first_log_states = False
+
+        # Визуализация ребер
+        for agent_from, agent_to, result in interactions:
             if agent_from in self.agent_nodes and agent_to in self.agent_nodes:
-                edge = InteractionEdge(self.canvas, self.agent_nodes[agent_from], self.agent_nodes[agent_to], success)
+                edge = InteractionEdge(self.canvas, self.agent_nodes[agent_from], self.agent_nodes[agent_to], result)
                 self.edges.append(edge)
 
-        # Обновить дату после симуляции
-        self.current_date += datetime.timedelta(days=1)
-        self.date_label.config(text=f"Дата: {self.current_date.strftime('%d %b %Y')}")
-        # Увеличить счетчик дней и обновить метку
-        self.day_counter += 1
-        self.day_label.config(text=f"День симуляции: {self.day_counter}")
+        # Обновление цветов
+        for name, agent in self.collective.agents.items():
+            if name in self.agent_nodes:
+                emotion_name, value = agent.get_primary_emotion()
+                color = get_emotion_color(emotion_name, value)
+                self.agent_nodes[name].set_color(color)
 
-        self.log_interactions_to_csv(interactions)
-        self.log_states_to_csv()  # Добавлен вызов сохранения состояния после дня
+        self.date_label.config(text=f"Дата: {self.collective.current_date.strftime('%d %b %Y')}")
+        self.day_label.config(text=f"День симуляции: {self.collective.current_step}")
 
     def show_agent_details(self):
         if self.selected_agent_name is None:
@@ -231,82 +338,23 @@ class SimulationGUI(tk.Tk):
     def run_autosim(self):
         if self.auto_running:
             self.simulate_day()
-            self.after(1000, self.run_autosim)  # запускать каждые 1000 мс (1 сек)
+            self.after(1000, self.run_autosim)
 
     def add_random_agent(self):
-        archetype = random.choice(list(ArchetypeEnum))
+        new_name = self.collective.add_random_agent()
+        self.add_agent_node(new_name)
 
-        names = ["Рома", "Иван", "Аня", "Катя", "Дима", "Саша", "Маша", "Петя", "Лена", "Никита"]
-        name = random.choice(names) + f"_{len(self.collective.agents) + 1}"
-
-        sensitivity = round(random.uniform(0.0, 3.0), 2)
-
-        emotions = {axis: random.randint(-3, 3) for axis in [
-            "joy_sadness", "fear_calm", "anger_humility",
-            "disgust_acceptance", "surprise_habit",
-            "shame_confidence", "love_alienation"
-        ]}
-
-        relations = {}
-        for other_agent_name in self.collective.agents:
-            relations[other_agent_name] = {
-                'trust': random.randint(-10, 10) if random.random() > 0.3 else 0,
-                'affinity': random.randint(-10, 10) if random.random() > 0.3 else 0,
-                'utility': random.randint(-10, 10) if random.random() > 0.3 else 0,
-                'responsiveness': random.randint(-10, 10) if random.random() > 0.3 else 0,
-            }
-
-        from agent import Agent
-        new_agent = Agent(
-            name=name,
-            archetype=archetype,
-            sensitivity=sensitivity,
-            emotions=emotions
-        )
-        for other_name, preds in relations.items():
-            new_agent.relations[other_name] = preds
-
-        self.collective.add_agent(new_agent)
-        self.add_agent_node(new_agent.name)
-
-    def log_states_to_csv(self):
-        import csv
-        import os
-        mode = "w" if self.first_log_states else "a"
-        with open("agent_states.csv", mode, newline='', encoding="utf-8") as f:
-            writer = csv.writer(f)
-            if self.first_log_states:
-                writer.writerow(["Дата", "Имя агента", "Эмоции", "Предикаты"])
-            for agent in self.collective.agents.values():
-                emotion_str = "; ".join(f"{k}:{v}" for k, v in agent.get_emotions().items())
-                pred_strs = []
-                for target, preds in agent.relations.items():
-                    pred_str = f"{target}=" + ",".join(f"{k}:{v}" for k, v in preds.items())
-                    pred_strs.append(pred_str)
-                writer.writerow([self.current_date.isoformat(), agent.name, emotion_str, " | ".join(pred_strs)])
-        self.first_log_states = False
-
-    def log_interactions_to_csv(self, interactions):
-        import csv
-        import os
-        mode = "w" if self.first_log_interactions else "a"
-        with open("interaction_log.csv", mode, newline='', encoding="utf-8") as f:
-            writer = csv.writer(f)
-            if self.first_log_interactions:
-                writer.writerow(["Дата", "Источник", "Цель", "Успех"])
-            for a_from, a_to, success in interactions:
-                writer.writerow([self.current_date.isoformat(), a_from, a_to, success])
-        self.first_log_interactions = False
     def restart_simulation(self):
         self.collective = Collective()
         self.agent_nodes.clear()
         self.edges.clear()
         self.canvas.delete("all")
         self.agent_listbox.delete(0, tk.END)
-        self.day_counter = 0
-        self.current_date = datetime.date(2025, 1, 1)
+        # Сброс скролла
+        self.canvas.config(scrollregion=(0, 0, INITIAL_CANVAS_SIZE, INITIAL_CANVAS_SIZE))
+        
         self.simulation_started = False
         self.first_log_states = True
         self.first_log_interactions = True
-        self.date_label.config(text=f"Дата: {self.current_date.strftime('%d %b %Y')}")
-        self.day_label.config(text=f"День симуляции: {self.day_counter}")
+        self.date_label.config(text=f"Дата: {self.collective.current_date.strftime('%d %b %Y')}")
+        self.day_label.config(text=f"День симуляции: {self.collective.current_step}")

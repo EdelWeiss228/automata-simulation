@@ -4,9 +4,11 @@ from typing import Optional, TYPE_CHECKING
 """Модуль описывает класс Agent и его поведение в симуляции."""
 
 if TYPE_CHECKING:
-    from collective import Collective
+    from .collective import Collective
 
 from model.emotion_automaton import EmotionAutomaton, EmotionAxis
+from model.constants import AgentStatus
+import random
 
 
 class Agent:
@@ -20,6 +22,8 @@ class Agent:
         emotion_coefficients=None,
         sensitivity: float = 1.0,
         archetype=None,
+        sportiness: Optional[float] = None,
+        skip_tendency: Optional[float] = None,
     ):
         self.name = name
         self.automaton = EmotionAutomaton()
@@ -27,32 +31,33 @@ class Agent:
             self.automaton.set_archetype(archetype)
         self.relations = {}
         self.sensitivity = sensitivity
-        self.archetype = archetype or self.automaton.get_archetype()
+        self.archetype = self.automaton.get_archetype()
         self.group: Optional["Collective"] = None  # Указатель на коллектив, устанавливается позже
 
-        self.emotion_effects = emotion_effects or {
-            "joy_sadness": {"affinity": 1, "trust": 1},
-            "anger_humility": {"affinity": -2, "trust": -2, "utility": -1},
-            "fear_calm": {"trust": -1, "utility": -1},
-            "love_alienation": {"affinity": 2, "trust": 1},
-            "disgust_acceptance": {"affinity": -1, "utility": -1},
-            "shame_confidence": {"trust": 1, "affinity": -1},
-            "surprise_habit": {"utility": 1},
-        }
+        # Новые параметры версии 3.0
+        self.sportiness = sportiness if sportiness is not None else random.uniform(0, 1)
+        self.skip_tendency = skip_tendency if skip_tendency is not None else random.uniform(0, 0.3)
+        self.status = AgentStatus.HOME
+        
+        # Иерархия
+        self.faculty = None
+        self.stream = None
+        self.group_id = None
+        self.current_pair_index = -1
+        self.seated_next_to = None
 
-        self.emotion_coefficients = emotion_coefficients or {
-            "joy_sadness": 1,
-            "anger_humility": -1,
-            "fear_calm": -1,
-            "love_alienation": 1,
-            "disgust_acceptance": -1,
-            "shame_confidence": 1,
-            "surprise_habit": 1,
-        }
+        self.emotion_effects = emotion_effects or self.archetype.emotion_effects
+        self.emotion_coefficients = emotion_coefficients or self.archetype.emotion_coefficients
         self.emotions = emotions
         if emotions:
             for emotion_name, value in emotions.items():
                 self.automaton.set_emotion(emotion_name, value)
+
+    def set_university_info(self, faculty, stream, group_id):
+        """Устанавливает иерархическую информацию об агенте."""
+        self.faculty = faculty
+        self.stream = stream
+        self.group_id = group_id
 
     def limit_predicate_value(self, value, min_value=-10, max_value=10):
         """Ограничивает значение предиката в заданном диапазоне."""
@@ -107,36 +112,58 @@ class Agent:
         return dict(self.relations)
 
     def get_primary_emotion(self):
-        """Определяет основную эмоцию по максимальному модулю значения."""
-        max_name = None
-        max_value = 0
+        """
+        Определяет основную эмоцию.
+        Если несколько эмоций имеют одинаковую максимальную силу, выбирается случайная из них.
+        """
+        max_abs = 0
+        candidates = []
         for name, pair in self.automaton.pairs.items():
-            if abs(pair.value) > abs(max_value):
-                max_value = pair.value
-                max_name = name
-        return max_name, max_value
+            val_abs = abs(pair.value)
+            if val_abs > max_abs:
+                max_abs = val_abs
+                candidates = [(name, pair.value)]
+            elif val_abs == max_abs and val_abs > 0:
+                candidates.append((name, pair.value))
+        
+        if not candidates:
+            return None, 0
+            
+        import random
+        return random.choice(candidates)
 
     def react_to_relations(self):
-        """Изменяет эмоции агента в зависимости от отношений."""
+        """
+        Изменяет эмоции агента в зависимости от его отношений ко всем остальным.
+        Использует средневзвешенное влияние по всем 7 осям на основе коэффициентов архетипа.
+        """
+        if not self.relations:
+            return
+
+        n = len(self.relations)
+        # Собираем средние значения метрик
+        avg_metrics = {"affinity": 0.0, "utility": 0.0, "trust": 0.0}
         for pred in self.relations.values():
-            u, a, t = pred["utility"], pred["affinity"], pred["trust"]
+            avg_metrics["affinity"] += self.limit_predicate_value(pred["affinity"])
+            avg_metrics["utility"] += self.limit_predicate_value(pred["utility"])
+            avg_metrics["trust"] += self.limit_predicate_value(pred["trust"])
+        
+        for key in avg_metrics:
+            avg_metrics[key] /= n
 
-            a = self.limit_predicate_value(a)
-            t = self.limit_predicate_value(t)
-            u = self.limit_predicate_value(u)
+        # Применяем влияние на каждую ось эмоций
+        # Коэффициенты берутся из архетипа (emotion_coefficients)
+        coeffs = getattr(self.archetype, 'emotion_coefficients', {})
+        for axis_name, coeff in coeffs.items():
+            # ДЕМПФИРОВАНИЕ: умножаем на 0.1, чтобы отношения не перегружали эмоции
+            effect = (avg_metrics["affinity"] + avg_metrics["trust"]) / 2.0
+            self.automaton.adjust_emotion(axis_name, (effect * coeff * 0.1) * self.sensitivity)
 
-            self.automaton.adjust_emotion(EmotionAxis.JOY_SADNESS, a * self.sensitivity)
-            self.automaton.adjust_emotion(EmotionAxis.LOVE_ALIENATION, a * self.sensitivity)
-
-            self.automaton.adjust_emotion(EmotionAxis.DISGUST_ACCEPTANCE, u * self.sensitivity)
-
-            if t < 0:
-                self.automaton.adjust_emotion(
-                    EmotionAxis.FEAR_CALM, -abs(t) * self.sensitivity
-                )
-                self.automaton.adjust_emotion(
-                    EmotionAxis.ANGER_HUMILITY, -abs(t) * self.sensitivity
-                )
+    def apply_emotion_decay(self):
+        """Метод вызывает затухание эмоций в автомате."""
+        # Затухание зависит от архетипа и чувствительности
+        decay_rate = getattr(self.archetype, 'emotion_decay', 0.2)
+        self.automaton.apply_decay(decay_rate * self.sensitivity)
 
     def _adjust_affinity_based_on_responsiveness(self, target_name, delta):
         if self.relations[target_name]["responsiveness"] < 0:
@@ -191,7 +218,7 @@ class Agent:
                 for target_name, relation in self.relations.items():
                     self._adjust_trust_based_on_responsiveness(target_name, 1)
 
-            elif name == EmotionAxis.LOVE_ALIENATION and emotion_value > 1:
+            elif name == EmotionAxis.OPENNESS_ALIENATION and emotion_value > 1:
                 for target_name, relation in self.relations.items():
                     self._adjust_trust_based_on_responsiveness(target_name, 1)
                     self._adjust_affinity_based_on_responsiveness(target_name, 1)
@@ -234,55 +261,67 @@ class Agent:
             ) / 3
 
             # Check relationship classification for avoid
-            if self.group is not None:
-                target_agent = self.group.get_agent_by_name(target_name)
-                if target_agent is not None and target_agent.classify_relationship(self.name) == "avoid":
-                    continue
+            target_agent = self.get_agent(target_name)
+            if target_agent is None:
+                continue
 
-            try:
-                target_agent = self.get_agent(target_name)
-                target_agent.automaton.adjust_emotion(
-                    primary_emotion_name,
-                    primary_emotion_value
-                    * effect_strength
-                    * dynamic_weight_primary
-                    * self.sensitivity,
-                )
+            if target_agent.classify_relationship(self.name) == "avoid":
+                continue
 
-                other_emotions = {
-                    name: pair.value
-                    for name, pair in self.automaton.pairs.items()
-                    if name != primary_emotion_name
-                }
+            target_agent.automaton.adjust_emotion(
+                primary_emotion_name,
+                primary_emotion_value
+                * effect_strength
+                * dynamic_weight_primary
+                * self.sensitivity,
+            )
 
-                for name, value in other_emotions.items():
-                    if value != 0:
-                        target_agent.automaton.adjust_emotion(
-                            name,
-                            value
-                            * effect_strength
-                            * dynamic_weight_secondary
-                            * self.sensitivity,
-                        )
+            other_emotions = {
+                name: pair.value
+                for name, pair in self.automaton.pairs.items()
+                if name != primary_emotion_name
+            }
 
-                self.update_responsiveness(target_name, 1)
-            except (ValueError, AttributeError):
-                self.update_responsiveness(target_name, -1)
+            for name, value in other_emotions.items():
+                if value != 0:
+                    target_agent.automaton.adjust_emotion(
+                        name,
+                        value
+                        * effect_strength
+                        * dynamic_weight_secondary
+                        * self.sensitivity,
+                    )
+            
+            # Успешное влияние повышает отзывчивость
+            self.update_responsiveness(target_name, 1)
 
     def get_agent(self, name):
-        """Получает объект агента по имени из группы, если агент состоит в группе."""
-        group = getattr(self, "group", None)
-        if group:
-            agent = group.get_agent_by_name(name)
-            if agent is not None:
-                return agent
-            raise ValueError(
-                f"Agent with name '{name}' not found in the group."
-            )
-        raise AttributeError(
-            "Agent is not part of any group or group is not set."
-        )
+        """Получает объект агента по имени из группы."""
+        if self.group:
+            # Пытаемся получить через group.get_agent (Collective)
+            if hasattr(self.group, 'get_agent'):
+                return self.group.get_agent(name)
+            # Или напрямую из словаря, если имеем доступ
+            if hasattr(self.group, 'agents'):
+                return self.group.agents.get(name)
+        return None
 
+    def apply_relation_decay(self):
+        """
+        Закон прощения: Отношения стремятся к нейтральному состоянию (0) со временем.
+        Скорость зависит от архетипа и чувствительности.
+        """
+        decay_rate = getattr(self.archetype, 'decay_rate', 0.1)
+        step = decay_rate * self.sensitivity
+        
+        for target_name in list(self.relations.keys()):
+            for key in ['trust', 'affinity', 'utility']:
+                current_val = self.relations[target_name].get(key, 0)
+                if current_val > 0:
+                    self.relations[target_name][key] = max(0, current_val - step)
+                elif current_val < 0:
+                    self.relations[target_name][key] = min(0, current_val + step)
+                    
     def classify_relationship(self, other_name):
         """Классифицирует тип отношений с другим агентом на основе предикатов."""
         relation = self.get_relation_vector(other_name)

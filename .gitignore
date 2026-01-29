@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+env/
+
+# System
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+build/
+*.so
+*.dylib
+
+# Data & Logs & Archives
+*.log
+*.csv
+logs/
+backup/
+archive/
+batch_analysis/
+batch_results/
+
+# User specific junk
+pdf/
+*.txt
+texput.log
+
+# Allow requirements
+!requirements.txt
+
+# Scripts & temporary research
+turbo*
+tests/
+# We keep scripts/ generally, but maybe ignore specific debug junk if needed.
+# For now, keeping main scripts folder but ignoring 'tests' folder as requested.

@@ -20,11 +20,16 @@ class AgentNode:
         self.node_id = self.canvas.create_oval(
             self.x - NODE_RADIUS, self.y - NODE_RADIUS,
             self.x + NODE_RADIUS, self.y + NODE_RADIUS,
-            fill='lightblue'
+            fill='#ADD8E6', outline='black'
         )
         self.text_id = self.canvas.create_text(
-            self.x, self.y, text=str(self.name)
+            self.x, self.y, text=str(self.name), fill='black', font=('Arial', 10, 'bold')
         )
+
+    def set_color(self, color_hex):
+        """Обновляет цвет заливки узла."""
+        if self.node_id:
+            self.canvas.itemconfig(self.node_id, fill=color_hex)
 
     def delete(self):
         if self.node_id:

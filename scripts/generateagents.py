@@ -12,7 +12,7 @@ def generate_emotions():
         "disgust_acceptance": random.randint(-3, 3),
         "surprise_habit": random.randint(-3, 3),
         "shame_confidence": random.randint(-3, 3),
-        "love_alienation": random.randint(-3, 3)
+        "openness_alienation": random.randint(-3, 3)
     }
 
 def generate_relationships(agent_count):

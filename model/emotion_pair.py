@@ -27,4 +27,6 @@ class EmotionPair:
              2: "позитивно",
              3: "очень позитивно"
         }
-        return descriptions.get(self.value, "неопределённо")
+        # Округляем до ближайшего целого для получения текстового описания
+        rounded_val = round(self.value)
+        return descriptions.get(rounded_val, "неопределённо")

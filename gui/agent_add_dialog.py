@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import simpledialog, messagebox, ttk
 from model.archetypes import ArchetypeEnum
-from agent import Agent
+from model.agent import Agent
 
 class AgentAddDialog:
     def __init__(self, parent, collective):
@@ -43,7 +43,7 @@ class AgentAddDialog:
         emotion_keys = [
             "joy_sadness", "fear_calm", "anger_humility",
             "disgust_acceptance", "surprise_habit",
-            "shame_confidence", "love_alienation"
+            "shame_confidence", "openness_alienation"
         ]
         for key in emotion_keys:
             tk.Label(frame_emotions, text=key).pack()

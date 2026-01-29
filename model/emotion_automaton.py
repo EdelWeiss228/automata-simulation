@@ -10,7 +10,7 @@ class EmotionAxis(str, Enum):
     DISGUST_ACCEPTANCE = 'disgust_acceptance'
     SURPRISE_HABIT = 'surprise_habit'
     SHAME_CONFIDENCE = 'shame_confidence'
-    LOVE_ALIENATION = 'love_alienation'
+    OPENNESS_ALIENATION = 'openness_alienation'
 
 class EmotionAutomaton:
     """
@@ -39,6 +39,16 @@ class EmotionAutomaton:
         """Устанавливает значение эмоции по оси."""
         if axis in self.pairs:
             self.pairs[axis].set(value)
+
+    def apply_decay(self, decay_rate: float = 0.5):
+        """
+        Естественное затухание эмоций: стремление к 0 со временем.
+        """
+        for pair in self.pairs.values():
+            if pair.value > 0:
+                pair.value = max(0, pair.value - decay_rate)
+            elif pair.value < 0:
+                pair.value = min(0, pair.value + decay_rate)
 
     def get_emotion_description(self, axis: EmotionAxis) -> str:
         """Возвращает текстовое описание эмоции по оси."""
