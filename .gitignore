@@ -1,42 +1,32 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
 venv/
-env/
+.venv/
+.env
 
-# System
+# C++ Build Artifacts
+*.so
+*.o
+*.a
+build/
+core/src/*.so
+core/src/*.o
+
+# Data & Logs
+*.csv
+*.log
+pdf/
+*.pdf
+
+# IDEs & System
 .DS_Store
-
-# IDE
 .vscode/
 .idea/
 
-# Build
-build/
-*.so
-*.dylib
-
-# Data & Logs & Archives
-*.log
-*.csv
-logs/
-backup/
-archive/
-batch_analysis/
-batch_results/
-
-# User specific junk
-pdf/
-*.txt
-texput.log
-
-# Allow requirements
-!requirements.txt
-
-# Scripts & temporary research
-turbo*
+# Research & Tests (as per user request)
 tests/
-# We keep scripts/ generally, but maybe ignore specific debug junk if needed.
-# For now, keeping main scripts folder but ignoring 'tests' folder as requested.
+scripts/
+gui/simulation_gui_backup.py
+# note: some scripts might be useful, but user said "without tests and such"
