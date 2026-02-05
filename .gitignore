@@ -39,3 +39,4 @@ tests/
 
 # System-specific build info
 core/.build_info
+CONTEXT_STATE_SNAPSHOT.md
