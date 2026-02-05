@@ -7,6 +7,8 @@ import random
 from agent import Agent
 from player import Player
 
+added_agents=0
+
 
 class Collective:
     """
@@ -23,6 +25,7 @@ class Collective:
         """
         self.agents = {}
         self.players = []
+        self.agent_count = 0  # Счётчик добавленных агентов
         if agents_data:
             for agent_name, agent_initial_data in agents_data:
                 agent = Agent(agent_name, **agent_initial_data)
@@ -48,6 +51,8 @@ class Collective:
     def add_agent(self, agent):
         """Добавить агента в коллектив."""
         self.agents[agent.name] = agent
+        self.agent_count += 1
+        print("Добавлен агент", agent.name, f"(всего: {self.agent_count})")
 
     def add_player(self, player):
         """Добавить игрока в коллектив и инициализировать его отношения с агентами."""
