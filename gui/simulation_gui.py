@@ -19,13 +19,13 @@ INITIAL_CANVAS_SIZE = 600
 SPACING = 3 * NODE_RADIUS  # 60 пикселей между центрами
 
 class SimulationGUI(tk.Tk):
-    def __init__(self):
+    def __init__(self, collective=None):
         super().__init__()
         self.title("Симуляция агентов")
         # Увеличиваем размер окна
         self.geometry(f"{INITIAL_CANVAS_SIZE + 350}x{INITIAL_CANVAS_SIZE + 250}")
         
-        self.collective = Collective()
+        self.collective = collective if collective else Collective()
         self.agent_nodes = {}
         self.edges = []
 
@@ -281,7 +281,8 @@ class SimulationGUI(tk.Tk):
 
     def simulate_day(self):
         if not self.simulation_started:
-            self.logger.log_agent_states("agent_states.csv", self.collective.current_date, self.collective.agents, self.first_log_states)
+            os.makedirs("data/output", exist_ok=True)
+            self.logger.log_agent_states("data/output/agent_states.csv", self.collective.current_date, self.collective.agents, self.first_log_states)
             self.first_log_states = False
         
         self.simulation_started = True
@@ -294,10 +295,10 @@ class SimulationGUI(tk.Tk):
             return
 
         # Логирование
-        self.logger.log_interactions("interaction_log.csv", self.collective.current_date, interactions, self.first_log_interactions)
+        self.logger.log_interactions("data/output/interaction_log.csv", self.collective.current_date, interactions, self.first_log_interactions)
         self.first_log_interactions = False
         
-        self.logger.log_agent_states("agent_states.csv", self.collective.current_date, self.collective.agents, self.first_log_states)
+        self.logger.log_agent_states("data/output/agent_states.csv", self.collective.current_date, self.collective.agents, self.first_log_states)
         self.first_log_states = False
 
         # Визуализация ребер

@@ -233,8 +233,26 @@ class UniversityCollective(Collective):
         return [("System", "All", "New_Day_Ready")]
 
     def _interact_pair(self, name1, name2) -> Tuple[str, str, str]:
+        """
+        Моделирует взаимодействие пары (v4.6: Логика сигма {-1, 0, 1}).
+        Возвращает (имя1, имя2, статус).
+        """
         a1, a2 = self.agents[name1], self.agents[name2]
-        # Простая попытка взаимодействия
-        success = random.random() < 0.6
+        
+        # 1. Проверка на ОТКАЗ (Sigma = 0)
+        # Отказ принимается вторым агентом
+        refusal_chance = InteractionStrategy.calculate_refusal_chance(a2, a1)
+        if random.random() < refusal_chance:
+            InteractionStrategy.process_refusal(a1, a2)
+            return (name1, name2, "refusal")
+            
+        # 2. Определение УСПЕХА (Sigma = 1) или ПРОВАЛА (Sigma = -1)
+        # Базовая вероятность успеха зависит от текущей симпатии
+        affinity = a1.relations.get(name2, {}).get("affinity", 0)
+        success_chance = 0.5 + (affinity / 20.0) # От 0.0 до 1.0 (в среднем 0.5)
+        success_chance = max(0.1, min(0.9, success_chance))
+        
+        success = random.random() < success_chance
         InteractionStrategy.process_interaction_result(a1, a2, success)
+        
         return (name1, name2, "success" if success else "fail")

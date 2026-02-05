@@ -2,31 +2,27 @@
 
 class EmotionPair:
     """Класс для представления и управления значением пары противоположных эмоций."""
-    def __init__(self, name, min_value=-3, max_value=3):
+    def __init__(self, name, min_value=-3.0, max_value=3.0):
         self.name = name
-        self.value = 0
-        self.min_value = min_value
-        self.max_value = max_value
+        self.value = 0.0
+        self.min_value = float(min_value)
+        self.max_value = float(max_value)
 
     def adjust(self, delta):
-        """Изменяет значение эмоции на заданное смещение, соблюдая границы."""
-        self.value = max(self.min_value, min(self.max_value, self.value + delta))
+        """Изменяет значение эмоции на заданное смещение (float), соблюдая границы."""
+        self.value = max(self.min_value, min(self.max_value, self.value + float(delta)))
 
     def set(self, value):
-        """Устанавливает конкретное значение эмоции в пределах допустимого диапазона."""
-        self.value = max(self.min_value, min(self.max_value, value))
+        """Устанавливает конкретное значение эмоции (float) в пределах допустимого диапазона."""
+        self.value = max(self.min_value, min(self.max_value, float(value)))
 
     def describe(self):
-        """Возвращает текстовое описание текущего значения эмоции."""
-        descriptions = {
-            -3: "очень негативно",
-            -2: "негативно",
-            -1: "немного негативно",
-             0: "нейтрально",
-             1: "немного позитивно",
-             2: "позитивно",
-             3: "очень позитивно"
-        }
-        # Округляем до ближайшего целого для получения текстового описания
-        rounded_val = round(self.value)
-        return descriptions.get(rounded_val, "неопределённо")
+        """Возвращает текстовое описание текущего значения эмоции на основе диапазонов."""
+        val = self.value
+        if val <= -2.5: return "очень негативно"
+        if val <= -1.5: return "негативно"
+        if val <= -0.5: return "немного негативно"
+        if val >= 2.5: return "очень позитивно"
+        if val >= 1.5: return "позитивно"
+        if val >= 0.5: return "немного позитивно"
+        return "нейтрально"

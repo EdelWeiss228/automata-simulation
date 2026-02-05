@@ -16,6 +16,7 @@ core/src/*.o
 
 # Data & Logs
 *.csv
+agents.csv
 *.log
 pdf/
 *.pdf
@@ -26,8 +27,15 @@ pdf/
 .idea/
 .git 2/
 
-# Research & Tests (as per user request)
+# Research & Analysis Data
+data/analysis/
+data/output/*.csv
+!data/scenarios/*.json
+archive/data/*.csv
+
+# Research-specific scripts (as per user preference for "clean" repo)
+scripts/research/
 tests/
-scripts/
-gui/simulation_gui_backup.py
-# note: some scripts might be useful, but user said "without tests and such"
+
+# System-specific build info
+core/.build_info

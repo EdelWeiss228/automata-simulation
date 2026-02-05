@@ -1,0 +1,17 @@
+{
+    "total_agents": 5,
+    "agent_counts": {
+        "Altruist": 1,
+        "Aggressor": 1,
+        "Rationalist": 1,
+        "Imitator": 1,
+        "Loner": 1
+    },
+    "emotion_dist": "Uniform",
+    "emotion_params": {
+        "min": -1.0,
+        "max": 1.0
+    },
+    "steps": 2,
+    "seed": 42
+}

@@ -7,8 +7,14 @@ class AgentFactory:
     """Фабрика для создания агентов и инициализации их отношений."""
     
     @staticmethod
-    def create_agent(name, archetype_enum=None, sensitivity=1.0):
-        """Создает базового агента."""
+    def create_agent(name, archetype_enum=None, sensitivity=None):
+        """Создает базового агента со случайными или заданными параметрами."""
+        if archetype_enum is None:
+            archetype_enum = random.choice(list(ArchetypeEnum))
+        if sensitivity is None:
+            # Диапазон (0, 3] согласно правилам
+            sensitivity = random.uniform(0.1, 3.0)
+            
         return Agent(name, archetype=archetype_enum, sensitivity=sensitivity)
 
     @staticmethod

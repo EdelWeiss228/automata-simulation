@@ -42,13 +42,13 @@ class EmotionAutomaton:
 
     def apply_decay(self, decay_rate: float = 0.5):
         """
-        Естественное затухание эмоций: стремление к 0 со временем.
+        Естественное затухание эмоций: стремление к 0 (continuous float).
         """
         for pair in self.pairs.values():
             if pair.value > 0:
-                pair.value = max(0, pair.value - decay_rate)
+                pair.value = max(0.0, pair.value - float(decay_rate))
             elif pair.value < 0:
-                pair.value = min(0, pair.value + decay_rate)
+                pair.value = min(0.0, pair.value + float(decay_rate))
 
     def get_emotion_description(self, axis: EmotionAxis) -> str:
         """Возвращает текстовое описание эмоции по оси."""

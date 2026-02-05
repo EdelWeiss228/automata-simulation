@@ -36,6 +36,20 @@ class AgentStateDialog:
         self.sensitivity_scale.set(agent.sensitivity)
         self.sensitivity_scale.pack(pady=5, fill='x', padx=30)
 
+        # Новые параметры v4.2: Спорт и Прогулы
+        tk.Label(frame_arch, text="Склонность к спорту (%):", bg='#F8F9FA', fg='#212529', font=('Arial', 10, 'bold')).pack(pady=(15, 5))
+        self.sport_scale = tk.Scale(frame_arch, from_=0, to=100, orient=tk.HORIZONTAL, 
+                                     bg='#F8F9FA', fg='#212529', highlightthickness=0)
+        self.sport_scale.set(int(agent.sportiness * 100))
+        self.sport_scale.pack(pady=5, fill='x', padx=30)
+
+        tk.Label(frame_arch, text="Вероятность прогула (%):", bg='#F8F9FA', fg='#212529', font=('Arial', 10, 'bold')).pack(pady=(15, 5))
+        self.skip_scale = tk.Scale(frame_arch, from_=0, to=30, orient=tk.HORIZONTAL, 
+                                    bg='#F8F9FA', fg='#212529', highlightthickness=0)
+        # Ограничено 30% согласно логике Agent.__init__
+        self.skip_scale.set(int(agent.skip_tendency * 100))
+        self.skip_scale.pack(pady=5, fill='x', padx=30)
+
         # Вкладка Эмоции
         frame_emotions = ttk.Frame(notebook)
         notebook.add(frame_emotions, text="Эмоции")
@@ -126,6 +140,8 @@ class AgentStateDialog:
             self.agent.automaton.set_emotion(key, scale.get())
 
         self.agent.sensitivity = self.sensitivity_scale.get()
+        self.agent.sportiness = self.sport_scale.get() / 100.0
+        self.agent.skip_tendency = self.skip_scale.get() / 100.0
 
         other = self.other_agent_var.get()
         if other:

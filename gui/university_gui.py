@@ -131,14 +131,24 @@ class UniversityGUI(tk.Toplevel):
         self.selected_agent = None # Имя выбранного агента
         self.selection_circle = None # Canvas ID круга выделения
 
-        # Легенда
-        legend_frame = tk.LabelFrame(self.side_panel, text="Легенда", bg='#2C3E50', fg='#ECF0F1', padx=5, pady=5)
-        legend_frame.pack(fill=tk.X, pady=10)
+        # Легенда локаций
+        legend_frame = tk.LabelFrame(self.side_panel, text="Легенда: Зоны", bg='#2C3E50', fg='#ECF0F1', padx=5, pady=5)
+        legend_frame.pack(fill=tk.X, pady=5)
         
-        for text, color in [("Лекция (Поток)", "#E3F2FD"), ("Семинар (Группа)", "#E8F5E9"), ("Спортзал", "#FFF3E0"), ("Коридор", "#F5F5F5")]:
+        for text, color in [("Лекция", "#E3F2FD"), ("Семинар", "#E8F5E9"), ("Спортзал", "#FFF3E0"), ("Коридор", "#F5F5F5")]:
             f = tk.Frame(legend_frame, bg='#2C3E50')
             f.pack(fill=tk.X)
             tk.Label(f, bg=color, width=2, relief=tk.SOLID).pack(side=tk.LEFT, padx=3)
+            tk.Label(f, text=text, font=('Arial', 8), bg='#2C3E50', fg='#ECF0F1').pack(side=tk.LEFT)
+
+        # Легенда взаимодействий
+        inter_frame = tk.LabelFrame(self.side_panel, text="Легенда: Общение", bg='#2C3E50', fg='#ECF0F1', padx=5, pady=5)
+        inter_frame.pack(fill=tk.X, pady=5)
+
+        for text, color in [("Успех (Sigma=1)", "#FFD700"), ("Провал (Sigma=-1)", "#FF4500"), ("Отказ (Sigma=0)", "#95A5A6")]:
+            f = tk.Frame(inter_frame, bg='#2C3E50')
+            f.pack(fill=tk.X)
+            tk.Label(f, bg=color, width=2).pack(side=tk.LEFT, padx=3)
             tk.Label(f, text=text, font=('Arial', 8), bg='#2C3E50', fg='#ECF0F1').pack(side=tk.LEFT)
 
         # События мыши и клавиатуры
@@ -350,8 +360,17 @@ class UniversityGUI(tk.Toplevel):
         for s1, s2, status in interactions_to_show:
             if s1 in positions and s2 in positions:
                 p1, p2 = positions[s1], positions[s2]
-                color = "#FFD700" if status == "success" else "#FF4500"
-                line_id = self.canvas.create_line(p1[0], p1[1], p2[0], p2[1], fill=color, width=2, dash=(4,4))
+                if status == "success":
+                    color = "#FFD700" # Золотой
+                    width = 2
+                elif status == "refusal":
+                    color = "#95A5A6" # Серый/Серебряный
+                    width = 1
+                else: # fail
+                    color = "#FF4500" # Оранжево-красный
+                    width = 2
+                    
+                line_id = self.canvas.create_line(p1[0], p1[1], p2[0], p2[1], fill=color, width=width, dash=(4,4))
                 self.interaction_lines.append(line_id)
 
         # Статистика
@@ -432,6 +451,7 @@ class UniversityGUI(tk.Toplevel):
                     info = (f"Имя: {name}\n"
                             f"Группа: {agent.group_id}\n"
                             f"Путь: {agent.archetype.name}\n"
+                            f"Спорт: {int(agent.sportiness*100)}% | Прогулы: {int(agent.skip_tendency*100)}%\n"
                             f"Эмоция: {agent.get_primary_emotion()[0]}")
                     self.tooltip.show_tip(info, event.x_root, event.y_root)
                     return

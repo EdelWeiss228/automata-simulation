@@ -1,4 +1,4 @@
-# Antigravity Simulation
+# Collective Automaton Simulation
 
 ## Как запустить проект
 

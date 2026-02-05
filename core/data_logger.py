@@ -3,7 +3,7 @@ import os
 import datetime
 
 class DataLogger:
-    def __init__(self, log_dir: str = "logs"):
+    def __init__(self, log_dir: str = "data/output"):
         self.log_dir = log_dir
 
     def log_agent_states(self, filepath: str, current_date: datetime.date, agents: dict, is_first_run: bool):

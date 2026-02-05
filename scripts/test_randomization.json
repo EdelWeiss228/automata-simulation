@@ -1,0 +1,24 @@
+{
+    "total_agents": 10,
+    "agent_counts": {
+        "ERUDITION": 2,
+        "ENIGMATA": 1,
+        "HARMONY": 0,
+        "HUNT": 0,
+        "ELATION": 0,
+        "PRESERVATION": 0,
+        "NIHILITY": 0,
+        "TRAILBLAZE": 0,
+        "REMEMBRANCE": 0
+    },
+    "emotion_dist": "Uniform",
+    "emotion_params": {
+        "min": -1.0,
+        "max": 1.0,
+        "mean": 0.0,
+        "std": 1.0
+    },
+    "steps": 2,
+    "seed": 123,
+    "silent_mode": true
+}

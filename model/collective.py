@@ -1,6 +1,7 @@
 import random
 from .agent import Agent
 from .player import Player
+from .emotion_automaton import EmotionAxis
 from core.interaction_strategy import InteractionStrategy
 from typing import List, Tuple
 from core.agent_factory import AgentFactory
@@ -113,68 +114,78 @@ class Collective:
         self._id_map = {name: i for i, name in enumerate(names)}
         self._reverse_id_map = {i: name for name, i in self._id_map.items()}
 
+    def _sync_to_cpp(self):
+        """Прямая синхронизация всех агентов и их отношений в C++ структуру."""
+        n = len(self.agents)
+        for i in range(n):
+            name = self._reverse_id_map[i]
+            agent = self.agents[name]
+            
+            # Sync emotions
+            for axis_idx, axis in enumerate(EmotionAxis):
+                val = agent.automaton.pairs[axis].value
+                self.cpp_engine.set_emotion(i, axis_idx, val)
+            
+            # Sync sensitivities
+            self.cpp_engine.state.sensitivities[i] = agent.sensitivity
+
+            # Sync Emission Weights (Archetype effects)
+            effects = getattr(agent, "emotion_effects", {})
+            for axis_idx, axis in enumerate(EmotionAxis):
+                axis_name = axis.value
+                ax_eff = effects.get(axis_name, {})
+                self.cpp_engine.set_emission_weight(
+                    i, axis_idx,
+                    ax_eff.get("utility", 0.0),
+                    ax_eff.get("affinity", 0.0),
+                    ax_eff.get("trust", 0.0),
+                    0.0
+                )
+
+            # Sync Relations
+            for j in range(n):
+                target_name = self._reverse_id_map[j]
+                if target_name in agent.relations:
+                    rel = agent.relations[target_name]
+                    self.cpp_engine.set_relation(
+                        i, j,
+                        rel.get('utility', 0.0),
+                        rel.get('affinity', 0.0),
+                        rel.get('trust', 0.0),
+                        rel.get('responsiveness', 0.0)
+                    )
+
     def _run_cpp_influence(self):
-        """Синхронизирует данные с C++, выполняет расчет и возвращает результат."""
+        """
+        Запуск C++ движка и синхронизация результатов обратно в Python.
+        """
         self._update_id_maps()
         n = len(self.agents)
-        if not self.cpp_engine or self.cpp_engine.num_agents != n:
-             # В этом прототипе Engine не имеет атрибута num_agents напрямую в Python, 
-             # но мы можем создать новый при изменении состава группы
+        if not self.cpp_engine or self.cpp_engine.state.num_agents != n:
              import emotion_engine
              self.cpp_engine = emotion_engine.Engine(n)
 
-        # 1. Sync to CPP
-        sensitivities = []
-        for i in range(n):
-            name = self._reverse_id_map[i]
-            agent = self.agents[name]
-            sensitivities.append(agent.sensitivity)
-            
-            # Эмоции
-            emotions_dict = agent.get_emotions()
-            # В C++ порядок: joy_sadness (0), fear_calm (1), anger_humility (2), disgust_acceptance (3), 
-            # surprise_habit (4), shame_confidence (5), openness_alienation (6)
-            axes_order = ["joy_sadness", "fear_calm", "anger_humility", "disgust_acceptance", 
-                          "surprise_habit", "shame_confidence", "openness_alienation"]
-            for axis_idx, axis_name in enumerate(axes_order):
-                self.cpp_engine.set_emotion(i, axis_idx, float(emotions_dict.get(axis_name, 0)))
-
-            # Отношения
-            for target_name, rel in agent.relations.items():
-                if target_name in self._id_map:
-                    target_idx = self._id_map[target_name]
-                    self.cpp_engine.set_relation(i, target_idx, 
-                        float(rel.get('utility', 0)), 
-                        float(rel.get('affinity', 0)), 
-                        float(rel.get('trust', 0)), 
-                        float(rel.get('responsiveness', 0))
-                    )
-        
-        self.cpp_engine.sensitivities = sensitivities
-
-        # 2. RUN
+        self._sync_to_cpp()
         self.cpp_engine.influence_emotions()
-
-        # 3. Sync from CPP
-        new_emotions = self.cpp_engine.emotions
-        new_relations = self.cpp_engine.relations # N x N x 4
+        
+        # Синхронизация обратно
+        new_emotions = self.cpp_engine.state.emotions
+        new_relations = self.cpp_engine.state.relations
         
         for i in range(n):
             name = self._reverse_id_map[i]
             agent = self.agents[name]
             
-            # Обновляем эмоции
-            axes_order = ["joy_sadness", "fear_calm", "anger_humility", "disgust_acceptance", 
-                          "surprise_habit", "shame_confidence", "openness_alienation"]
-            for axis_idx, axis_name in enumerate(axes_order):
-                val = new_emotions[i * 7 + axis_idx]
-                agent.automaton.set_emotion(axis_name, val)
+            for axis_idx, axis in enumerate(EmotionAxis):
+                agent.automaton.set_emotion(axis, new_emotions[i * 7 + axis_idx])
                 
-            # Обновляем отзывчивость (она меняется в C++)
             for j in range(n):
                 target_name = self._reverse_id_map[j]
                 if target_name in agent.relations:
                     base = (i * n + j) * 4
+                    agent.relations[target_name]['utility'] = new_relations[base + 0]
+                    agent.relations[target_name]['affinity'] = new_relations[base + 1]
+                    agent.relations[target_name]['trust'] = new_relations[base + 2]
                     agent.relations[target_name]['responsiveness'] = new_relations[base + 3]
 
     def make_interaction_decision(self) -> List[Tuple[str, str, str]]:
