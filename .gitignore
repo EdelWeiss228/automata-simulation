@@ -18,7 +18,7 @@ core/src/*.o
 *.csv
 agents.csv
 *.log
-diplom/
+pdf/
 *.pdf
 
 # IDEs & System
