@@ -82,35 +82,25 @@ def run_headless(scenario_path):
     
     # 1. Setup Simulation
     agents = generate_research_agents(scenario)
-    collective = Collective()
+    from model.simulation_session import SimulationSession
+    session = SimulationSession()
     
     for agent in agents:
-        collective.add_agent(agent)
+        session.collective.add_agent(agent)
         
-    logger = DataLogger()
     steps = scenario["steps"]
     
     print(f"Запуск симуляции: {steps} шагов в Silent Mode...")
-    
-    # Регулярный лог-файл (как в основном GUI)
-    output_dir = "data/output"
-    os.makedirs(output_dir, exist_ok=True)
-    states_file = os.path.join(output_dir, "agent_states.csv")
-    interactions_file = os.path.join(output_dir, "interaction_log.csv")
     
     # 2. Simulation Loop
     for step in range(steps):
         if step % 10 == 0:
             print(f"Шаг {step+1}/{steps}...")
             
-        interactions = collective.perform_full_day_cycle(interactive=False)
-        
-        # Логирование
-        logger.log_agent_states(states_file, collective.current_date, collective.agents, step == 0)
-        logger.log_interactions(interactions_file, collective.current_date, interactions, step == 0)
+        session.run_day()
         
     print(f"--- РАСЧЕТ ЗАВЕРШЕН УСПЕШНО ---")
-    print(f"Результаты сохранены в '{states_file}' и '{interactions_file}'.")
+    print(f"Результаты сохранены в '{session.output_dir}'.")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

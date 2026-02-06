@@ -20,6 +20,7 @@ agents.csv
 *.log
 pdf/
 *.pdf
+scripts/*.json
 
 # IDEs & System
 .DS_Store
@@ -40,4 +41,4 @@ tests/
 # System-specific build info
 core/.build_info
 CONTEXT_STATE_SNAPSHOT.md
-CONTEXT_STATE_SNAPSHOT.md
+

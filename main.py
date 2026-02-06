@@ -1,5 +1,7 @@
 from gui.simulation_gui import SimulationGUI
+from model.simulation_session import SimulationSession
 
 if __name__ == "__main__":
-    app = SimulationGUI()
+    session = SimulationSession()
+    app = SimulationGUI(session=session)
     app.mainloop()

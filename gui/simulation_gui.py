@@ -14,29 +14,29 @@ from gui.color_utils import get_emotion_color
 import random
 import math
 import os
+from model.simulation_session import SimulationSession
 
 NODE_RADIUS = 20
 INITIAL_CANVAS_SIZE = 600
 SPACING = 3 * NODE_RADIUS  # 60 пикселей между центрами
 
 class SimulationGUI(tk.Tk):
-    def __init__(self, collective=None):
+    def __init__(self, session=None, collective=None):
         super().__init__()
         self.title("Симуляция агентов")
         # Увеличиваем размер окна
         self.geometry(f"{INITIAL_CANVAS_SIZE + 350}x{INITIAL_CANVAS_SIZE + 250}")
         
-        self.collective = collective if collective else Collective()
+        if session:
+            self.session = session
+        else:
+            self.session = SimulationSession(collective=collective)
+            
         self.agent_nodes = {}
         self.edges = []
 
         self.selected_agent_name = None
         self.auto_running = False
-        self.simulation_started = False
-
-        self.logger = DataLogger()
-        self.first_log_states = True
-        self.first_log_interactions = True
 
         self.create_widgets()
         self.place_agents_initial()
@@ -88,9 +88,9 @@ class SimulationGUI(tk.Tk):
         self.agent_listbox.bind('<<ListboxSelect>>', self.on_agent_select)
 
         # Метки информации
-        self.date_label = tk.Label(self.control_frame, text=f"Дата: {self.collective.current_date.strftime('%d %b %Y')}")
+        self.date_label = tk.Label(self.control_frame, text=f"Дата: {self.session.current_date.strftime('%d %b %Y')}")
         self.date_label.pack(pady=3)
-        self.day_label = tk.Label(self.control_frame, text=f"День симуляции: {self.collective.current_step}")
+        self.day_label = tk.Label(self.control_frame, text=f"День симуляции: {self.session.current_step}")
         self.day_label.pack(pady=3)
 
         # Кнопки
@@ -111,7 +111,8 @@ class SimulationGUI(tk.Tk):
     def load_university(self):
         """Переключает на масштабную симуляцию университета."""
         if messagebox.askyesno("Подтверждение", "Это создаст 1875 агентов и может занять некоторое время. Продолжить?"):
-            self.collective = UniversityCollective()
+            univ = UniversityCollective()
+            self.session.reset(new_collective=univ)
             self.restart_gui_for_new_collective()
             messagebox.showinfo("Готово", "Университет загружен. 5 факультетов, 25 потоков, 75 групп.")
             
@@ -120,8 +121,8 @@ class SimulationGUI(tk.Tk):
 
     def open_university_map(self):
         """Открывает детализированную карту университета."""
-        if isinstance(self.collective, UniversityCollective):
-            self.uni_map_window = UniversityGUI(self, self.collective)
+        if isinstance(self.session.collective, UniversityCollective):
+            self.uni_map_window = UniversityGUI(self, self.session.collective)
         else:
             messagebox.showwarning("Внимание", "Карта доступна только в режиме Университета (V3).")
 
@@ -133,7 +134,6 @@ class SimulationGUI(tk.Tk):
         self.agent_listbox.delete(0, tk.END)
         self.canvas.config(scrollregion=(0, 0, INITIAL_CANVAS_SIZE, INITIAL_CANVAS_SIZE))
         self.place_agents_initial()
-        self.simulation_started = False
 
     def add_multiple_random_agents(self):
         try:
@@ -145,7 +145,7 @@ class SimulationGUI(tk.Tk):
             self.add_random_agent()
 
     def place_agents_initial(self):
-        for agent_name in self.collective.agents.keys():
+        for agent_name in self.session.collective.agents.keys():
             self.add_agent_node(agent_name)
 
     def get_next_grid_position(self):
@@ -233,7 +233,7 @@ class SimulationGUI(tk.Tk):
         node = AgentNode(self.canvas, x, y, agent_name)
         
         # Сразу красим, если агент уже со старыми эмоциями
-        agent = self.collective.get_agent(agent_name)
+        agent = self.session.collective.get_agent(agent_name)
         if agent:
              emotion_name, value = agent.get_primary_emotion()
              color = get_emotion_color(emotion_name, value)
@@ -251,7 +251,7 @@ class SimulationGUI(tk.Tk):
             self.selected_agent_name = None
 
     def add_agent_dialog(self):
-        dialog = AgentAddDialog(self, self.collective)
+        dialog = AgentAddDialog(self, self.session.collective)
         self.wait_window(dialog.top)
         if dialog.agent_added:
             agent_name = dialog.agent_name
@@ -261,7 +261,7 @@ class SimulationGUI(tk.Tk):
         if self.selected_agent_name is None:
             messagebox.showwarning("Внимание", "Выберите агента для удаления")
             return
-        self.collective.remove_agent(self.selected_agent_name)
+        self.session.collective.remove_agent(self.selected_agent_name)
         
         node = self.agent_nodes.pop(self.selected_agent_name)
         node.delete()
@@ -281,26 +281,13 @@ class SimulationGUI(tk.Tk):
         self.edges.clear()
 
     def simulate_day(self):
-        if not self.simulation_started:
-            os.makedirs("data/output", exist_ok=True)
-            self.logger.log_agent_states("data/output/agent_states.csv", self.collective.current_date, self.collective.agents, self.first_log_states)
-            self.first_log_states = False
-        
-        self.simulation_started = True
         self.clear_edges()
         
         try:
-            interactions = self.collective.perform_full_day_cycle(interactive=False)
+            interactions = self.session.run_day()
         except Exception as e:
             messagebox.showerror("Ошибка симуляции", f"Произошла ошибка при симуляции: {e}")
             return
-
-        # Логирование
-        self.logger.log_interactions("data/output/interaction_log.csv", self.collective.current_date, interactions, self.first_log_interactions)
-        self.first_log_interactions = False
-        
-        self.logger.log_agent_states("data/output/agent_states.csv", self.collective.current_date, self.collective.agents, self.first_log_states)
-        self.first_log_states = False
 
         # Визуализация ребер
         for agent_from, agent_to, result in interactions:
@@ -309,24 +296,24 @@ class SimulationGUI(tk.Tk):
                 self.edges.append(edge)
 
         # Обновление цветов
-        for name, agent in self.collective.agents.items():
+        for name, agent in self.session.collective.agents.items():
             if name in self.agent_nodes:
                 emotion_name, value = agent.get_primary_emotion()
                 color = get_emotion_color(emotion_name, value)
                 self.agent_nodes[name].set_color(color)
 
-        self.date_label.config(text=f"Дата: {self.collective.current_date.strftime('%d %b %Y')}")
-        self.day_label.config(text=f"День симуляции: {self.collective.current_step}")
+        self.date_label.config(text=f"Дата: {self.session.current_date.strftime('%d %b %Y')}")
+        self.day_label.config(text=f"День симуляции: {self.session.current_step}")
 
     def show_agent_details(self):
         if self.selected_agent_name is None:
             messagebox.showwarning("Внимание", "Выберите агента")
             return
-        agent = self.collective.get_agent(self.selected_agent_name)
+        agent = self.session.collective.get_agent(self.selected_agent_name)
         if agent is None:
             messagebox.showerror("Ошибка", "Агент не найден")
             return
-        dialog = AgentStateDialog(self, agent, self.collective)
+        dialog = AgentStateDialog(self, agent, self.session.collective)
         self.wait_window(dialog.top)
 
     def toggle_autosim(self):
@@ -343,11 +330,11 @@ class SimulationGUI(tk.Tk):
             self.after(1000, self.run_autosim)
 
     def add_random_agent(self):
-        new_name = self.collective.add_random_agent()
+        new_name = self.session.collective.add_random_agent()
         self.add_agent_node(new_name)
 
     def restart_simulation(self):
-        self.collective = Collective()
+        self.session.reset()
         self.agent_nodes.clear()
         self.edges.clear()
         self.canvas.delete("all")
@@ -355,8 +342,5 @@ class SimulationGUI(tk.Tk):
         # Сброс скролла
         self.canvas.config(scrollregion=(0, 0, INITIAL_CANVAS_SIZE, INITIAL_CANVAS_SIZE))
         
-        self.simulation_started = False
-        self.first_log_states = True
-        self.first_log_interactions = True
-        self.date_label.config(text=f"Дата: {self.collective.current_date.strftime('%d %b %Y')}")
-        self.day_label.config(text=f"День симуляции: {self.collective.current_step}")
+        self.date_label.config(text=f"Дата: {self.session.current_date.strftime('%d %b %Y')}")
+        self.day_label.config(text=f"День симуляции: {self.session.current_step}")

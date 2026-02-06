@@ -282,6 +282,12 @@ class Collective:
         existing_names = list(self.agents.keys())
         new_agent = AgentFactory.create_agent_with_relations(len(existing_names) + 1, existing_names)
         self.add_agent(new_agent)
+        
+        # ВАЖНО: Инициализируем отношения существующих агентов К новому агенту
+        for other_agent in self.agents.values():
+            if other_agent.name != new_agent.name:
+                AgentFactory.initialize_agent_relations(other_agent, [new_agent.name])
+                
         return new_agent.name
 
     def simulate_day(self, interactions_per_day: int = 1):

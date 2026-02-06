@@ -16,18 +16,19 @@ def run_research_gui(scenario_path):
     
     # 1. Setup Simulation Data
     agents = generate_research_agents(scenario)
-    collective = Collective()
+    from model.simulation_session import SimulationSession
+    session = SimulationSession()
     
     for agent in agents:
-        collective.add_agent(agent)
+        session.collective.add_agent(agent)
         
     print("Инициализация связей для визуализации...")
-    agent_names = list(collective.agents.keys())
-    for agent in collective.agents.values():
+    agent_names = list(session.collective.agents.keys())
+    for agent in session.collective.agents.values():
         AgentFactory.initialize_agent_relations(agent, agent_names)
     
     # 2. Launch GUI
-    app = SimulationGUI(collective=collective)
+    app = SimulationGUI(session=session)
     app.title(f"Research Mode: {scenario['emotion_dist']} Dist (Seed: {scenario['seed']})")
     app.mainloop()
 

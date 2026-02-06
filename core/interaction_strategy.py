@@ -137,6 +137,10 @@ class InteractionStrategy:
         s_target = getattr(target_agent, 'sensitivity', 1.0)
 
         # Инициатор (agent) расстроен отказом
+        if target_agent.name not in agent.relations:
+            from core.agent_factory import AgentFactory
+            AgentFactory.initialize_agent_relations(agent, [target_agent.name])
+
         agent.relations[target_agent.name]['responsiveness'] = agent.limit_predicate_value(
             agent.relations[target_agent.name].get('responsiveness', 0) - 2.0 * s_i # Сильное падение R
         )
@@ -148,6 +152,10 @@ class InteractionStrategy:
         )
 
         # Целевой агент (target_agent) тоже охладевает, если отказал
+        if agent.name not in target_agent.relations:
+            from core.agent_factory import AgentFactory
+            AgentFactory.initialize_agent_relations(target_agent, [agent.name])
+
         target_agent.relations[agent.name]['responsiveness'] = target_agent.limit_predicate_value(
             target_agent.relations[agent.name].get('responsiveness', 0) - 1.0 * s_target
         )
@@ -171,6 +179,10 @@ class InteractionStrategy:
             
             for a, t_obj, s in [(agent, target_agent, s_i), (target_agent, agent, s_t)]:
                 t_name = t_obj.name
+                if t_name not in a.relations:
+                    from core.agent_factory import AgentFactory
+                    AgentFactory.initialize_agent_relations(a, [t_name])
+                
                 a.relations[t_name]['affinity'] = a.limit_predicate_value(a.relations[t_name].get('affinity', 0) + delta_primary)
                 a.relations[t_name]['utility'] = a.limit_predicate_value(a.relations[t_name].get('utility', 0) + delta_primary)
                 a.relations[t_name]['trust'] = a.limit_predicate_value(a.relations[t_name].get('trust', 0) + delta_trust)
@@ -183,6 +195,10 @@ class InteractionStrategy:
             
             for a, t_obj, s in [(agent, target_agent, s_i), (target_agent, agent, s_t)]:
                 t_name = t_obj.name
+                if t_name not in a.relations:
+                    from core.agent_factory import AgentFactory
+                    AgentFactory.initialize_agent_relations(a, [t_name])
+
                 a.relations[t_name]['trust'] = a.limit_predicate_value(a.relations[t_name].get('trust', 0) - delta_trust_fail)
                 a.relations[t_name]['affinity'] = a.limit_predicate_value(a.relations[t_name].get('affinity', 0) - delta_others_fail)
                 a.relations[t_name]['utility'] = a.limit_predicate_value(a.relations[t_name].get('utility', 0) - delta_others_fail)
