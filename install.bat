@@ -37,7 +37,8 @@ call build.bat
 
 if %ERRORLEVEL% equ 0 (
     echo === INSTALLATION SUCCESSFUL ===
-    echo To start the simulation, use: run.bat
+    echo Launching simulation...
+    call run.bat
 ) else (
     echo === INSTALLATION FINISHED WITH WARNINGS ===
     echo Environment is set up, but build.bat failed. Check C++ compiler (g++).

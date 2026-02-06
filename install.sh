@@ -72,7 +72,9 @@ chmod +x build.sh
 
 if [ $? -eq 0 ]; then
     echo "=== INSTALLATION SUCCESSFUL ==="
-    echo "To start the simulation, use: ./run.sh"
+    echo "Launching simulation..."
+    chmod +x run.sh
+    ./run.sh
 else
     echo "=== INSTALLATION FINISHED WITH WARNINGS ==="
     echo "Environment is set up, but build.sh failed. Check C++ dependencies."
