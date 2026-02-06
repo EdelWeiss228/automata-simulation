@@ -75,11 +75,10 @@ if [ $? -eq 0 ]; then
     echo "Entering virtual environment shell. Type 'exit' to leave."
     # Пытаемся запустить интерактивную оболочку с активированным окружением
     if [ -f "./venv/bin/activate" ]; then
-        # Используем bash/zsh --rcfile или аналоги для загрузки окружения
+        echo "Source the venv and start a clean shell..."
         if [[ "$SHELL" == *"zsh"* ]]; then
-            # Для zsh мы можем создать временный файл или использовать -c
-            # Самый надежный способ: запустить zsh и сказать ему засорсить активацию
-            exec zsh -is <<< "source ./venv/bin/activate"
+            # Заменяем текущий процесс оболочкой zsh с командой активации
+            exec zsh -l -c "source ./venv/bin/activate; exec zsh"
         else
             # Для bash
             exec bash --rcfile <(echo "source ~/.bashrc 2>/dev/null; source ./venv/bin/activate")
