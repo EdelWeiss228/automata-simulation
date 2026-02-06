@@ -22,13 +22,13 @@ if not exist "venv" (
 echo Activating virtual environment and installing dependencies...
 call venv\Scripts\activate.bat
 
-python -m pip install --upgrade pip
+venv\Scripts\python -m pip install --upgrade pip
 
 if exist "requirements.txt" (
-    python -m pip install -r requirements.txt
+    venv\Scripts\python -m pip install -r requirements.txt
 ) else (
     echo requirements.txt not found! Installing base packages manually...
-    python -m pip install numpy pandas pybind11
+    venv\Scripts\python -m pip install numpy pandas pybind11
 )
 
 :: 4. Build Engine

@@ -55,14 +55,14 @@ echo "Activating virtual environment and installing dependencies..."
 source ./venv/bin/activate
 
 # Апгрейд pip
-python3 -m pip install --upgrade pip
+./venv/bin/python3 -m pip install --upgrade pip
 
 # Установка из requirements.txt
 if [ -f "requirements.txt" ]; then
-    python3 -m pip install -r requirements.txt
+    ./venv/bin/python3 -m pip install -r requirements.txt
 else
     echo "requirements.txt not found! Installing base packages manually..."
-    python3 -m pip install numpy pandas pybind11
+    ./venv/bin/python3 -m pip install numpy pandas pybind11
 fi
 
 # 6. Компиляция ядра
