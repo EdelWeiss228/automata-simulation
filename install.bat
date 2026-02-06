@@ -37,8 +37,8 @@ call build.bat
 
 if %ERRORLEVEL% equ 0 (
     echo === INSTALLATION SUCCESSFUL ===
-    echo Launching simulation...
-    call run.bat
+    echo Entering virtual environment shell...
+    cmd /k venv\Scripts\activate.bat
 ) else (
     echo === INSTALLATION FINISHED WITH WARNINGS ===
     echo Environment is set up, but build.bat failed. Check C++ compiler (g++).

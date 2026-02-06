@@ -72,9 +72,13 @@ chmod +x build.sh
 
 if [ $? -eq 0 ]; then
     echo "=== INSTALLATION SUCCESSFUL ==="
-    echo "Launching simulation..."
-    chmod +x run.sh
-    ./run.sh
+    echo "Entering virtual environment shell. Type 'exit' to leave."
+    # Пытаемся запустить оболочку с активированным окружением
+    if [[ "$SHELL" == *"zsh"* ]]; then
+        ZDOTDIR=$PWD exec zsh -i -c "source ./venv/bin/activate; exec zsh"
+    else
+        bash --rcfile <(echo "source ~/.bashrc; source ./venv/bin/activate")
+    fi
 else
     echo "=== INSTALLATION FINISHED WITH WARNINGS ==="
     echo "Environment is set up, but build.sh failed. Check C++ dependencies."
