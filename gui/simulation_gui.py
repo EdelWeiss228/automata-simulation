@@ -13,6 +13,7 @@ from core.data_logger import DataLogger
 from gui.color_utils import get_emotion_color
 import random
 import math
+import os
 
 NODE_RADIUS = 20
 INITIAL_CANVAS_SIZE = 600
