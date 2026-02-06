@@ -73,11 +73,17 @@ chmod +x build.sh
 if [ $? -eq 0 ]; then
     echo "=== INSTALLATION SUCCESSFUL ==="
     echo "Entering virtual environment shell. Type 'exit' to leave."
-    # Пытаемся запустить оболочку с активированным окружением
-    if [[ "$SHELL" == *"zsh"* ]]; then
-        ZDOTDIR=$PWD exec zsh -i -c "source ./venv/bin/activate; exec zsh"
-    else
-        bash --rcfile <(echo "source ~/.bashrc; source ./venv/bin/activate")
+    # Пытаемся запустить интерактивную оболочку с активированным окружением
+    if [ -f "./venv/bin/activate" ]; then
+        # Используем bash/zsh --rcfile или аналоги для загрузки окружения
+        if [[ "$SHELL" == *"zsh"* ]]; then
+            # Для zsh мы можем создать временный файл или использовать -c
+            # Самый надежный способ: запустить zsh и сказать ему засорсить активацию
+            exec zsh -is <<< "source ./venv/bin/activate"
+        else
+            # Для bash
+            exec bash --rcfile <(echo "source ~/.bashrc 2>/dev/null; source ./venv/bin/activate")
+        fi
     fi
 else
     echo "=== INSTALLATION FINISHED WITH WARNINGS ==="
