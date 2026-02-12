@@ -1,40 +1,34 @@
-import json
+import argparse
 import sys
 import os
 
 # Добавляем корневую директорию проекта в path
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from gui.simulation_gui import SimulationGUI
-from model.collective import Collective
-from scripts.run_headless import generate_research_agents
-from core.agent_factory import AgentFactory
+from model.simulation_session import SimulationSession
 
-def run_research_gui(scenario_path):
-    with open(scenario_path, 'r', encoding='utf-8') as f:
-        scenario = json.load(f)
+def main():
+    parser = argparse.ArgumentParser(description="GUI Research Runner v5.0")
+    parser.add_argument("scenario", type=str, help="Path to scenario JSON file")
+    parser.add_argument("--steps", type=int, help="Number of steps (overrides scenario)")
+    parser.add_argument("--gui", action="store_true", default=True, help="Run in GUI mode (default)")
     
-    # 1. Setup Simulation Data
-    agents = generate_research_agents(scenario)
-    from model.simulation_session import SimulationSession
+    args = parser.parse_args()
+
+    if not os.path.exists(args.scenario):
+        print(f"Error: Scenario file '{args.scenario}' not found.", file=sys.stderr)
+        sys.exit(1)
+
+    from gui.simulation_gui import SimulationGUI
+    
     session = SimulationSession()
-    
-    for agent in agents:
-        session.collective.add_agent(agent)
+    session.load_scenario(args.scenario)
+    if args.steps:
+        session.total_steps = args.steps
         
-    print("Инициализация связей для визуализации...")
-    agent_names = list(session.collective.agents.keys())
-    for agent in session.collective.agents.values():
-        AgentFactory.initialize_agent_relations(agent, agent_names)
-    
-    # 2. Launch GUI
     app = SimulationGUI(session=session)
-    app.title(f"Research Mode: {scenario['emotion_dist']} Dist (Seed: {scenario['seed']})")
+    app.title(f"Research Mode: Scenario Loading...")
     app.mainloop()
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 run_research_gui.py <scenario_json>")
-        sys.exit(1)
-    
-    run_research_gui(sys.argv[1])
+    main()

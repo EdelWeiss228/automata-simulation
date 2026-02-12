@@ -52,7 +52,7 @@ SUFFIX=$($PY_BIN -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFI
 # 6. Компилируем
 echo "Compiling C++ engine with OpenMP..."
 c++ -O3 -Wall -shared -std=c++17 -fPIC ${OMP_FLAGS} ${INCLUDES} ${UNDEFINED_LOOKUP} \
-    core/src/engine.cpp core/src/binding.cpp \
+    core/src/engine.cpp core/src/logger.cpp core/src/binding.cpp \
     ${EXTRA_LIBS} \
     -o core/emotion_engine${SUFFIX}
 

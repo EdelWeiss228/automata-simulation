@@ -15,7 +15,7 @@ for /f "tokens=*" %%i in ('python -c "import sysconfig; print(sysconfig.get_conf
 :: 3. Compilation with g++ (MinGW/MSYS2)
 echo Using g++ to build core\emotion_engine%SUFFIX%...
 g++ -O3 -Wall -shared -std=c++17 -fopenmp %INCLUDES% ^
-    core\src\engine.cpp core\src\binding.cpp ^
+    core\src\engine.cpp core\src\logger.cpp core\src\binding.cpp ^
     -o core\emotion_engine%SUFFIX%
 
 if %ERRORLEVEL% equ 0 (

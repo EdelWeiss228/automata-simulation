@@ -44,4 +44,4 @@ if [ -d "./venv" ]; then
 fi
 
 # 3. Запускаем симуляцию
-python3 main.py
+python3 main.py "$@"

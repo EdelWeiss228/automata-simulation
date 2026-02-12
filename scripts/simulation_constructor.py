@@ -7,6 +7,8 @@ import subprocess
 from enum import Enum
 import random
 import numpy as np
+import threading
+import re
 
 # Добавляем корневую директорию проекта в path
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -16,8 +18,8 @@ from model.archetypes import ArchetypeEnum
 class SimulationConstructor(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Research Constructor: Agent Simulation v4.8")
-        self.geometry("600x800")
+        self.title("Конструктор симуляции (V5.2 High-Perf Core)")
+        self.geometry("600x650")
         
         self.params = {
             "total_agents": 1875,
@@ -26,8 +28,11 @@ class SimulationConstructor(tk.Tk):
             "emotion_params": {"min": -3.0, "max": 3.0, "mean": 0.0, "std": 1.0},
             "steps": 100,
             "seed": random.randint(0, 1000000),
-            "silent_mode": False
+            "silent_mode": True
         }
+        
+        self.progress_var = tk.DoubleVar(value=0)
+        self.status_var = tk.StringVar(value="Готов к запуску")
         
         self.create_widgets()
 
@@ -98,15 +103,24 @@ class SimulationConstructor(tk.Tk):
         self.seed_entry.insert(0, str(self.params["seed"]))
         self.seed_entry.grid(row=1, column=1, sticky=tk.W, padx=5)
 
-        self.silent_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(sim_frame, text="Silent Mode (Без GUI, только расчет)", variable=self.silent_var).grid(row=2, column=0, columnspan=2, sticky=tk.W, padx=5, pady=10)
+        self.silent_var = tk.BooleanVar(value=True)
+        # Checkbutton removed as per user request to avoid "slop" and enforce silent simulation by default
 
         # 4. Buttons
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=20)
         
         ttk.Button(btn_frame, text="Сохранить сценарий (JSON)", command=self.save_scenario).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        ttk.Button(btn_frame, text="ЗАПУСТИТЬ ИССЛЕДОВАНИЕ", command=self.run_simulation, style="Accent.TButton").pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        self.run_btn = ttk.Button(btn_frame, text="ЗАПУСТИТЬ ИССЛЕДОВАНИЕ", command=self.run_simulation)
+        self.run_btn.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+
+        # 5. Progress Section
+        progress_frame = ttk.LabelFrame(main_frame, text="Прогресс выполнения", padding="10")
+        progress_frame.pack(fill=tk.X, pady=10)
+        
+        ttk.Label(progress_frame, textvariable=self.status_var).pack(anchor=tk.W)
+        self.progressbar = ttk.Progressbar(progress_frame, variable=self.progress_var, maximum=100, mode='determinate')
+        self.progressbar.pack(fill=tk.X, pady=5)
 
     def update_remainder_label(self):
         try:
@@ -190,15 +204,66 @@ class SimulationConstructor(tk.Tk):
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(self.params, f, indent=4, ensure_ascii=False)
             
-        if self.params["silent_mode"]:
-            # Запуск Headless скрипта
-            messagebox.showinfo("Silent Mode", "Запускается высокоскоростной расчет.\nРезультаты будут в 'data/output/agent_states.csv' и 'data/output/interaction_log.csv'.\n\nМожете закрыть это окно или оставить его для новых сценариев.")
-            headless_path = os.path.join(os.path.dirname(__file__), "run_headless.py")
-            subprocess.Popen([sys.executable, headless_path, config_path])
-        else:
-            # Запуск обычной GUI симуляции с предзагруженным конфигом
-            gui_path = os.path.join(os.path.dirname(__file__), "run_research_gui.py")
-            subprocess.Popen([sys.executable, gui_path, config_path])
+        main_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "main.py")
+        
+        # Сбрасываем прогресс и отключаем кнопку
+        self.progress_var.set(0)
+        self.status_var.set("Запуск процесса...")
+        self.run_btn.config(state=tk.DISABLED)
+        
+        cmd = [sys.executable, main_path, "--scenario", config_path, "--silent"]
+        
+        def monitor_process():
+            try:
+                process = subprocess.Popen(
+                    cmd, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+                
+                total_steps = self.params["steps"]
+                
+                for line in process.stdout:
+                    line = line.strip()
+                    if not line: continue
+                    
+                    # Парсинг инициализации связей (0-20% бара)
+                    init_match = re.search(r"Подготовка связей: (\d+)%", line)
+                    if init_match:
+                        perc = int(init_match.group(1))
+                        self.after(0, lambda p=perc: (self.progress_var.set(p * 0.2), self.status_var.set(f"Инициализация мира: {p}%")))
+                        continue
+                        
+                    # Парсинг шагов (20-100% бара)
+                    step_match = re.search(r"Шаг (\d+)/(\d+)", line)
+                    if step_match:
+                        cur = int(step_match.group(1))
+                        tot = int(step_match.group(2))
+                        progress = 20 + (cur / tot) * 80
+                        self.after(0, lambda pr=progress, c=cur, t=tot: (self.progress_var.set(pr), self.status_var.set(f"Симуляция: Шаг {c}/{t}")))
+                        continue
+                        
+                    # Статусные сообщения
+                    if "РАСЧЕТ ЗАВЕРШЕН" in line:
+                        self.after(0, lambda: (self.progress_var.set(100), self.status_var.set("Расчет успешно завершен")))
+                    elif "Инициализация связей для" in line:
+                        self.after(0, lambda: self.status_var.set("Подготовка графа отношений..."))
+
+                process.wait()
+                if process.returncode == 0:
+                    self.after(0, lambda: self.status_var.set("Готово. Результаты в data/output/"))
+                else:
+                    self.after(0, lambda rc=process.returncode: self.status_var.set(f"Ошибка выполнения (код {rc})"))
+                    
+            except Exception as e:
+                self.after(0, lambda err=str(e): self.status_var.set(f"Ошибка: {err}"))
+            finally:
+                self.after(0, lambda: self.run_btn.config(state=tk.NORMAL))
+
+        # Запускаем мониторинг в отдельном потоке
+        threading.Thread(target=monitor_process, daemon=True).start()
 
 if __name__ == "__main__":
     app = SimulationConstructor()

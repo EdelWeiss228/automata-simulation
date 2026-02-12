@@ -1,0 +1,17 @@
+{
+    "total_agents": 5,
+    "agent_counts": {
+        "HARMONY": 1,
+        "NIHILITY": 1,
+        "PRESERVATION": 1,
+        "HUNT": 1,
+        "ELATION": 1
+    },
+    "emotion_dist": "Uniform",
+    "emotion_params": {
+        "min": -1.0,
+        "max": 1.0
+    },
+    "steps": 2,
+    "seed": 42
+}

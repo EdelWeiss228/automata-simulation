@@ -31,6 +31,9 @@ class SimulationGUI(tk.Tk):
             self.session = session
         else:
             self.session = SimulationSession(collective=collective)
+        
+        # Сигнализируем сессии, что GUI активен
+        self.session.gui_active = True
             
         self.agent_nodes = {}
         self.edges = []
@@ -150,64 +153,30 @@ class SimulationGUI(tk.Tk):
 
     def get_next_grid_position(self):
         """
-        Находит случайную свободную позицию в 'активной зоне' сетки.
-        Если находит, возвращает координаты.
+        Находит позицию для агента на основе его индекса. 
+        Метод O(1), предотвращает зависания при N > 1000.
         """
-        # Определяем примерное количество необходимых ячеек с запасом
         idx = len(self.agent_nodes)
-        n_agents = idx + 1
         
-        # Оцениваем нужный размер поля (columns x rows)
-        # Хотим примерно квадратную или прямоугольную область
-        # S ~ n_agents * 2 (чтобы было 50% заполнение, для "воздуха")
-        target_cells = max(50, n_agents * 2) 
-        columns = 10 # Фиксированная ширина для удобства скролла
+        # Используем детерминированную 'сетку' для размещения, 
+        # но с небольшим рандомом для 'органического' вида.
+        columns = 15 # Фиксированное количество колонок
+        cell_size = SPACING + 15
+        margin = NODE_RADIUS + 30
         
-        # Пытаемся найти случайное свободное место
-        max_attempts = 50
-        margin = NODE_RADIUS + 20
-        cell_size = SPACING + 20
+        c = idx % columns
+        r = idx // columns
         
-        for _ in range(max_attempts):
-            # Выбираем случайную колонку и ряд в разумных пределах
-            # Ряд может расти вниз по мере добавления
-            max_row = (n_agents // columns) + 5 # +5 рядов запаса вниз
-            
-            c = random.randint(0, columns - 1)
-            r = random.randint(0, max_row)
-            
-            # Проверяем, не занята ли ячейка (простая проверка по расстоянию до всех других)
-            candidate_x = margin + c * cell_size
-            candidate_y = margin + r * cell_size
-            
-            collision = False
-            for node in self.agent_nodes.values():
-                dist = ((node.x - candidate_x)**2 + (node.y - candidate_y)**2)**0.5
-                if dist < NODE_RADIUS: # Если попали почти в ту же точку
-                    collision = True
-                    break
-            
-            if not collision:
-                return candidate_x, candidate_y
-                
-        # Если не повезло с рандомом — ставим в первое свободное место последовательно (fallback)
-        # Это старая логика, чтобы точно не зависнуть
-        for r in range(1000):
-            for c in range(columns):
-                candidate_x = margin + c * cell_size
-                candidate_y = margin + r * cell_size
-                
-                collision = False
-                for node in self.agent_nodes.values():
-                    dist = ((node.x - candidate_x)**2 + (node.y - candidate_y)**2)**0.5
-                    if dist < NODE_RADIUS:
-                        collision = True
-                        break
-                
-                if not collision:
-                    return candidate_x, candidate_y
+        # Базовая позиция
+        x = margin + c * cell_size
+        y = margin + r * cell_size
         
-        return 0, 0 # Should not happen
+        # Добавляем небольшой детерминированный Jitter на основе Seed (если есть в сессии) или просто индекса
+        # чтобы агенты не стояли по идеальной линейке (по завету пользователя 'не делать сетку')
+        jitter_x = (hash(str(idx)) % 20) - 10
+        jitter_y = (hash(str(idx) + "y") % 20) - 10
+        
+        return x + jitter_x, y + jitter_y
 
     def add_agent_node(self, agent_name):
         x, y = self.get_next_grid_position()
