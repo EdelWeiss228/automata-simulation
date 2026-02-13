@@ -62,7 +62,13 @@
 - **OpenMP Integration**: Параллельные вычисления для всех N² операций.
 - **Deterministic Seeding**: Синхронизация генератора случайных чисел между Python и C++.
 
-## [v5.2] — High-Performance Logging (Текущая)
+## [v5.3] — Direct University Launch & Determinism (Текущая)
+*Улучшение воспроизводимости и удобства запуска.*
+- **Direct Launch**: Добавлен флаг `--university` для мгновенного запуска карты кампуса.
+- **Initialization Determinism**: Внедрена синхронизация сидов для `random` и `numpy.random`. Теперь при указании сида в сценарии "Такт 0" (инициализация всех 1875 агентов, их архетипов и отношений) всегда идентичен.
+- **Flexible Entry**: Расширены скрипты `run.sh` и `run.bat` командой `uni`.
+
+## [v5.2] — High-Performance Logging
 *Устранение бутылочного горлышка ввода-вывода.*
 - **C++ CSV Logger**: Создан модуль `logger.cpp`, пишущий логи напрямую из C++, минуя Python.
 - **Dynamic Sync (GUI Active)**: Автоматический пропуск синхронизации Python-объектов в headless режиме (прирост скорости >50% для больших N).

@@ -57,8 +57,10 @@ class SimulationSession:
         with open(scenario_path, 'r', encoding='utf-8') as f:
             scenario = json.load(f)
         
+        seed = scenario.get("seed")
+        self.reset(seed=seed)
+        
         agents = generate_research_agents(scenario)
-        self.reset()
         for agent in agents:
             self.collective.add_agent(agent)
             
@@ -172,9 +174,12 @@ class SimulationSession:
             )
         self.first_log_interactions = False
 
-    def reset(self, new_collective=None):
+    def reset(self, new_collective=None, seed=None):
         """Сбрасывает сессию симуляции."""
-        self.collective = new_collective if new_collective else Collective()
+        if new_collective:
+            self.collective = new_collective
+        else:
+            self.collective = Collective(seed=seed)
         self.first_log_states = True
         self.first_log_interactions = True
         self.simulation_started = False

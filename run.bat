@@ -11,6 +11,12 @@ if not exist "%BINARY_FILE%" (
     if %ERRORLEVEL% neq 0 exit /b 1
 )
 
+if "%1"=="uni" (
+    echo Launching University Map...
+    venv\Scripts\python main.py --university
+    exit /b
+)
+
 :: 2. Activate Virtual Environment
 if exist "venv\Scripts\activate.bat" (
     call venv\Scripts\activate.bat

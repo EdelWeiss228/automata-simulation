@@ -1,6 +1,13 @@
 #!/bin/bash
 
-# 1. Проверка совместимости билда (авто-ребилд при смене ядра/ОС)
+if [ "$1" == "uni" ]; then
+    echo "Launching University Map..."
+    ./venv/bin/python3 main.py --university
+    exit 0
+fi
+
+# 1. Сначала пробуем просто запустить
+мости билда (авто-ребилд при смене ядра/ОС)
 OS_NAME=$(uname -s)
 KERNEL_INFO=$(uname -rvm)
 ARCH_NAME=$(uname -m)

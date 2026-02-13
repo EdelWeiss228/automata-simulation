@@ -1,4 +1,5 @@
 import random
+import numpy as np
 import datetime
 from typing import List, Tuple, Dict
 from .collective import Collective
@@ -13,8 +14,11 @@ class UniversityCollective(Collective):
     Управляет расписанием, локациями и специфическими правилами v3.0.
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, seed=None):
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed)
+        super().__init__(seed=seed)
         self.uni_manager = UniversityManager()
         self.uni_manager.generate_schedules()
         

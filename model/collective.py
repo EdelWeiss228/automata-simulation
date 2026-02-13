@@ -1,4 +1,5 @@
 import random
+import numpy as np
 from .agent import Agent
 from .player import Player
 from .emotion_automaton import EmotionAxis
@@ -24,10 +25,14 @@ class Collective:
     управляющий их взаимодействиями и отношениями.
     """
 
-    def __init__(self, agents_data=None, relations_data=None, players_data=None):
+    def __init__(self, agents_data=None, relations_data=None, players_data=None, seed=None):
         """
         Инициализация коллектива.
         """
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed)
+        self.seed = seed
         self.agents = {}
         self.players = []
         self.agent_count = 0
