@@ -17,7 +17,7 @@ void Engine::influence_emotions() {
         
         int offset_i = i * SimulationState::NUM_AXES;
         for (int a = 0; a < SimulationState::NUM_AXES; ++a) {
-            float val = state.emotions[offset_i + a];
+            float val = (float)state.emotions[offset_i + a];
             float abs_val = std::abs(val);
             total_intensity += abs_val;
             if (abs_val > std::abs(max_val)) {
@@ -36,72 +36,53 @@ void Engine::influence_emotions() {
         for (int j = 0; j < num_agents; ++j) {
             if (i == j) continue;
 
-            // Проверяем классификацию отношений j к i (избегание)
-            // Важно: берем отношение j -> i
             int base_ji = (j * num_agents + i) * 4;
-            float a_ji = state.relations[base_ji + 1];
-            float t_ji = state.relations[base_ji + 2];
-            float r_ji = state.relations[base_ji + 3];
+            int a_ji = state.relations[base_ji + 1];
+            int t_ji = state.relations[base_ji + 2];
+            int r_ji = state.relations[base_ji + 3];
 
             bool avoid = false;
-            if (r_ji < -5.0f) avoid = true;
-            else if (t_ji >= 5.0f && a_ji >= 5.0f && r_ji >= 0.0f) {} // mandatory
-            else if (t_ji >= 0.0f || a_ji >= 0.0f || r_ji > -5.0f) {} // optional
+            if (r_ji < -50) avoid = true;
+            else if (t_ji >= 50 && a_ji >= 50 && r_ji >= 0) {} 
+            else if (t_ji >= 0 || a_ji >= 0 || r_ji > -50) {} 
             else avoid = true;
 
             if (avoid) continue;
 
-            // Рассчитываем силу влияния (i -> j)
             int base_ij = (i * num_agents + j) * 4;
-            float u_ij = state.relations[base_ij + 0];
-            float a_ij = state.relations[base_ij + 1];
-            float t_ij = state.relations[base_ij + 2];
+            float u_ij = (float)state.relations[base_ij + 0];
+            float a_ij = (float)state.relations[base_ij + 1];
+            float t_ij = (float)state.relations[base_ij + 2];
             
             float effect_strength = (a_ij + t_ij + u_ij) / 3.0f;
-            float common_factor = std::abs(effect_strength) * state.sensitivities[j] * 0.01f;
+            // Уменьшаем common_factor, т.к. значения выросли в 10 раз
+            float common_factor = std::abs(effect_strength) * state.sensitivities[j] * 0.001f;
 
-            // Применяем изменения к j
             int offset_j = j * SimulationState::NUM_AXES;
             for (int a = 0; a < SimulationState::NUM_AXES; ++a) {
-                float val_i = state.emotions[offset_i + a];
+                float val_i = (float)state.emotions[offset_i + a];
                 float weight = (a == primary_axis) ? weight_primary : weight_secondary;
                 float delta = val_i * common_factor * weight;
                 delta_emotions[offset_j + a] += delta;
 
-                // ВЛИЯНИЕ НА ОТНОШЕНИЯ (j -> i): Отношение того, КТО воспринимает, к ТОМУ, КТО транслирует
-                // В Python это react_to_relations/react_to_emotions, но в C++ мы делаем это в момент контакта
-                int base_ji = (j * num_agents + i) * 4;
+                int base_ji_rel = (j * num_agents + i) * 4;
                 int weight_base = (i * SimulationState::NUM_AXES + a) * 4;
                 
-                // delta_relation = val_i * archetype_coeff * sensitivity
                 float r_sens = state.sensitivities[j];
-                state.relations[base_ji + 0] = std::max(-10.0f, std::min(10.0f, state.relations[base_ji + 0] + delta * state.emission_weights[weight_base + 0] * r_sens));
-                state.relations[base_ji + 1] = std::max(-10.0f, std::min(10.0f, state.relations[base_ji + 1] + delta * state.emission_weights[weight_base + 1] * r_sens));
-                state.relations[base_ji + 2] = std::max(-10.0f, std::min(10.0f, state.relations[base_ji + 2] + delta * state.emission_weights[weight_base + 2] * r_sens));
+                // delta здесь - плавающее изменение, прибавляем к целому
+                state.relations[base_ji_rel + 0] = std::max(-100, std::min(100, (int)(state.relations[base_ji_rel + 0] + delta * state.emission_weights[weight_base + 0] * r_sens * 10.0f)));
+                state.relations[base_ji_rel + 1] = std::max(-100, std::min(100, (int)(state.relations[base_ji_rel + 1] + delta * state.emission_weights[weight_base + 1] * r_sens * 10.0f)));
+                state.relations[base_ji_rel + 2] = std::max(-100, std::min(100, (int)(state.relations[base_ji_rel + 2] + delta * state.emission_weights[weight_base + 2] * r_sens * 10.0f)));
             }
 
-            // Контакт повышает отзывчивость (i -> j) и (j -> i)
-            // Но в v4.9 мы делаем это только для пары
-            state.relations[base_ij + 3] = std::min(10.0f, state.relations[base_ij + 3] + 0.05f);
+            state.relations[base_ij + 3] = std::min(100, (int)(state.relations[base_ij + 3] + 0.5f * 10.0f));
             int base_ji_final = (j * num_agents + i) * 4;
-            state.relations[base_ji_final + 3] = std::min(10.0f, state.relations[base_ji_final + 3] + 0.05f);
+            state.relations[base_ji_final + 3] = std::min(100, (int)(state.relations[base_ji_final + 3] + 0.5f * 10.0f));
         }
     }
 
-    // Применяем накопленные изменения эмоций + добавляем естественное затухание
-    float decay_rate = 0.05f; // Базовая скорость затухания для C++ шага
-
     for (size_t k = 0; k < state.emotions.size(); ++k) {
-        float current = state.emotions[k] + delta_emotions[k];
-        
-        // Эмоциональное затухание (стремление к 0)
-        if (current > 0) {
-            current = std::max(0.0f, current - decay_rate);
-        } else if (current < 0) {
-            current = std::min(0.0f, current + decay_rate);
-        }
-
-        state.emotions[k] = std::max(-3.0f, std::min(3.0f, current));
+        state.emotions[k] = std::max(-30, std::min(30, (int)(state.emotions[k] + delta_emotions[k])));
     }
 }
 
@@ -124,15 +105,16 @@ float Engine::calculate_priority_score(int from_idx, int to_idx) {
     const auto& conf = state.archetype_configs[arch_idx];
     
     int base_ij = (from_idx * num_agents + to_idx) * 4;
-    float u = state.relations[base_ij + 0];
-    float a = state.relations[base_ij + 1];
-    float t = state.relations[base_ij + 2];
-    float r = state.relations[base_ij + 3];
+    float u = (float)state.relations[base_ij + 0];
+    float a = (float)state.relations[base_ij + 1];
+    float t = (float)state.relations[base_ij + 2];
+    float r = (float)state.relations[base_ij + 3];
     
-    float a_score = apply_transformation(a, conf.scoring_affinity);
-    float u_score = apply_transformation(u, conf.scoring_utility);
-    float t_score = apply_transformation(t, conf.scoring_trust);
-    float r_score = apply_transformation(r, conf.scoring_responsiveness);
+    // ВНИМАНИЕ: Трансформации (log/exp) ожидают значения в старой шкале (0..10), делим на 10
+    float a_score = apply_transformation(a / 10.0f, conf.scoring_affinity);
+    float u_score = apply_transformation(u / 10.0f, conf.scoring_utility);
+    float t_score = apply_transformation(t / 10.0f, conf.scoring_trust);
+    float r_score = apply_transformation(r / 10.0f, conf.scoring_responsiveness);
     
     float alpha = 1.5f;
     float multiplier = (r < 0) ? 1.5f : 1.0f;
@@ -141,8 +123,8 @@ float Engine::calculate_priority_score(int from_idx, int to_idx) {
 }
 
 bool Engine::should_refuse(int agent_idx, int target_idx) {
-    int base_tj = (target_idx * num_agents + agent_idx) * 4; // Отношение цели к инициатору
-    float r_ji = state.relations[base_tj + 3];
+    int base_tj = (target_idx * num_agents + agent_idx) * 4;
+    float r_ji = (float)state.relations[base_tj + 3] / 10.0f; // Возврат к шкале 2.0 для экспоненты
     
     float temp = 2.0f;
     float refusal_prob = 1.0f / (1.0f + std::exp(r_ji / temp));
@@ -152,8 +134,6 @@ bool Engine::should_refuse(int agent_idx, int target_idx) {
     
     float final_prob = std::min(0.95f, refusal_prob * (base_factor / 0.3f));
     
-    // Используем простой rand() для детерминированности, если seed задан, 
-    // но лучше было бы передавать генератор. Для C++ ядра пока так.
     return ((float)rand() / (float)RAND_MAX) < final_prob;
 }
 
@@ -165,14 +145,14 @@ int Engine::choose_target(int agent_idx) {
         if (agent_idx == j) continue;
         
         int base_ij = (agent_idx * num_agents + j) * 4;
-        float a = state.relations[base_ij + 1];
-        float t = state.relations[base_ij + 2];
-        float r = state.relations[base_ij + 3];
+        int a = state.relations[base_ij + 1];
+        int t = state.relations[base_ij + 2];
+        int r = state.relations[base_ij + 3];
         
-        // Классификация (упрощенная копия из Python)
-        if (r < -5.0f) continue; // avoid
-        if (t >= 5.0f && a >= 5.0f && r >= 0.0f) mandatory.push_back(j);
-        else if (t >= 0.0f || a >= 0.0f || r > -5.0f) optional.push_back(j);
+        // Классификация (новые границы x10)
+        if (r < -50) continue; // avoid
+        if (t >= 50 && a >= 50 && r >= 0) mandatory.push_back(j);
+        else if (t >= 0 || a >= 0 || r > -50) optional.push_back(j);
     }
     
     const auto& candidates = mandatory.empty() ? optional : mandatory;
@@ -213,45 +193,45 @@ void Engine::process_interaction(int from_idx, int to_idx, bool success) {
     float s_t = state.sensitivities[to_idx];
     
     if (success) {
-        float delta_primary = 2.0f * s_i;
-        float delta_trust = 1.0f * s_i;
-        float delta_resp = 1.0f * s_i;
+        int delta_primary = (int)(20.0f * s_i); // 2.0 * 10
+        int delta_trust = (int)(10.0f * s_i);
+        int delta_resp = (int)(10.0f * s_i);
         
         // i -> target
         int base_it = (from_idx * num_agents + to_idx) * 4;
-        state.relations[base_it + 1] = std::max(-10.0f, std::min(10.0f, state.relations[base_it + 1] + delta_primary));
-        state.relations[base_it + 0] = std::max(-10.0f, std::min(10.0f, state.relations[base_it + 0] + delta_primary));
-        state.relations[base_it + 2] = std::max(-10.0f, std::min(10.0f, state.relations[base_it + 2] + delta_trust));
-        state.relations[base_it + 3] = std::max(-10.0f, std::min(10.0f, state.relations[base_it + 3] + delta_resp));
+        state.relations[base_it + 1] = std::max(-100, std::min(100, state.relations[base_it + 1] + delta_primary));
+        state.relations[base_it + 0] = std::max(-100, std::min(100, state.relations[base_it + 0] + delta_primary));
+        state.relations[base_it + 2] = std::max(-100, std::min(100, state.relations[base_it + 2] + delta_trust));
+        state.relations[base_it + 3] = std::max(-100, std::min(100, state.relations[base_it + 3] + delta_resp));
         
         // target -> i
-        float dt_primary = 2.0f * s_t;
-        float dt_trust = 1.0f * s_t;
-        float dt_resp = 1.0f * s_t;
+        int dt_primary = (int)(20.0f * s_t);
+        int dt_trust = (int)(10.0f * s_t);
+        int dt_resp = (int)(10.0f * s_t);
         int base_ti = (to_idx * num_agents + from_idx) * 4;
-        state.relations[base_ti + 1] = std::max(-10.0f, std::min(10.0f, state.relations[base_ti + 1] + dt_primary));
-        state.relations[base_ti + 0] = std::max(-10.0f, std::min(10.0f, state.relations[base_ti + 0] + dt_primary));
-        state.relations[base_ti + 2] = std::max(-10.0f, std::min(10.0f, state.relations[base_ti + 2] + dt_trust));
-        state.relations[base_ti + 3] = std::max(-10.0f, std::min(10.0f, state.relations[base_ti + 3] + dt_resp));
+        state.relations[base_ti + 1] = std::max(-100, std::min(100, state.relations[base_ti + 1] + dt_primary));
+        state.relations[base_ti + 0] = std::max(-100, std::min(100, state.relations[base_ti + 0] + dt_primary));
+        state.relations[base_ti + 2] = std::max(-100, std::min(100, state.relations[base_ti + 2] + dt_trust));
+        state.relations[base_ti + 3] = std::max(-100, std::min(100, state.relations[base_ti + 3] + dt_resp));
     } else {
-        float delta_trust_fail = 2.0f * s_i;
-        float delta_others_fail = 0.5f * s_i;
-        float delta_resp_fail = 0.5f * s_i;
+        int delta_trust_fail = (int)(20.0f * s_i);
+        int delta_others_fail = (int)(5.0f * s_i);
+        int delta_resp_fail = (int)(5.0f * s_i);
         
         int base_it = (from_idx * num_agents + to_idx) * 4;
-        state.relations[base_it + 2] = std::max(-10.0f, std::min(10.0f, state.relations[base_it + 2] - delta_trust_fail));
-        state.relations[base_it + 1] = std::max(-10.0f, std::min(10.0f, state.relations[base_it + 1] - delta_others_fail));
-        state.relations[base_it + 0] = std::max(-10.0f, std::min(10.0f, state.relations[base_it + 0] - delta_others_fail));
-        state.relations[base_it + 3] = std::max(-10.0f, std::min(10.0f, state.relations[base_it + 3] + delta_resp_fail));
+        state.relations[base_it + 2] = std::max(-100, std::min(100, state.relations[base_it + 2] - delta_trust_fail));
+        state.relations[base_it + 1] = std::max(-100, std::min(100, state.relations[base_it + 1] - delta_others_fail));
+        state.relations[base_it + 0] = std::max(-100, std::min(100, state.relations[base_it + 0] - delta_others_fail));
+        state.relations[base_it + 3] = std::max(-100, std::min(100, state.relations[base_it + 3] + delta_resp_fail));
 
-        float dt_trust_fail = 2.0f * s_t;
-        float dt_others_fail = 0.5f * s_t;
-        float dt_resp_fail = 0.5f * s_t;
+        int dt_trust_fail = (int)(20.0f * s_t);
+        int dt_others_fail = (int)(5.0f * s_t);
+        int dt_resp_fail = (int)(5.0f * s_t);
         int base_ti = (to_idx * num_agents + from_idx) * 4;
-        state.relations[base_ti + 2] = std::max(-10.0f, std::min(10.0f, state.relations[base_ti + 2] - dt_trust_fail));
-        state.relations[base_ti + 1] = std::max(-10.0f, std::min(10.0f, state.relations[base_ti + 1] - dt_others_fail));
-        state.relations[base_ti + 0] = std::max(-10.0f, std::min(10.0f, state.relations[base_ti + 0] - dt_others_fail));
-        state.relations[base_ti + 3] = std::max(-10.0f, std::min(10.0f, state.relations[base_ti + 3] + dt_resp_fail));
+        state.relations[base_ti + 2] = std::max(-100, std::min(100, state.relations[base_ti + 2] - dt_trust_fail));
+        state.relations[base_ti + 1] = std::max(-100, std::min(100, state.relations[base_ti + 1] - dt_others_fail));
+        state.relations[base_ti + 0] = std::max(-100, std::min(100, state.relations[base_ti + 0] - dt_others_fail));
+        state.relations[base_ti + 3] = std::max(-100, std::min(100, state.relations[base_ti + 3] + dt_resp_fail));
     }
 }
 
@@ -259,16 +239,14 @@ void Engine::process_refusal(int from_idx, int to_idx) {
     float s_i = state.sensitivities[from_idx];
     float s_t = state.sensitivities[to_idx];
     
-    // Инициатор расстроен
     int base_it = (from_idx * num_agents + to_idx) * 4;
-    state.relations[base_it + 3] = std::max(-10.0f, std::min(10.0f, state.relations[base_it + 3] - 2.0f * s_i));
-    state.relations[base_it + 1] = std::max(-10.0f, std::min(10.0f, state.relations[base_it + 1] - 1.5f * s_i));
-    state.relations[base_it + 0] = std::max(-10.0f, std::min(10.0f, state.relations[base_it + 0] - 0.5f * s_i));
+    state.relations[base_it + 3] = std::max(-100, std::min(100, (int)(state.relations[base_it + 3] - 20.0f * s_i)));
+    state.relations[base_it + 1] = std::max(-100, std::min(100, (int)(state.relations[base_it + 1] - 15.0f * s_i)));
+    state.relations[base_it + 0] = std::max(-100, std::min(100, (int)(state.relations[base_it + 0] - 5.0f * s_i)));
     
-    // Цель тоже охладевает
     int base_ti = (to_idx * num_agents + from_idx) * 4;
-    state.relations[base_ti + 3] = std::max(-10.0f, std::min(10.0f, state.relations[base_ti + 3] - 1.0f * s_t));
-    state.relations[base_ti + 1] = std::max(-10.0f, std::min(10.0f, state.relations[base_ti + 1] - 0.5f * s_t));
+    state.relations[base_ti + 3] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 3] - 10.0f * s_t)));
+    state.relations[base_ti + 1] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 1] - 5.0f * s_t)));
 }
 
 void Engine::apply_relation_decay() {
@@ -285,15 +263,15 @@ void Engine::apply_relation_decay() {
             
             // A, T, U decay
             for (int k = 0; k < 3; ++k) {
-                float val = state.relations[base + k];
-                if (val > 0) state.relations[base + k] = std::max(0.0f, val - step * 0.5f);
-                else if (val < 0) state.relations[base + k] = std::min(0.0f, val + step);
+                int val = state.relations[base + k];
+                if (val > 0) state.relations[base + k] = std::max(0, (int)(val - step * 0.5f));
+                else if (val < 0) state.relations[base + k] = std::min(0, (int)(val + step)); // Режим прощения 1.0x
             }
             
             // Responsiveness decay
-            float r_val = state.relations[base + 3];
-            if (r_val > 0) state.relations[base + 3] = std::max(0.0f, r_val - step * 1.5f);
-            else if (r_val < 0) state.relations[base + 3] = std::min(0.0f, r_val + step * 1.0f);
+            int r_val = state.relations[base + 3];
+            if (r_val > 0) state.relations[base + 3] = std::max(0, (int)(r_val - step * 1.5f));
+            else if (r_val < 0) state.relations[base + 3] = std::min(0, (int)(r_val + step));
         }
     }
 }
@@ -301,14 +279,17 @@ void Engine::apply_relation_decay() {
 void Engine::react_to_relations() {
     #pragma omp parallel for
     for (int i = 0; i < num_agents; ++i) {
-        float avg_a = 0.0f, avg_u = 0.0f, avg_t = 0.0f;
+        float avg_u = 0.0f;
+        float avg_a = 0.0f;
+        float avg_t = 0.0f;
         int count = 0;
+
         for (int j = 0; j < num_agents; ++j) {
             if (i == j) continue;
             int base = (i * num_agents + j) * 4;
-            avg_u += state.relations[base + 0];
-            avg_a += state.relations[base + 1];
-            avg_t += state.relations[base + 2];
+            avg_u += (float)state.relations[base + 0];
+            avg_a += (float)state.relations[base + 1];
+            avg_t += (float)state.relations[base + 2];
             count++;
         }
         
@@ -318,7 +299,7 @@ void Engine::react_to_relations() {
             avg_t /= count;
         }
 
-        float effect = (avg_a + avg_t + avg_u) / 3.0f;
+        float effect = (avg_a + avg_t + avg_u) / 3.0f; // Scale is now (100+100+100)/3 = 100 max.
         int arch_idx = state.agent_archetypes[i];
         const auto& coeffs = state.archetype_configs[arch_idx].emotion_coefficients;
         float s_i = state.sensitivities[i];
@@ -327,7 +308,7 @@ void Engine::react_to_relations() {
             if (axis < (int)coeffs.size()) {
                 float delta = (effect * coeffs[axis] * 0.05f) * s_i;
                 state.emotions[i * SimulationState::NUM_AXES + axis] = 
-                    std::max(-3.0f, std::min(3.0f, state.emotions[i * SimulationState::NUM_AXES + axis] + delta));
+                    std::max(-30, std::min(30, (int)(state.emotions[i * SimulationState::NUM_AXES + axis] + delta)));
             }
         }
     }
@@ -340,35 +321,35 @@ void Engine::react_to_emotions() {
         float k_factor = 0.3f;
 
         for (int axis = 0; axis < SimulationState::NUM_AXES; ++axis) {
-            float val = state.emotions[i * SimulationState::NUM_AXES + axis];
-            if (std::abs(val) < 0.1f) continue;
+            float val = (float)state.emotions[i * SimulationState::NUM_AXES + axis];
+            if (std::abs(val) < 1.0f) continue;
 
             for (int j = 0; j < num_agents; ++j) {
                 if (i == j) continue;
                 int base = (i * num_agents + j) * 4;
                 
-                // Axis 0: JOY_SADNESS -> Affinity
+                // JOY_SADNESS -> Affinity
                 if (axis == 0) {
-                    state.relations[base + 1] = std::max(-10.0f, std::min(10.0f, state.relations[base + 1] + val * k_factor * s_i));
+                    state.relations[base + 1] = std::max(-100, std::min(100, (int)(state.relations[base + 1] + val * k_factor * s_i)));
                 }
-                // Axis 2: ANGER_HUMILITY -> Trust
+                // ANGER_HUMILITY -> Trust
                 else if (axis == 2) {
                     float factor = (val < 0) ? 2.0f : 1.0f;
-                    state.relations[base + 2] = std::max(-10.0f, std::min(10.0f, state.relations[base + 2] + val * k_factor * factor * s_i));
+                    state.relations[base + 2] = std::max(-100, std::min(100, (int)(state.relations[base + 2] + val * k_factor * factor * s_i)));
                 }
-                // Axis 1: FEAR_CALM -> Trust
+                // FEAR_CALM -> Trust
                 else if (axis == 1) {
-                    state.relations[base + 2] = std::max(-10.0f, std::min(10.0f, state.relations[base + 2] + val * k_factor * s_i));
+                    state.relations[base + 2] = std::max(-100, std::min(100, (int)(state.relations[base + 2] + val * k_factor * s_i)));
                 }
-                // Axis 6: LOVE_ALIENATION (Openness in agent.py) -> Trust & Affinity
+                // LOVE_ALIENATION -> Trust & Affinity
                 else if (axis == 6) {
-                    state.relations[base + 2] = std::max(-10.0f, std::min(10.0f, state.relations[base + 2] + val * k_factor * s_i));
-                    state.relations[base + 1] = std::max(-10.0f, std::min(10.0f, state.relations[base + 1] + val * k_factor * s_i));
+                    state.relations[base + 2] = std::max(-100, std::min(100, (int)(state.relations[base + 2] + val * k_factor * s_i)));
+                    state.relations[base + 1] = std::max(-100, std::min(100, (int)(state.relations[base + 1] + val * k_factor * s_i)));
                 }
-                // Axis 3: DISGUST_ACCEPTANCE -> Utility & Affinity
+                // DISGUST_ACCEPTANCE -> Utility & Affinity
                 else if (axis == 3) {
-                    state.relations[base + 1] = std::max(-10.0f, std::min(10.0f, state.relations[base + 1] + val * k_factor * s_i));
-                    state.relations[base + 0] = std::max(-10.0f, std::min(10.0f, state.relations[base + 0] + val * k_factor * s_i));
+                    state.relations[base + 1] = std::max(-100, std::min(100, (int)(state.relations[base + 1] + val * k_factor * s_i)));
+                    state.relations[base + 0] = std::max(-100, std::min(100, (int)(state.relations[base + 0] + val * k_factor * s_i)));
                 }
             }
         }
@@ -384,9 +365,9 @@ void Engine::apply_emotion_decay() {
         float step = decay_rate * s_i;
 
         for (int axis = 0; axis < SimulationState::NUM_AXES; ++axis) {
-            float& val = state.emotions[i * SimulationState::NUM_AXES + axis];
-            if (val > 0) val = std::max(0.0f, val - step);
-            else if (val < 0) val = std::min(0.0f, val + step);
+            int& val = state.emotions[i * SimulationState::NUM_AXES + axis];
+            if (val > 0) val = std::max(0, (int)(val - step));
+            else if (val < 0) val = std::min(0, (int)(val + step));
         }
     }
 }

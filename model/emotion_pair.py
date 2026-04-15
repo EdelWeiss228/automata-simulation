@@ -2,27 +2,27 @@
 
 class EmotionPair:
     """Класс для представления и управления значением пары противоположных эмоций."""
-    def __init__(self, name, min_value=-3.0, max_value=3.0):
+    def __init__(self, name, min_value=-30, max_value=30):
         self.name = name
-        self.value = 0.0
-        self.min_value = float(min_value)
-        self.max_value = float(max_value)
+        self.value = 0
+        self.min_value = int(min_value)
+        self.max_value = int(max_value)
 
     def adjust(self, delta):
-        """Изменяет значение эмоции на заданное смещение (float), соблюдая границы."""
-        self.value = max(self.min_value, min(self.max_value, self.value + float(delta)))
+        """Изменяет значение эмоции на заданное смещение (int), соблюдая границы."""
+        self.value = max(self.min_value, min(self.max_value, int(self.value + delta)))
 
     def set(self, value):
-        """Устанавливает конкретное значение эмоции (float) в пределах допустимого диапазона."""
-        self.value = max(self.min_value, min(self.max_value, float(value)))
+        """Устанавливает конкретное значение эмоции (int) в пределах допустимого диапазона."""
+        self.value = max(self.min_value, min(self.max_value, int(value)))
 
     def describe(self):
-        """Возвращает текстовое описание текущего значения эмоции на основе диапазонов."""
+        """Возвращает текстовое описание текущего значения эмоции на основе диапазонов (x10)."""
         val = self.value
-        if val <= -2.5: return "очень негативно"
-        if val <= -1.5: return "негативно"
-        if val <= -0.5: return "немного негативно"
-        if val >= 2.5: return "очень позитивно"
-        if val >= 1.5: return "позитивно"
-        if val >= 0.5: return "немного позитивно"
+        if val <= -25: return "очень негативно"
+        if val <= -15: return "негативно"
+        if val <= -5: return "немного негативно"
+        if val >= 25: return "очень позитивно"
+        if val >= 15: return "позитивно"
+        if val >= 5: return "немного позитивно"
         return "нейтрально"

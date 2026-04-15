@@ -14,14 +14,11 @@ class InteractionStrategy:
         """
         r_ij = agent.get_relation_vector(target_agent.name).get("responsiveness", 0)
         
-        # Используем экспоненциальную функцию для Softmax-подобного поведения
-        # Температура T определяет крутизну кривой. Чем ниже T, тем жестче отказ при R < 0.
+        # Шкала R теперь -100..100, приводим к старой шкале для температуры
+        r_scaled = r_ij / 10.0
         temp = 2.0
-        # Шанс отказа = 1 / (1 + exp(R / T))
-        # Если R = 0, шанс 0.5. Если R = 10, шанс ~0.006. Если R = -10, шанс ~0.993.
-        refusal_prob = 1.0 / (1.0 + math.exp(r_ij / temp))
+        refusal_prob = 1.0 / (1.0 + math.exp(r_scaled / temp))
         
-        # Архетипичный базовый шанс как множитель
         base_factor = getattr(agent.archetype, "refusal_chance", 0.3)
         return min(0.95, refusal_prob * (base_factor / 0.3))
 
@@ -34,36 +31,37 @@ class InteractionStrategy:
         # Игрок отвечает на эмоцию
         player.respond_to_agent(agent.name, emotion_name, emotion_value)
         
-        # Агент обновляет отношение к игроку
+        # Агент обновляет отношение к игроку (delta теперь в x10)
         s_i = getattr(agent, 'sensitivity', 1.0)
-        delta = emotion_value * s_i
+        delta_scaled = emotion_value * s_i # emotion_value уже до 30
         
         # При успехе контакта с игроком (инициатива агента)
         agent.relations[player.name]['affinity'] = agent.limit_predicate_value(
-            agent.relations[player.name].get('affinity', 0) + delta * 2.0 # Усиленный рост
+            agent.relations[player.name].get('affinity', 0) + int(delta_scaled * 2.0)
         )
         agent.relations[player.name]['utility'] = agent.limit_predicate_value(
-            agent.relations[player.name].get('utility', 0) + delta * 2.0 # Усиленный рост
+            agent.relations[player.name].get('utility', 0) + int(delta_scaled * 2.0)
         )
         agent.relations[player.name]['trust'] = agent.limit_predicate_value(
-            agent.relations[player.name].get('trust', 0) + delta
+            agent.relations[player.name].get('trust', 0) + int(delta_scaled)
         )
         agent.relations[player.name]['responsiveness'] = agent.limit_predicate_value(
-            agent.relations[player.name].get('responsiveness', 0) + s_i
+            agent.relations[player.name].get('responsiveness', 0) + int(10 * s_i)
         )
 
     @staticmethod
     def _apply_transformation(val, transform_type):
-        """Применяет математическую трансформацию к значению."""
+        """Применяет математическую трансформацию к значению (scaled input)."""
+        val_orig = val / 10.0 # Ожидаем логарифм/экспоненту в шкале 0..10
         if transform_type == "log":
-            return math.log(abs(val) + 1) * (1 if val >= 0 else -1)
+            return math.log(abs(val_orig) + 1) * (1 if val_orig >= 0 else -1)
         elif transform_type == "exp":
-            return math.exp(val / 5.0)
+            return math.exp(val_orig / 5.0)
         elif transform_type == "sigmoid":
-            return 10 / (1 + math.exp(-val))
+            return 10 / (1 + math.exp(-val_orig))
         elif transform_type == "periodic":
-            return math.sin(val) * 5.0
-        return val # linear по умолчанию
+            return math.sin(val_orig) * 5.0
+        return val_orig # linear по умолчанию
 
     @classmethod
     def priority_score(cls, agent, target_name, metrics):
@@ -142,13 +140,13 @@ class InteractionStrategy:
             AgentFactory.initialize_agent_relations(agent, [target_agent.name])
 
         agent.relations[target_agent.name]['responsiveness'] = agent.limit_predicate_value(
-            agent.relations[target_agent.name].get('responsiveness', 0) - 2.0 * s_i # Сильное падение R
+            agent.relations[target_agent.name].get('responsiveness', 0) - 20 * s_i # -2 * 10
         )
         agent.relations[target_agent.name]['affinity'] = agent.limit_predicate_value(
-            agent.relations[target_agent.name].get('affinity', 0) - 1.5 * s_i # Существенное падение A
+            agent.relations[target_agent.name].get('affinity', 0) - 15 * s_i # -1.5 * 10
         )
         agent.relations[target_agent.name]['utility'] = agent.limit_predicate_value(
-            agent.relations[target_agent.name].get('utility', 0) - 0.5 * s_i # Легкое падение U
+            agent.relations[target_agent.name].get('utility', 0) - 5 * s_i # -0.5 * 10
         )
 
         # Целевой агент (target_agent) тоже охладевает, если отказал
@@ -157,10 +155,10 @@ class InteractionStrategy:
             AgentFactory.initialize_agent_relations(target_agent, [agent.name])
 
         target_agent.relations[agent.name]['responsiveness'] = target_agent.limit_predicate_value(
-            target_agent.relations[agent.name].get('responsiveness', 0) - 1.0 * s_target
+            target_agent.relations[agent.name].get('responsiveness', 0) - 10 * s_target
         )
         target_agent.relations[agent.name]['affinity'] = target_agent.limit_predicate_value(
-            target_agent.relations[agent.name].get('affinity', 0) - 0.5 * s_target
+            target_agent.relations[agent.name].get('affinity', 0) - 5 * s_target
         )
 
     @staticmethod
@@ -172,10 +170,9 @@ class InteractionStrategy:
         s_t = getattr(target_agent, "sensitivity", 1.0)
         
         if success:
-            # УСПЕХ: Приоритетный рост Affinity и Utility (с двойным коэффициентом)
-            delta_primary = 2.0 * s_i
-            delta_trust = 1.0 * s_i
-            delta_resp = 1.0 * s_i
+            delta_primary = 20 * s_i
+            delta_trust = 10 * s_i
+            delta_resp = 10 * s_i
             
             for a, t_obj, s in [(agent, target_agent, s_i), (target_agent, agent, s_t)]:
                 t_name = t_obj.name
@@ -188,10 +185,9 @@ class InteractionStrategy:
                 a.relations[t_name]['trust'] = a.limit_predicate_value(a.relations[t_name].get('trust', 0) + delta_trust)
                 a.relations[t_name]['responsiveness'] = a.limit_predicate_value(a.relations[t_name].get('responsiveness', 0) + delta_resp)
         else:
-            # НЕУДАЧА: Основной удар по Trust
-            delta_trust_fail = 2.0 * s_i
-            delta_others_fail = 0.5 * s_i
-            delta_resp_fail = 0.5 * s_i # Контакт был, R все равно растет, но слабее
+            delta_trust_fail = 20 * s_i
+            delta_others_fail = 5 * s_i
+            delta_resp_fail = 5 * s_i 
             
             for a, t_obj, s in [(agent, target_agent, s_i), (target_agent, agent, s_t)]:
                 t_name = t_obj.name

@@ -59,9 +59,9 @@ class Agent:
         self.stream = stream
         self.group_id = group_id
 
-    def limit_predicate_value(self, value, min_value=-10, max_value=10):
-        """Ограничивает значение предиката в заданном диапазоне."""
-        return max(min(value, max_value), min_value)
+    def limit_predicate_value(self, value, min_value=-100, max_value=100):
+        """Ограничивает значение предиката в заданном диапазоне (x10)."""
+        return max(min(int(value), max_value), min_value)
 
     def update_relation(self, other_agent_name, utility, affinity, trust):
         """Обновляет отношение к другому агенту с учетом ограничений."""
@@ -90,11 +90,11 @@ class Agent:
             
             # Механика «Выхода из игнора»: если R < 0, положительная дельта усиливается
             if current < 0 and delta > 0:
-                final_delta = delta * 2.5 # Ускоренный рост до 0
+                final_delta = delta * 2.5 # Ускоренный рост до 0 (delta предполагается в масштабе 1..20)
             else:
                 final_delta = delta
                 
-            new_responsiveness = self.limit_predicate_value(current + final_delta * self.sensitivity)
+            new_responsiveness = self.limit_predicate_value(current + int(final_delta * self.sensitivity))
             self.relations[target_name]["responsiveness"] = new_responsiveness
 
     def describe_emotions(self):
@@ -143,13 +143,15 @@ class Agent:
 
         coeffs = getattr(self.archetype, 'emotion_coefficients', {})
         for axis_name, coeff in coeffs.items():
+            # Делим на 3.0, т.к. avg_metrics теперь в масштабе -100..100, а нам нужен эффект в масштабе -10..10
             effect = (avg_metrics["affinity"] + avg_metrics["trust"] + avg_metrics["utility"]) / 3.0
             self.automaton.adjust_emotion(axis_name, (effect * coeff * 0.05) * self.sensitivity)
 
     def apply_emotion_decay(self):
-        """Метод вызывает затухание эмоций в автомате."""
-        decay_rate = getattr(self.archetype, 'emotion_decay', 0.2)
-        self.automaton.apply_decay(decay_rate * self.sensitivity)
+        """Метод вызывает затухание эмоций в автомате (integer x10 scale)."""
+        decay_rate = getattr(self.archetype, 'emotion_decay', 2) # Дефолт 2 (0.2 * 10)
+        # Больше не умножаем на 10, т.к. в архетипе коэффициент уже x10
+        self.automaton.apply_decay(int(decay_rate * self.sensitivity))
 
     def _adjust_affinity_based_on_responsiveness(self, target_name, delta):
         # В v4.9 влияние всегда пропорционально направлению
@@ -176,9 +178,9 @@ class Agent:
         """
         for name, pair in self.automaton.pairs.items():
             val = pair.value
-            if abs(val) < 0.1: continue
+            if abs(val) < 1: continue
             
-            k = 0.3 # Мягкий коэффициент для пассивного влияния
+            k = 0.3 # Оставляем 0.3, т.к. val уже x10 (результат будет x10)
             
             if name == EmotionAxis.JOY_SADNESS:
                 for target_name in self.relations:
@@ -218,7 +220,7 @@ class Agent:
             if not target_agent or target_agent.classify_relationship(self.name) == "avoid":
                 continue
 
-            effect_strength = (relation["affinity"] + relation["trust"] + relation["utility"]) / 30.0 # Нормализация 0..1
+            effect_strength = (relation["affinity"] + relation["trust"] + relation["utility"]) / 300.0 # Нормализация 0..1 (х10)
             
             # Заражение основной эмоцией
             target_agent.automaton.adjust_emotion(
@@ -227,21 +229,22 @@ class Agent:
             )
             
             # Успешное влияние повышает отзывчивость
-            self.update_responsiveness(target_name, 0.5)
+            self.update_responsiveness(target_name, 5.0)
 
     def apply_relation_decay(self):
         """
-        Закон прощения: Отношения и Отзывчивость стремятся к 0.
+        Закон прощения: Отношения и Отзывчивость стремятся к 0 (integer x10 scale).
         """
-        decay_rate = getattr(self.archetype, 'decay_rate', 0.1)
-        step = decay_rate * self.sensitivity
+        decay_rate = getattr(self.archetype, 'decay_rate', 1) # Дефолт 1 (0.1 * 10)
+        # Коэффициент в архетипе уже x10
+        step = int(decay_rate * self.sensitivity)
         
         for target_name in list(self.relations.keys()):
             # Decay for A, T, U
             for key in ['trust', 'affinity', 'utility']:
                 current_val = self.relations[target_name].get(key, 0)
                 if current_val > 0:
-                    self.relations[target_name][key] = max(0, current_val - step * 0.5)
+                    self.relations[target_name][key] = max(0, current_val - int(step * 0.5))
                 elif current_val < 0:
                     self.relations[target_name][key] = min(0, current_val + step) # Негатив прощается быстрее
             
@@ -249,10 +252,9 @@ class Agent:
             # Если контактов нет, R падает к 0
             r_val = self.relations[target_name].get('responsiveness', 0)
             if r_val > 0:
-                self.relations[target_name]['responsiveness'] = max(0, r_val - step * 1.5)
+                self.relations[target_name]['responsiveness'] = max(0, r_val - int(step * 1.5))
             elif r_val < 0:
-                # Из "недоброго духа" уходить чуть легче даже пассивно
-                self.relations[target_name]['responsiveness'] = min(0, r_val + step * 1.0)
+                self.relations[target_name]['responsiveness'] = min(0, r_val + step)
                     
     def classify_relationship(self, other_name):
         """Классифицирует тип отношений."""
@@ -261,14 +263,14 @@ class Agent:
         affinity = relation["affinity"]
         responsiveness = relation["responsiveness"]
 
-        # Если R слишком низкое - избегаем
-        if responsiveness < -6.0:
+        # Если R слишком низкое - избегаем (порог -60 вместо -6.0)
+        if responsiveness < -60:
             return "avoid"
         
-        # Softmax будет в InteractionStrategy, тут — жесткие пороги для категорий
-        if trust >= 5.0 and affinity >= 4.0 and responsiveness >= 0:
+        # Пороги x10
+        if trust >= 50 and affinity >= 40 and responsiveness >= 0:
             return "mandatory"
-        if trust >= -2.0 and affinity >= -2.0 and responsiveness > -5.0:
+        if trust >= -20 and affinity >= -20 and responsiveness > -50:
             return "optional"
         return "avoid"
 
