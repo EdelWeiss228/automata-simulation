@@ -25,13 +25,13 @@ class AgentFactory:
         name = f"Agent_{index}_{arch.value}"
         agent = Agent(name, archetype=arch, sensitivity=random.uniform(0.5, 2.0))
         
-        # Инициализируем отношения (x10 integer scale)
+        # Инициализируем отношения (x10 integer scale - FULL RANGE)
         for other_name in existing_agents:
             agent.update_relation(
                 other_name,
-                utility=random.randint(-30, 30),
-                affinity=random.randint(-30, 30),
-                trust=random.randint(-30, 30)
+                utility=random.randint(-100, 100),
+                affinity=random.randint(-100, 100),
+                trust=random.randint(-100, 100)
             )
         return agent
 
@@ -44,9 +44,9 @@ class AgentFactory:
             if other_name not in agent.relations:
                 agent.update_relation(
                     other_name,
-                    utility=random.randint(-10, 10),
-                    affinity=random.randint(-10, 10),
-                    trust=random.randint(-10, 10)
+                    utility=random.randint(-50, 50),
+                    affinity=random.randint(-50, 50),
+                    trust=random.randint(-50, 50)
                 )
 
     @staticmethod
