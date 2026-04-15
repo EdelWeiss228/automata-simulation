@@ -13,12 +13,12 @@
     },
     "emotion_dist": "Uniform",
     "emotion_params": {
-        "min": -3.0,
-        "max": 3.0,
-        "mean": 0.0,
-        "std": 1.0
+        "min": -30,
+        "max": 30,
+        "mean": 0,
+        "std": 10
     },
     "steps": 100,
-    "seed": 292277,
+    "seed": 39010,
     "silent_mode": true
 }

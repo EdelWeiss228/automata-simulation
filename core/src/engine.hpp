@@ -3,16 +3,15 @@
 
 #include <vector>
 #include <string>
-#include <map>
 #include "logger.hpp"
 
 namespace core_engine {
 
 struct Relation {
-    float utility;
-    float affinity;
-    float trust;
-    float responsiveness;
+    int utility;
+    int affinity;
+    int trust;
+    int responsiveness;
 };
 
 struct Interaction {
@@ -36,8 +35,8 @@ struct ArchetypeConfig {
 // Плоская структура для быстрого доступа к данным в памяти
 struct SimulationState {
     int num_agents;
-    std::vector<float> emotions; // Matrix N x 7
-    std::vector<float> relations; // Matrix N x N x 4 (utility, affinity, trust, responsiveness)
+    std::vector<int> emotions; // Matrix N x 7 (Values -30 to 30)
+    std::vector<int> relations; // Matrix N x N x 4 (Values -100 to 100)
     std::vector<float> sensitivities; // Vector N
     // Матрица влияния эмоций на отношения (из Archetype.emotion_effects)
     // Размер: N_agents x 7_axes x 4_relations (U, A, T, R)
@@ -55,14 +54,14 @@ class Engine {
 public:
     Engine(int n) : num_agents(n) {
         state.num_agents = n;
-        state.emotions.assign(n * SimulationState::NUM_AXES, 0.0f);
-        state.relations.assign(n * n * 4, 0.0f);
+        state.emotions.assign(n * SimulationState::NUM_AXES, 0);
+        state.relations.assign(n * n * 4, 0);
         state.sensitivities.assign(n, 1.0f);
         state.emission_weights.assign(n * SimulationState::NUM_AXES * 4, 0.0f);
         state.agent_archetypes.assign(n, 0);
     }
 
-    void set_emotion(int agent_idx, int axis_idx, float value) {
+    void set_emotion(int agent_idx, int axis_idx, int value) {
         state.emotions[agent_idx * SimulationState::NUM_AXES + axis_idx] = value;
     }
 
@@ -74,7 +73,7 @@ public:
         state.emission_weights[base + 3] = dr;
     }
 
-    void set_relation(int from_idx, int to_idx, float u, float a, float t, float r) {
+    void set_relation(int from_idx, int to_idx, int u, int a, int t, int r) {
         int base = (from_idx * num_agents + to_idx) * 4;
         state.relations[base + 0] = u;
         state.relations[base + 1] = a;

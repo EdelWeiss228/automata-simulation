@@ -225,9 +225,9 @@ class UniversityCollective(Collective):
         # Family Day
         for agent in self.agents.values():
             # Сброс стресса/эмоций (ближе к 0)
-            agent.automaton.apply_decay(0.5)
-            # Рандомное влияние семьи
-            family_impact = random.uniform(-1, 1)
+            agent.automaton.apply_decay(5) # Было 0.5
+            # Рандомное влияние семьи (x10)
+            family_impact = random.randint(-10, 10)
             agent.automaton.adjust_emotion("joy_sadness", family_impact)
             
         self.current_date += datetime.timedelta(days=1)
@@ -251,9 +251,9 @@ class UniversityCollective(Collective):
             return (name1, name2, "refusal")
             
         # 2. Определение УСПЕХА (Sigma = 1) или ПРОВАЛА (Sigma = -1)
-        # Базовая вероятность успеха зависит от текущей симпатии
+        # Базовая вероятность успеха зависит от текущей симпатии (x10 scale)
         affinity = a1.relations.get(name2, {}).get("affinity", 0)
-        success_chance = 0.5 + (affinity / 20.0) # От 0.0 до 1.0 (в среднем 0.5)
+        success_chance = 0.5 + (affinity / 200.0) # От 0.0 до 1.0 (делим на 200, т.к. макс 100)
         success_chance = max(0.1, min(0.9, success_chance))
         
         success = random.random() < success_chance

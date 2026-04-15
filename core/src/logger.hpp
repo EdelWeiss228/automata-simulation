@@ -3,8 +3,7 @@
 
 #include <string>
 #include <vector>
-#include <fstream>
-#include <iomanip>
+
 
 namespace core_engine {
 
@@ -20,8 +19,8 @@ public:
         const std::string& filepath,
         const std::string& date_str,
         const std::vector<std::string>& agent_names,
-        const std::vector<float>& emotions,
-        const std::vector<float>& relations,
+        const std::vector<int>& emotions,
+        const std::vector<int>& relations,
         int num_agents,
         bool is_first_run
     );
