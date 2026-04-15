@@ -15,13 +15,14 @@ class ArchetypeEnum(Enum):
 
 
 class Archetype:
-    def __init__(self, name, weights, description, refusal_chance=0.3, decay_rate=0.1, temperature=1.0, emotion_effects=None, emotion_coefficients=None, scoring_config=None):
+    def __init__(self, name, weights, description, refusal_chance=0.3, decay_rate=0.1, temperature=1.0, refusal_vulnerability=0, emotion_effects=None, emotion_coefficients=None, scoring_config=None):
         self.name = name
         self.weights = weights
         self.description = description
         self.refusal_chance = refusal_chance
         self.decay_rate = decay_rate
         self.temperature = temperature
+        self.refusal_vulnerability = refusal_vulnerability
         self.scoring_config = scoring_config or {
             "affinity": "linear",
             "utility": "linear",
@@ -65,6 +66,7 @@ ARCHETYPE_WEIGHTS = {
         refusal_chance=0.2,
         decay_rate=0.8, # ТЕПЕРЬ 0.8 (умножаем на 10 и будем вычитать как целое в логике)
         temperature=0.1,
+        refusal_vulnerability=0, # Utility
         scoring_config={
             "affinity": "linear",
             "utility": "log",
@@ -87,6 +89,7 @@ ARCHETYPE_WEIGHTS = {
         refusal_chance=0.4,
         decay_rate=2.0,
         temperature=1.5,
+        refusal_vulnerability=0, # Utility
         scoring_config={
             "affinity": "linear",
             "utility": "linear",
@@ -109,6 +112,7 @@ ARCHETYPE_WEIGHTS = {
         refusal_chance=0.05,
         decay_rate=0.4,
         temperature=0.3,
+        refusal_vulnerability=1, # Affinity
         scoring_config={
             "affinity": "sigmoid",
             "utility": "linear",
@@ -131,6 +135,7 @@ ARCHETYPE_WEIGHTS = {
         refusal_chance=0.2,
         decay_rate=1.2,
         temperature=0.1,
+        refusal_vulnerability=2, # Trust
         scoring_config={
             "affinity": "linear",
             "utility": "linear",
@@ -153,6 +158,7 @@ ARCHETYPE_WEIGHTS = {
         refusal_chance=0.5,
         decay_rate=2.5,
         temperature=3.0,
+        refusal_vulnerability=1, # Affinity
         scoring_config={
             "affinity": "periodic",
             "utility": "linear",
@@ -175,6 +181,7 @@ ARCHETYPE_WEIGHTS = {
         refusal_chance=0.1,
         decay_rate=0.2,
         temperature=0.2,
+        refusal_vulnerability=2, # Trust
         scoring_config={
             "affinity": "linear",
             "utility": "linear",
@@ -197,6 +204,7 @@ ARCHETYPE_WEIGHTS = {
         refusal_chance=0.8,
         decay_rate=1.0,
         temperature=1.0,
+        refusal_vulnerability=0, # Utility
         scoring_config={
             "affinity": "log",
             "utility": "linear",
@@ -219,6 +227,7 @@ ARCHETYPE_WEIGHTS = {
         refusal_chance=0.2,
         decay_rate=0.8,
         temperature=1.2,
+        refusal_vulnerability=0, # Utility
         scoring_config={
             "affinity": "linear",
             "utility": "log",
@@ -241,6 +250,7 @@ ARCHETYPE_WEIGHTS = {
         refusal_chance=0.2,
         decay_rate=0.1,
         temperature=1.0,
+        refusal_vulnerability=2, # Trust
         scoring_config={
             "affinity": "exp",
             "utility": "linear",

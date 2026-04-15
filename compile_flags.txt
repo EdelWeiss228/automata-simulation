@@ -1,0 +1,6 @@
+-std=c++17
+-isysroot
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
+-I/opt/homebrew/opt/python@3.14/Frameworks/Python.framework/Versions/3.14/include/python3.14
+-I/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/pybind11/include
+-I/Users/georgijtadziev/Documents/proga/diplom/core/src

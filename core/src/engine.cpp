@@ -36,20 +36,24 @@ void Engine::influence_emotions() {
         for (int j = 0; j < num_agents; ++j) {
             if (i == j) continue;
 
-            int base_ji = (j * num_agents + i) * 4;
+            int base_ji = (j * num_agents + i) * 3;
+            int u_ji = state.relations[base_ji + 0];
             int a_ji = state.relations[base_ji + 1];
             int t_ji = state.relations[base_ji + 2];
-            int r_ji = state.relations[base_ji + 3];
+
+            int arch_j = state.agent_archetypes[j];
+            int vuln_j = state.archetype_configs[arch_j].refusal_vulnerability;
+            int vuln_val = (vuln_j == 0) ? u_ji : (vuln_j == 1 ? a_ji : t_ji);
 
             bool avoid = false;
-            if (r_ji < -50) avoid = true;
-            else if (t_ji >= 50 && a_ji >= 50 && r_ji >= 0) {} 
-            else if (t_ji >= 0 || a_ji >= 0 || r_ji > -50) {} 
+            if (vuln_val < -50) avoid = true;
+            else if (t_ji >= 50 && a_ji >= 50) {} 
+            else if (t_ji >= 0 || a_ji >= 0) {} 
             else avoid = true;
 
             if (avoid) continue;
 
-            int base_ij = (i * num_agents + j) * 4;
+            int base_ij = (i * num_agents + j) * 3;
             float u_ij = (float)state.relations[base_ij + 0];
             float a_ij = (float)state.relations[base_ij + 1];
             float t_ij = (float)state.relations[base_ij + 2];
@@ -65,8 +69,8 @@ void Engine::influence_emotions() {
                 float delta = val_i * common_factor * weight;
                 delta_emotions[offset_j + a] += delta;
 
-                int base_ji_rel = (j * num_agents + i) * 4;
-                int weight_base = (i * SimulationState::NUM_AXES + a) * 4;
+                int base_ji_rel = (j * num_agents + i) * 3;
+                int weight_base = (i * SimulationState::NUM_AXES + a) * 3;
                 
                 float r_sens = state.sensitivities[j];
                 // delta здесь - плавающее изменение, прибавляем к целому
@@ -75,9 +79,6 @@ void Engine::influence_emotions() {
                 state.relations[base_ji_rel + 2] = std::max(-100, std::min(100, (int)(state.relations[base_ji_rel + 2] + delta * state.emission_weights[weight_base + 2] * r_sens * 10.0f)));
             }
 
-            state.relations[base_ij + 3] = std::min(100, (int)(state.relations[base_ij + 3] + 0.5f * 10.0f));
-            int base_ji_final = (j * num_agents + i) * 4;
-            state.relations[base_ji_final + 3] = std::min(100, (int)(state.relations[base_ji_final + 3] + 0.5f * 10.0f));
         }
     }
 
@@ -104,35 +105,23 @@ float Engine::calculate_priority_score(int from_idx, int to_idx) {
     int arch_idx = state.agent_archetypes[from_idx];
     const auto& conf = state.archetype_configs[arch_idx];
     
-    int base_ij = (from_idx * num_agents + to_idx) * 4;
+    int base_ij = (from_idx * num_agents + to_idx) * 3;
     float u = (float)state.relations[base_ij + 0];
     float a = (float)state.relations[base_ij + 1];
     float t = (float)state.relations[base_ij + 2];
-    float r = (float)state.relations[base_ij + 3];
     
-    // ВНИМАНИЕ: Трансформации (log/exp) ожидают значения в старой шкале (0..10), делим на 10
     float a_score = apply_transformation(a / 10.0f, conf.scoring_affinity);
     float u_score = apply_transformation(u / 10.0f, conf.scoring_utility);
     float t_score = apply_transformation(t / 10.0f, conf.scoring_trust);
-    float r_score = apply_transformation(r / 10.0f, conf.scoring_responsiveness);
     
     float alpha = 1.5f;
-    float multiplier = (r < 0) ? 1.5f : 1.0f;
-    
-    return a_score + u_score + alpha * t_score + multiplier * r_score;
+    return a_score + u_score + alpha * t_score;
 }
 
 bool Engine::should_refuse(int agent_idx, int target_idx) {
-    int base_tj = (target_idx * num_agents + agent_idx) * 4;
-    float r_ji = (float)state.relations[base_tj + 3] / 10.0f; // Возврат к шкале 2.0 для экспоненты
-    
-    float temp = 2.0f;
-    float refusal_prob = 1.0f / (1.0f + std::exp(r_ji / temp));
-    
     int arch_idx = state.agent_archetypes[target_idx];
     float base_factor = state.archetype_configs[arch_idx].refusal_chance;
-    
-    float final_prob = std::min(0.95f, refusal_prob * (base_factor / 0.3f));
+    float final_prob = std::min(0.95f, base_factor);
     
     return ((float)rand() / (float)RAND_MAX) < final_prob;
 }
@@ -144,15 +133,18 @@ int Engine::choose_target(int agent_idx) {
     for (int j = 0; j < num_agents; ++j) {
         if (agent_idx == j) continue;
         
-        int base_ij = (agent_idx * num_agents + j) * 4;
+        int base_ij = (agent_idx * num_agents + j) * 3;
+        int u = state.relations[base_ij + 0];
         int a = state.relations[base_ij + 1];
         int t = state.relations[base_ij + 2];
-        int r = state.relations[base_ij + 3];
         
-        // Классификация (новые границы x10)
-        if (r < -50) continue; // avoid
-        if (t >= 50 && a >= 50 && r >= 0) mandatory.push_back(j);
-        else if (t >= 0 || a >= 0 || r > -50) optional.push_back(j);
+        int arch_idx = state.agent_archetypes[agent_idx];
+        int vuln_i = state.archetype_configs[arch_idx].refusal_vulnerability;
+        int vuln_val = (vuln_i == 0) ? u : (vuln_i == 1 ? a : t);
+        
+        if (vuln_val < -50) continue; // avoid
+        if (t >= 50 && a >= 50) mandatory.push_back(j);
+        else if (t >= 0 || a >= 0) optional.push_back(j);
     }
     
     const auto& candidates = mandatory.empty() ? optional : mandatory;
@@ -195,43 +187,35 @@ void Engine::process_interaction(int from_idx, int to_idx, bool success) {
     if (success) {
         int delta_primary = (int)(20.0f * s_i); // 2.0 * 10
         int delta_trust = (int)(10.0f * s_i);
-        int delta_resp = (int)(10.0f * s_i);
         
         // i -> target
-        int base_it = (from_idx * num_agents + to_idx) * 4;
+        int base_it = (from_idx * num_agents + to_idx) * 3;
         state.relations[base_it + 1] = std::max(-100, std::min(100, state.relations[base_it + 1] + delta_primary));
         state.relations[base_it + 0] = std::max(-100, std::min(100, state.relations[base_it + 0] + delta_primary));
         state.relations[base_it + 2] = std::max(-100, std::min(100, state.relations[base_it + 2] + delta_trust));
-        state.relations[base_it + 3] = std::max(-100, std::min(100, state.relations[base_it + 3] + delta_resp));
         
         // target -> i
         int dt_primary = (int)(20.0f * s_t);
         int dt_trust = (int)(10.0f * s_t);
-        int dt_resp = (int)(10.0f * s_t);
-        int base_ti = (to_idx * num_agents + from_idx) * 4;
+        int base_ti = (to_idx * num_agents + from_idx) * 3;
         state.relations[base_ti + 1] = std::max(-100, std::min(100, state.relations[base_ti + 1] + dt_primary));
         state.relations[base_ti + 0] = std::max(-100, std::min(100, state.relations[base_ti + 0] + dt_primary));
         state.relations[base_ti + 2] = std::max(-100, std::min(100, state.relations[base_ti + 2] + dt_trust));
-        state.relations[base_ti + 3] = std::max(-100, std::min(100, state.relations[base_ti + 3] + dt_resp));
     } else {
         int delta_trust_fail = (int)(20.0f * s_i);
         int delta_others_fail = (int)(5.0f * s_i);
-        int delta_resp_fail = (int)(5.0f * s_i);
         
-        int base_it = (from_idx * num_agents + to_idx) * 4;
+        int base_it = (from_idx * num_agents + to_idx) * 3;
         state.relations[base_it + 2] = std::max(-100, std::min(100, state.relations[base_it + 2] - delta_trust_fail));
         state.relations[base_it + 1] = std::max(-100, std::min(100, state.relations[base_it + 1] - delta_others_fail));
         state.relations[base_it + 0] = std::max(-100, std::min(100, state.relations[base_it + 0] - delta_others_fail));
-        state.relations[base_it + 3] = std::max(-100, std::min(100, state.relations[base_it + 3] + delta_resp_fail));
 
         int dt_trust_fail = (int)(20.0f * s_t);
         int dt_others_fail = (int)(5.0f * s_t);
-        int dt_resp_fail = (int)(5.0f * s_t);
-        int base_ti = (to_idx * num_agents + from_idx) * 4;
+        int base_ti = (to_idx * num_agents + from_idx) * 3;
         state.relations[base_ti + 2] = std::max(-100, std::min(100, state.relations[base_ti + 2] - dt_trust_fail));
         state.relations[base_ti + 1] = std::max(-100, std::min(100, state.relations[base_ti + 1] - dt_others_fail));
         state.relations[base_ti + 0] = std::max(-100, std::min(100, state.relations[base_ti + 0] - dt_others_fail));
-        state.relations[base_ti + 3] = std::max(-100, std::min(100, state.relations[base_ti + 3] + dt_resp_fail));
     }
 }
 
@@ -239,14 +223,17 @@ void Engine::process_refusal(int from_idx, int to_idx) {
     float s_i = state.sensitivities[from_idx];
     float s_t = state.sensitivities[to_idx];
     
-    int base_it = (from_idx * num_agents + to_idx) * 4;
-    state.relations[base_it + 3] = std::max(-100, std::min(100, (int)(state.relations[base_it + 3] - 20.0f * s_i)));
-    state.relations[base_it + 1] = std::max(-100, std::min(100, (int)(state.relations[base_it + 1] - 15.0f * s_i)));
-    state.relations[base_it + 0] = std::max(-100, std::min(100, (int)(state.relations[base_it + 0] - 5.0f * s_i)));
+    int vuln_i = state.archetype_configs[state.agent_archetypes[from_idx]].refusal_vulnerability;
+    int base_it = (from_idx * num_agents + to_idx) * 3;
+    if (vuln_i == 0) state.relations[base_it + 0] = std::max(-100, std::min(100, (int)(state.relations[base_it + 0] - 25.0f * s_i)));
+    else if (vuln_i == 1) state.relations[base_it + 1] = std::max(-100, std::min(100, (int)(state.relations[base_it + 1] - 25.0f * s_i)));
+    else state.relations[base_it + 2] = std::max(-100, std::min(100, (int)(state.relations[base_it + 2] - 25.0f * s_i)));
     
-    int base_ti = (to_idx * num_agents + from_idx) * 4;
-    state.relations[base_ti + 3] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 3] - 10.0f * s_t)));
-    state.relations[base_ti + 1] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 1] - 5.0f * s_t)));
+    int vuln_t = state.archetype_configs[state.agent_archetypes[to_idx]].refusal_vulnerability;
+    int base_ti = (to_idx * num_agents + from_idx) * 3;
+    if (vuln_t == 0) state.relations[base_ti + 0] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 0] - 15.0f * s_t)));
+    else if (vuln_t == 1) state.relations[base_ti + 1] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 1] - 15.0f * s_t)));
+    else state.relations[base_ti + 2] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 2] - 15.0f * s_t)));
 }
 
 void Engine::apply_relation_decay() {
@@ -259,7 +246,7 @@ void Engine::apply_relation_decay() {
 
         for (int j = 0; j < num_agents; ++j) {
             if (i == j) continue;
-            int base = (i * num_agents + j) * 4;
+            int base = (i * num_agents + j) * 3;
             
             // A, T, U decay
             for (int k = 0; k < 3; ++k) {
@@ -267,11 +254,6 @@ void Engine::apply_relation_decay() {
                 if (val > 0) state.relations[base + k] = std::max(0, (int)(val - step * 0.5f));
                 else if (val < 0) state.relations[base + k] = std::min(0, (int)(val + step)); // Режим прощения 1.0x
             }
-            
-            // Responsiveness decay
-            int r_val = state.relations[base + 3];
-            if (r_val > 0) state.relations[base + 3] = std::max(0, (int)(r_val - step * 1.5f));
-            else if (r_val < 0) state.relations[base + 3] = std::min(0, (int)(r_val + step));
         }
     }
 }
@@ -286,7 +268,7 @@ void Engine::react_to_relations() {
 
         for (int j = 0; j < num_agents; ++j) {
             if (i == j) continue;
-            int base = (i * num_agents + j) * 4;
+            int base = (i * num_agents + j) * 3;
             avg_u += (float)state.relations[base + 0];
             avg_a += (float)state.relations[base + 1];
             avg_t += (float)state.relations[base + 2];
@@ -326,7 +308,7 @@ void Engine::react_to_emotions() {
 
             for (int j = 0; j < num_agents; ++j) {
                 if (i == j) continue;
-                int base = (i * num_agents + j) * 4;
+                int base = (i * num_agents + j) * 3;
                 
                 // JOY_SADNESS -> Affinity
                 if (axis == 0) {

@@ -141,11 +141,11 @@ class Collective:
                 arch.decay_rate,
                 arch.temperature,
                 getattr(arch, 'emotion_decay', 0.2),
+                getattr(arch, 'refusal_vulnerability', 0),
                 e_coeffs,
                 arch.scoring_config.get("affinity", "linear"),
                 arch.scoring_config.get("utility", "linear"),
-                arch.scoring_config.get("trust", "linear"),
-                arch.scoring_config.get("responsiveness", "linear")
+                arch.scoring_config.get("trust", "linear")
             )
 
     def _sync_to_cpp(self):
@@ -190,8 +190,7 @@ class Collective:
                     i, axis_idx,
                     ax_eff.get("utility", 0.0),
                     ax_eff.get("affinity", 0.0),
-                    ax_eff.get("trust", 0.0),
-                    0.0
+                    ax_eff.get("trust", 0.0)
                 )
 
             # Sync Relations
@@ -203,8 +202,7 @@ class Collective:
                         i, j,
                         rel.get('utility', 0.0),
                         rel.get('affinity', 0.0),
-                        rel.get('trust', 0.0),
-                        rel.get('responsiveness', 0.0)
+                        rel.get('trust', 0.0)
                     )
 
     def _sync_from_cpp(self, sync_relations: bool = True):
@@ -226,11 +224,10 @@ class Collective:
                 for j in range(n):
                     target_name = self._reverse_id_map[j]
                     if target_name in agent.relations:
-                        base = (i * n + j) * 4
+                        base = (i * n + j) * 3
                         agent.relations[target_name]['utility'] = new_relations[base + 0]
                         agent.relations[target_name]['affinity'] = new_relations[base + 1]
                         agent.relations[target_name]['trust'] = new_relations[base + 2]
-                        agent.relations[target_name]['responsiveness'] = new_relations[base + 3]
 
     def _run_cpp_influence(self):
         """
@@ -327,11 +324,10 @@ class Collective:
             for j in range(n):
                 t_name = self._reverse_id_map[j]
                 if t_name in agent.relations:
-                    base = (i * n + j) * 4
+                    base = (i * n + j) * 3
                     agent.relations[t_name]['utility'] = new_relations[base + 0]
                     agent.relations[t_name]['affinity'] = new_relations[base + 1]
                     agent.relations[t_name]['trust'] = new_relations[base + 2]
-                    agent.relations[t_name]['responsiveness'] = new_relations[base + 3]
                     
         return interactions
 

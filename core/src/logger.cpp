@@ -30,7 +30,7 @@ void CSVLogger::log_agent_states(
     };
 
     const std::vector<std::string> relation_types = {
-        "utility", "affinity", "trust", "responsiveness"
+        "utility", "affinity", "trust"
     };
 
     // Date can be long (YYYY-MM-DD HH:MM:SS), we only want YYYY-MM-DD if matching isoformat() of date
@@ -56,10 +56,10 @@ void CSVLogger::log_agent_states(
             if (!first_rel) f << " | ";
             f << agent_names[j] << "=";
             
-            int base = (i * num_agents + j) * 4;
-            for (int r = 0; r < 4; ++r) {
+            int base = (i * num_agents + j) * 3;
+            for (int r = 0; r < 3; ++r) {
                 f << relation_types[r] << ":" << relations[base + r];
-                if (r < 3) f << ",";
+                if (r < 2) f << ",";
             }
             first_rel = false;
         }

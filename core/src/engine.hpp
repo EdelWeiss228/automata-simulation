@@ -11,7 +11,6 @@ struct Relation {
     int utility;
     int affinity;
     int trust;
-    int responsiveness;
 };
 
 struct Interaction {
@@ -25,21 +24,21 @@ struct ArchetypeConfig {
     float decay_rate;
     float temperature;
     float emotion_decay;
+    int refusal_vulnerability; // 0 = U, 1 = A, 2 = T
     std::vector<float> emotion_coefficients; // Matches NUM_AXES
     std::string scoring_affinity;       // "linear", "log", "exp", "sigmoid", "periodic"
     std::string scoring_utility;
     std::string scoring_trust;
-    std::string scoring_responsiveness;
 };
 
 // Плоская структура для быстрого доступа к данным в памяти
 struct SimulationState {
     int num_agents;
     std::vector<int> emotions; // Matrix N x 7 (Values -30 to 30)
-    std::vector<int> relations; // Matrix N x N x 4 (Values -100 to 100)
+    std::vector<int> relations; // Matrix N x N x 3 (Values -100 to 100)
     std::vector<float> sensitivities; // Vector N
     // Матрица влияния эмоций на отношения (из Archetype.emotion_effects)
-    // Размер: N_agents x 7_axes x 4_relations (U, A, T, R)
+    // Размер: N_agents x 7_axes x 3_relations (U, A, T)
     std::vector<float> emission_weights;
     
     // Новые поля для v5.1
@@ -55,9 +54,9 @@ public:
     Engine(int n) : num_agents(n) {
         state.num_agents = n;
         state.emotions.assign(n * SimulationState::NUM_AXES, 0);
-        state.relations.assign(n * n * 4, 0);
+        state.relations.assign(n * n * 3, 0);
         state.sensitivities.assign(n, 1.0f);
-        state.emission_weights.assign(n * SimulationState::NUM_AXES * 4, 0.0f);
+        state.emission_weights.assign(n * SimulationState::NUM_AXES * 3, 0.0f);
         state.agent_archetypes.assign(n, 0);
     }
 
@@ -65,30 +64,28 @@ public:
         state.emotions[agent_idx * SimulationState::NUM_AXES + axis_idx] = value;
     }
 
-    void set_emission_weight(int agent_idx, int axis_idx, float du, float da, float dt, float dr) {
-        int base = (agent_idx * SimulationState::NUM_AXES + axis_idx) * 4;
+    void set_emission_weight(int agent_idx, int axis_idx, float du, float da, float dt) {
+        int base = (agent_idx * SimulationState::NUM_AXES + axis_idx) * 3;
         state.emission_weights[base + 0] = du;
         state.emission_weights[base + 1] = da;
         state.emission_weights[base + 2] = dt;
-        state.emission_weights[base + 3] = dr;
     }
 
-    void set_relation(int from_idx, int to_idx, int u, int a, int t, int r) {
-        int base = (from_idx * num_agents + to_idx) * 4;
+    void set_relation(int from_idx, int to_idx, int u, int a, int t) {
+        int base = (from_idx * num_agents + to_idx) * 3;
         state.relations[base + 0] = u;
         state.relations[base + 1] = a;
         state.relations[base + 2] = t;
-        state.relations[base + 3] = r;
     }
 
     void set_archetype_config(int arch_idx, float refusal, float decay, float temp, 
-                             float e_decay, const std::vector<float>& e_coeffs,
+                             float e_decay, int refusal_vuln, const std::vector<float>& e_coeffs,
                              const std::string& sa, const std::string& su, 
-                             const std::string& st, const std::string& sr) {
+                             const std::string& st) {
         if (arch_idx >= (int)state.archetype_configs.size()) {
             state.archetype_configs.resize(arch_idx + 1);
         }
-        state.archetype_configs[arch_idx] = {refusal, decay, temp, e_decay, e_coeffs, sa, su, st, sr};
+        state.archetype_configs[arch_idx] = {refusal, decay, temp, e_decay, refusal_vuln, e_coeffs, sa, su, st};
     }
 
     void set_agent_archetype(int agent_idx, int arch_idx) {

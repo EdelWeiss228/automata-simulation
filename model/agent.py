@@ -68,34 +68,17 @@ class Agent:
         self.relations[other_agent_name] = {
             "utility": self.limit_predicate_value(utility),
             "affinity": self.limit_predicate_value(affinity),
-            "trust": self.limit_predicate_value(trust),
-            "responsiveness": self.limit_predicate_value(
-                self.relations.get(other_agent_name, {}).get("responsiveness", 0)
-            ),
+            "trust": self.limit_predicate_value(trust)
         }
 
     def get_relation_vector(self, other_agent_name):
         """Возвращает вектор отношений к другому агенту."""
         return self.relations.get(
             other_agent_name,
-            {"utility": 0, "affinity": 0, "trust": 0, "responsiveness": 0},
+            {"utility": 0, "affinity": 0, "trust": 0},
         )
 
-    def update_responsiveness(self, target_name, delta):
-        """
-        Обновляет отзывчивость. В v4.9 добавлена механика ускоренного выхода из отрицательных значений.
-        """
-        if target_name in self.relations:
-            current = self.relations[target_name].get("responsiveness", 0)
-            
-            # Механика «Выхода из игнора»: если R < 0, положительная дельта усиливается
-            if current < 0 and delta > 0:
-                final_delta = delta * 2.5 # Ускоренный рост до 0 (delta предполагается в масштабе 1..20)
-            else:
-                final_delta = delta
-                
-            new_responsiveness = self.limit_predicate_value(current + int(final_delta * self.sensitivity))
-            self.relations[target_name]["responsiveness"] = new_responsiveness
+
 
     def describe_emotions(self):
         """Возвращает описания эмоциональных пар."""

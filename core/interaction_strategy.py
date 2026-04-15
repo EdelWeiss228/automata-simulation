@@ -10,17 +10,10 @@ class InteractionStrategy:
     @staticmethod
     def calculate_refusal_chance(agent, target_agent) -> float:
         """
-        Рассчитывает вероятность отказа на основе Softmax от отзывчивости (Responsiveness).
+        Рассчитывает вероятность отказа на основе базового шанса архетипа.
         """
-        r_ij = agent.get_relation_vector(target_agent.name).get("responsiveness", 0)
-        
-        # Шкала R теперь -100..100, приводим к старой шкале для температуры
-        r_scaled = r_ij / 10.0
-        temp = 2.0
-        refusal_prob = 1.0 / (1.0 + math.exp(r_scaled / temp))
-        
         base_factor = getattr(agent.archetype, "refusal_chance", 0.3)
-        return min(0.95, refusal_prob * (base_factor / 0.3))
+        return min(0.95, base_factor)
 
     @staticmethod
     def handle_player_interaction(agent, player):
@@ -44,9 +37,6 @@ class InteractionStrategy:
         )
         agent.relations[player.name]['trust'] = agent.limit_predicate_value(
             agent.relations[player.name].get('trust', 0) + int(delta_scaled)
-        )
-        agent.relations[player.name]['responsiveness'] = agent.limit_predicate_value(
-            agent.relations[player.name].get('responsiveness', 0) + int(10 * s_i)
         )
 
     @staticmethod
@@ -73,18 +63,15 @@ class InteractionStrategy:
         affinity = metrics.get('affinity', 0)
         utility = metrics.get('utility', 0)
         trust = metrics.get('trust', 0)
-        responsiveness = metrics.get('responsiveness', 0)
 
         # Применяем трансформации
         a_score = cls._apply_transformation(affinity, config.get("affinity", "linear"))
         u_score = cls._apply_transformation(utility, config.get("utility", "linear"))
         t_score = cls._apply_transformation(trust, config.get("trust", "linear"))
-        r_score = cls._apply_transformation(responsiveness, config.get("responsiveness", "linear"))
 
         alpha = 1.5
-        multiplier = 1.5 if responsiveness < 0 else 1.0
         
-        return a_score + u_score + alpha * t_score + multiplier * r_score
+        return a_score + u_score + alpha * t_score
 
     @staticmethod
     def categorize_relationships(agent):
@@ -129,7 +116,8 @@ class InteractionStrategy:
     @staticmethod
     def process_refusal(agent, target_agent):
         """
-        Обработать отказ взаимодействия между агентами.
+        Обработать отказ взаимодействия между агентами: бьет по уязвимой предикате
+        согласно атрибуту архетипа refusal_vulnerability.
         """
         s_i = getattr(agent, 'sensitivity', 1.0)
         s_target = getattr(target_agent, 'sensitivity', 1.0)
@@ -139,27 +127,40 @@ class InteractionStrategy:
             from core.agent_factory import AgentFactory
             AgentFactory.initialize_agent_relations(agent, [target_agent.name])
 
-        agent.relations[target_agent.name]['responsiveness'] = agent.limit_predicate_value(
-            agent.relations[target_agent.name].get('responsiveness', 0) - 20 * s_i # -2 * 10
-        )
-        agent.relations[target_agent.name]['affinity'] = agent.limit_predicate_value(
-            agent.relations[target_agent.name].get('affinity', 0) - 15 * s_i # -1.5 * 10
-        )
-        agent.relations[target_agent.name]['utility'] = agent.limit_predicate_value(
-            agent.relations[target_agent.name].get('utility', 0) - 5 * s_i # -0.5 * 10
-        )
+        vuln_i = getattr(agent.archetype, 'refusal_vulnerability', 0)
+        
+        if vuln_i == 0:
+            agent.relations[target_agent.name]['utility'] = agent.limit_predicate_value(
+                agent.relations[target_agent.name].get('utility', 0) - 25 * s_i
+            )
+        elif vuln_i == 1:
+            agent.relations[target_agent.name]['affinity'] = agent.limit_predicate_value(
+                agent.relations[target_agent.name].get('affinity', 0) - 25 * s_i
+            )
+        else:
+            agent.relations[target_agent.name]['trust'] = agent.limit_predicate_value(
+                agent.relations[target_agent.name].get('trust', 0) - 25 * s_i
+            )
 
         # Целевой агент (target_agent) тоже охладевает, если отказал
         if agent.name not in target_agent.relations:
             from core.agent_factory import AgentFactory
             AgentFactory.initialize_agent_relations(target_agent, [agent.name])
 
-        target_agent.relations[agent.name]['responsiveness'] = target_agent.limit_predicate_value(
-            target_agent.relations[agent.name].get('responsiveness', 0) - 10 * s_target
-        )
-        target_agent.relations[agent.name]['affinity'] = target_agent.limit_predicate_value(
-            target_agent.relations[agent.name].get('affinity', 0) - 5 * s_target
-        )
+        vuln_t = getattr(target_agent.archetype, 'refusal_vulnerability', 0)
+        
+        if vuln_t == 0:
+            target_agent.relations[agent.name]['utility'] = target_agent.limit_predicate_value(
+                target_agent.relations[agent.name].get('utility', 0) - 15 * s_target
+            )
+        elif vuln_t == 1:
+            target_agent.relations[agent.name]['affinity'] = target_agent.limit_predicate_value(
+                target_agent.relations[agent.name].get('affinity', 0) - 15 * s_target
+            )
+        else:
+            target_agent.relations[agent.name]['trust'] = target_agent.limit_predicate_value(
+                target_agent.relations[agent.name].get('trust', 0) - 15 * s_target
+            )
 
     @staticmethod
     def process_interaction_result(agent, target_agent, success):
@@ -172,7 +173,6 @@ class InteractionStrategy:
         if success:
             delta_primary = 20 * s_i
             delta_trust = 10 * s_i
-            delta_resp = 10 * s_i
             
             for a, t_obj, s in [(agent, target_agent, s_i), (target_agent, agent, s_t)]:
                 t_name = t_obj.name
@@ -183,11 +183,9 @@ class InteractionStrategy:
                 a.relations[t_name]['affinity'] = a.limit_predicate_value(a.relations[t_name].get('affinity', 0) + delta_primary)
                 a.relations[t_name]['utility'] = a.limit_predicate_value(a.relations[t_name].get('utility', 0) + delta_primary)
                 a.relations[t_name]['trust'] = a.limit_predicate_value(a.relations[t_name].get('trust', 0) + delta_trust)
-                a.relations[t_name]['responsiveness'] = a.limit_predicate_value(a.relations[t_name].get('responsiveness', 0) + delta_resp)
         else:
             delta_trust_fail = 20 * s_i
             delta_others_fail = 5 * s_i
-            delta_resp_fail = 5 * s_i 
             
             for a, t_obj, s in [(agent, target_agent, s_i), (target_agent, agent, s_t)]:
                 t_name = t_obj.name
@@ -198,4 +196,3 @@ class InteractionStrategy:
                 a.relations[t_name]['trust'] = a.limit_predicate_value(a.relations[t_name].get('trust', 0) - delta_trust_fail)
                 a.relations[t_name]['affinity'] = a.limit_predicate_value(a.relations[t_name].get('affinity', 0) - delta_others_fail)
                 a.relations[t_name]['utility'] = a.limit_predicate_value(a.relations[t_name].get('utility', 0) - delta_others_fail)
-                a.relations[t_name]['responsiveness'] = a.limit_predicate_value(a.relations[t_name].get('responsiveness', 0) + delta_resp_fail)
