@@ -42,3 +42,6 @@ tests/
 core/.build_info
 CONTEXT_STATE_SNAPSHOT.md
 
+# Temporary Scratch Files
+scratch/
+
