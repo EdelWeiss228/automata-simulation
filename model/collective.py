@@ -150,8 +150,15 @@ class Collective:
 
     def _sync_to_cpp(self):
         """Прямая синхронизация всех агентов и их отношений в C++ структуру."""
+        if not CPP_ENGINE_AVAILABLE:
+            return
+            
         n = len(self.agents)
-        
+        if not self.cpp_engine or self.cpp_engine.state.num_agents != n:
+            import emotion_engine
+            self.cpp_engine = emotion_engine.Engine(n)
+            self._update_id_maps()
+            
         # Синхронизируем конфиги архетипов один раз (или при изменении состава)
         self._sync_archetypes()
         

@@ -30,8 +30,8 @@ class AgentStateDialog:
         self.combo.set(agent.archetype.name)
         self.combo.pack(pady=5)
 
-        tk.Label(frame_arch, text="Чувствительность:", bg='#F8F9FA', fg='#212529', font=('Arial', 10, 'bold')).pack(pady=(15, 5))
-        self.sensitivity_scale = tk.Scale(frame_arch, from_=0, to=3, resolution=0.1, orient=tk.HORIZONTAL, 
+        tk.Label(frame_arch, text="Чувствительность (0-30):", bg='#F8F9FA', fg='#212529', font=('Arial', 10, 'bold')).pack(pady=(15, 5))
+        self.sensitivity_scale = tk.Scale(frame_arch, from_=0, to=30, resolution=1, orient=tk.HORIZONTAL, 
                                           bg='#F8F9FA', fg='#212529', highlightthickness=0)
         self.sensitivity_scale.set(agent.sensitivity)
         self.sensitivity_scale.pack(pady=5, fill='x', padx=30)
@@ -55,11 +55,22 @@ class AgentStateDialog:
         notebook.add(frame_emotions, text="Эмоции")
 
         self.emotion_vars = {}
+        emotion_labels = {
+            "sadness_joy": "Печаль (—) / Радость (+)",
+            "fear_calm": "Страх (—) / Спокойствие (+)",
+            "anger_humility": "Гнев (—) / Смирение (+)",
+            "disgust_acceptance": "Отвращение (—) / Принятие (+)",
+            "habit_surprise": "Привычка (—) / Удивление (+)",
+            "shame_confidence": "Стыд (—) / Уверенность (+)",
+            "alienation_openness": "Замкнутость (—) / Открытость (+)"
+        }
+        
         for key, value in agent.get_emotions().items():
-            tk.Label(frame_emotions, text=key, bg='#F8F9FA', fg='#495057', font=('Arial', 9)).pack(pady=(5, 0))
-            scale = tk.Scale(frame_emotions, from_=-3, to=3, orient=tk.HORIZONTAL,
-                             bg='#F8F9FA', fg='#212529', highlightthickness=0)
-            scale.set(round(value))
+            label_text = emotion_labels.get(key, key)
+            tk.Label(frame_emotions, text=label_text, bg='#F8F9FA', fg='#495057', font=('Arial', 9, 'bold')).pack(pady=(8, 0))
+            scale = tk.Scale(frame_emotions, from_=-30, to=30, orient=tk.HORIZONTAL,
+                             bg='#F8F9FA', fg='#212529', highlightthickness=0, resolution=1)
+            scale.set(int(value))
             scale.pack(fill='x', padx=30)
             self.emotion_vars[key] = scale
 
@@ -94,7 +105,7 @@ class AgentStateDialog:
 
         # Ползунки для предикатов
         for label, attr in [("Trust (Доверие)", "trust_scale"), ("Affinity (Симпатия)", "affinity_scale"), 
-                             ("Utility (Выгода)", "utility_scale"), ("Responsiveness (Отзывчивость)", "responsiveness_scale")]:
+                             ("Utility (Выгода)", "utility_scale")]:
             tk.Label(frame_relations, text=label, bg='#F8F9FA', fg='#495057', font=('Arial', 8)).pack(pady=(5, 0))
             scale = tk.Scale(frame_relations, from_=-10, to=10, orient=tk.HORIZONTAL, 
                              bg='#F8F9FA', fg='#212529', highlightthickness=0)
@@ -128,7 +139,6 @@ class AgentStateDialog:
         self.trust_scale.set(rel.get('trust', 0))
         self.affinity_scale.set(rel.get('affinity', 0))
         self.utility_scale.set(rel.get('utility', 0))
-        self.responsiveness_scale.set(rel.get('responsiveness', 0))
 
     def on_save(self):
         selected_arch = self.archetype_var.get()
@@ -150,6 +160,5 @@ class AgentStateDialog:
             self.agent.relations[other]['trust'] = self.trust_scale.get()
             self.agent.relations[other]['affinity'] = self.affinity_scale.get()
             self.agent.relations[other]['utility'] = self.utility_scale.get()
-            self.agent.relations[other]['responsiveness'] = self.responsiveness_scale.get()
 
         self.top.destroy()

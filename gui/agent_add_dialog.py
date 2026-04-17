@@ -30,9 +30,9 @@ class AgentAddDialog:
         self.combo['values'] = [a.name for a in ArchetypeEnum]
         self.combo.pack()
 
-        tk.Label(frame_main, text="Чувствительность:").pack()
-        self.sensitivity_scale = tk.Scale(frame_main, from_=0, to=3, resolution=0.1, orient=tk.HORIZONTAL)
-        self.sensitivity_scale.set(1.0)
+        tk.Label(frame_main, text="Чувствительность (0-30):").pack()
+        self.sensitivity_scale = tk.Scale(frame_main, from_=0, to=30, resolution=1, orient=tk.HORIZONTAL)
+        self.sensitivity_scale.set(10)
         self.sensitivity_scale.pack(fill='x', padx=10)
 
         # Вкладка Эмоции
@@ -40,14 +40,19 @@ class AgentAddDialog:
         notebook.add(frame_emotions, text="Эмоции")
 
         self.emotion_vars = {}
-        emotion_keys = [
-            "joy_sadness", "fear_calm", "anger_humility",
-            "disgust_acceptance", "surprise_habit",
-            "shame_confidence", "openness_alienation"
-        ]
-        for key in emotion_keys:
-            tk.Label(frame_emotions, text=key).pack()
-            scale = tk.Scale(frame_emotions, from_=-3, to=3, orient=tk.HORIZONTAL)
+        self.emotion_labels = {
+            "sadness_joy": "Печаль (—) / Радость (+)",
+            "fear_calm": "Страх (—) / Спокойствие (+)",
+            "anger_humility": "Гнев (—) / Смирение (+)",
+            "disgust_acceptance": "Отвращение (—) / Принятие (+)",
+            "habit_surprise": "Привычка (—) / Удивление (+)",
+            "shame_confidence": "Стыд (—) / Уверенность (+)",
+            "alienation_openness": "Замкнутость (—) / Открытость (+)"
+        }
+        
+        for key, label in self.emotion_labels.items():
+            tk.Label(frame_emotions, text=label).pack()
+            scale = tk.Scale(frame_emotions, from_=-30, to=30, orient=tk.HORIZONTAL, resolution=1)
             scale.set(0)
             scale.pack(fill='x', padx=10)
             self.emotion_vars[key] = scale
@@ -65,21 +70,18 @@ class AgentAddDialog:
         self.other_agent_combo.pack(pady=5, fill='x', padx=10)
         self.other_agent_combo.bind("<<ComboboxSelected>>", self.load_add_relations)
 
-        tk.Label(frame_predicates, text="Trust").pack()
-        self.trust_scale = tk.Scale(frame_predicates, from_=-10, to=10, orient=tk.HORIZONTAL)
+        tk.Label(frame_predicates, text="Trust (-100...100)").pack()
+        self.trust_scale = tk.Scale(frame_predicates, from_=-100, to=100, orient=tk.HORIZONTAL)
         self.trust_scale.pack(fill='x', padx=10)
 
-        tk.Label(frame_predicates, text="Affinity").pack()
-        self.affinity_scale = tk.Scale(frame_predicates, from_=-10, to=10, orient=tk.HORIZONTAL)
+        tk.Label(frame_predicates, text="Affinity (-100...100)").pack()
+        self.affinity_scale = tk.Scale(frame_predicates, from_=-100, to=100, orient=tk.HORIZONTAL)
         self.affinity_scale.pack(fill='x', padx=10)
 
-        tk.Label(frame_predicates, text="Utility").pack()
-        self.utility_scale = tk.Scale(frame_predicates, from_=-10, to=10, orient=tk.HORIZONTAL)
+        tk.Label(frame_predicates, text="Utility (-100...100)").pack()
+        self.utility_scale = tk.Scale(frame_predicates, from_=-100, to=100, orient=tk.HORIZONTAL)
         self.utility_scale.pack(fill='x', padx=10)
 
-        tk.Label(frame_predicates, text="Responsiveness").pack()
-        self.responsiveness_scale = tk.Scale(frame_predicates, from_=-10, to=10, orient=tk.HORIZONTAL)
-        self.responsiveness_scale.pack(fill='x', padx=10)
 
         # Кнопка Добавить
         tk.Button(self.top, text="Добавить", command=self.on_add).pack(side='bottom', fill='x', pady=10)
@@ -108,7 +110,6 @@ class AgentAddDialog:
                 'trust': self.trust_scale.get(),
                 'affinity': self.affinity_scale.get(),
                 'utility': self.utility_scale.get(),
-                'responsiveness': self.responsiveness_scale.get(),
             }
 
         agent_obj = Agent(
@@ -132,4 +133,3 @@ class AgentAddDialog:
         self.trust_scale.set(rel.get('trust', 0))
         self.affinity_scale.set(rel.get('affinity', 0))
         self.utility_scale.set(rel.get('utility', 0))
-        self.responsiveness_scale.set(rel.get('responsiveness', 0))

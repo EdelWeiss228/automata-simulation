@@ -4,13 +4,13 @@ from model.archetypes import Archetype, ArchetypeEnum, ARCHETYPE_WEIGHTS
 from enum import Enum
 
 class EmotionAxis(str, Enum):
-    JOY_SADNESS = 'joy_sadness'
+    SADNESS_JOY = 'sadness_joy'
     FEAR_CALM = 'fear_calm'
     ANGER_HUMILITY = 'anger_humility'
     DISGUST_ACCEPTANCE = 'disgust_acceptance'
-    SURPRISE_HABIT = 'surprise_habit'
+    HABIT_SURPRISE = 'habit_surprise'
     SHAME_CONFIDENCE = 'shame_confidence'
-    OPENNESS_ALIENATION = 'openness_alienation'
+    ALIENATION_OPENNESS = 'alienation_openness'
 
 class EmotionAutomaton:
     """

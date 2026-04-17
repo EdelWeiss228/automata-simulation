@@ -62,13 +62,21 @@ if [ -f "requirements.txt" ]; then
     ./venv/bin/python3 -m pip install -r requirements.txt
 else
     echo "requirements.txt not found! Installing base packages manually..."
-    ./venv/bin/python3 -m pip install numpy pandas pybind11
+    ./venv/bin/python3 -m pip install numpy pandas pybind11 clickhouse-connect python-dotenv
 fi
 
 # 6. Компиляция ядра
 echo "Running build.sh to compile the C++ engine..."
 chmod +x build.sh
 ./build.sh
+
+# 7. Напоминание про .env
+if [ ! -f ".env" ]; then
+    echo ""
+    echo "Tip: .env file NOT found. Simulation will work in local CSV mode."
+    echo "To use ClickHouse, copy .env.example to .env and fill in credentials."
+    echo ""
+fi
 
 if [ $? -eq 0 ]; then
     echo "=== INSTALLATION SUCCESSFUL ==="

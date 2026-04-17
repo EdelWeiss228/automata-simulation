@@ -5,13 +5,13 @@ CREATE TABLE IF NOT EXISTS agent_states (
     slot_id UInt8 Codec(DoubleDelta),    -- Номер слота (1 пара, перерыв и т.д.)
     agent_id UInt32,                     -- Числовой ID агента
     
-    joy_sadness Int8 Codec(ZSTD(1)),
-    fear_calm Int8 Codec(ZSTD(1)),
-    anger_humility Int8 Codec(ZSTD(1)),
-    disgust_acceptance Int8 Codec(ZSTD(1)),
-    surprise_habit Int8 Codec(ZSTD(1)),
-    shame_confidence Int8 Codec(ZSTD(1)),
-    openness_alienation Int8 Codec(ZSTD(1))
+    sadness_joy Int8 Codec(ZSTD(1)),      -- Печаль (-30), Радость (+30)
+    fear_calm Int8 Codec(ZSTD(1)),        -- Страх (-30), Спокойствие (+30)
+    anger_humility Int8 Codec(ZSTD(1)),   -- Гнев (-30), Смирение (+30)
+    disgust_acceptance Int8 Codec(ZSTD(1)), -- Отвращение (-30), Принятие (+30)
+    habit_surprise Int8 Codec(ZSTD(1)),   -- Привычка (-30), Удивление (+30)
+    shame_confidence Int8 Codec(ZSTD(1)), -- Стыд (-30), Уверенность (+30)
+    alienation_openness Int8 Codec(ZSTD(1)) -- Отчужденность (-30), Открытость (+30)
 ) ENGINE = MergeTree()
 ORDER BY (run_id, day_id, slot_id, agent_id);
 

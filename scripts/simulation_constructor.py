@@ -18,7 +18,7 @@ from model.archetypes import ArchetypeEnum
 class SimulationConstructor(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Конструктор симуляции (V5.2 High-Perf Core)")
+        self.title("Исследовательский Конструктор: Университет v6.0")
         self.geometry("600x650")
         
         self.params = {
@@ -28,7 +28,8 @@ class SimulationConstructor(tk.Tk):
             "emotion_params": {"min": -3.0, "max": 3.0, "mean": 0.0, "std": 1.0},
             "steps": 100,
             "seed": random.randint(0, 1000000),
-            "silent_mode": True
+            "silent_mode": True,
+            "university_mode": True # Forced University Mode
         }
         
         self.progress_var = tk.DoubleVar(value=0)
@@ -211,7 +212,8 @@ class SimulationConstructor(tk.Tk):
         self.status_var.set("Запуск процесса...")
         self.run_btn.config(state=tk.DISABLED)
         
-        cmd = [sys.executable, main_path, "--scenario", config_path, "--silent"]
+        # Always use --university and --silent as per research requirements
+        cmd = [sys.executable, main_path, "--scenario", config_path, "--silent", "--university"]
         
         def monitor_process():
             try:

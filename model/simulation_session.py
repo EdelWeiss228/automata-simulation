@@ -15,7 +15,13 @@ class SimulationSession:
     def __init__(self, collective=None, output_dir="data/output"):
         self.collective = collective if collective else Collective()
         self.logger = DataLogger()
-        self.ch_logger = ClickHouseLogger() if ClickHouseLogger else None
+        self.ch_logger = None
+        if ClickHouseLogger:
+            try:
+                self.ch_logger = ClickHouseLogger()
+            except Exception as e:
+                print(f"Предупреждение: ClickHouse не доступен ({e}). Логирование в БД отключено.")
+        
         self.run_id = self.ch_logger.run_id if self.ch_logger else None
         self.output_dir = output_dir
         
@@ -149,48 +155,67 @@ class SimulationSession:
         """Выполняет один цикл симуляции дня и логирует результаты."""
         # Начальный лог состояний перед первым шагом
         if not self.simulation_started:
-            # Снимаем начальный срез (всегда с отношениями по запросу пользователя)
-            self.collective._sync_from_cpp(sync_relations=True)
-            self.log_states()
+            self.collective._sync_to_cpp()
+            self.log_states(slot_id=0)
             self.simulation_started = True
 
-        # Выполнение цикла
-        interactions = self.collective.perform_full_day_cycle(interactive=False)
-
-        # Логирование результатов дня
-        # Синхронизируем ПОЛНЫЕ данные из C++ обратно в Python ТОЛЬКО если нам это нужно (для GUI)
-        # В headless режиме мы это пропускаем, так как C++ сам пишет логи
+        all_interactions = []
         is_headless = not hasattr(self, 'gui_active') or not self.gui_active 
-        
-        if self.collective.cpp_engine and is_headless:
-            # В тихом режиме НЕ синхронизируем отношения в Python ради скорости
-            self.collective._sync_from_cpp(sync_relations=False)
+
+        if hasattr(self.collective, 'day_schedule_slots'):
+            while True:
+                interactions = self.collective.perform_next_step()
+                
+                # Проверяем, не является ли этот шаг просто техническим переходом дня
+                is_day_ready = any(res == "New_Day_Ready" for _, _, res in interactions if isinstance(res, str))
+                
+                if not is_day_ready:
+                    all_interactions.extend(interactions)
+                    
+                    # ОБЯЗАТЕЛЬНАЯ СИНХРОНИЗАЦИЯ: Университет работает на Python,
+                    # но логгер ClickHouse читает из C++. Синкаем перед логированием.
+                    if self.collective.cpp_engine:
+                        self.collective._sync_to_cpp()
+
+                    # slot_id отражает состояние ПОСЛЕ совершения шага (1..9)
+                    slot_id = self.collective.current_slot_idx
+                    self.log_interactions(interactions, slot_id=slot_id)
+                    self.log_states(slot_id=slot_id)
+                else:
+                    break
         else:
-            # В GUI режиме синхронизируем всё для отрисовки
+            # Обычный режим (один большой шаг)
+            all_interactions = self.collective.perform_full_day_cycle(interactive=False)
+            self.log_interactions(all_interactions, slot_id=1)
+            self.log_states(slot_id=1)
+
+        # Синхронизация для GUI (если нужно)
+        if not is_headless:
             self.collective._sync_from_cpp(sync_relations=True)
-        
-        self.log_interactions(interactions)
-        self.log_states()
+        elif self.collective.cpp_engine:
+            self.collective._sync_from_cpp(sync_relations=False)
 
-        return interactions
+        return all_interactions
 
-    def log_states(self):
+    def log_states(self, slot_id=0):
         """Записывает текущие состояния агентов в файл."""
         states_file = os.path.join(self.output_dir, "agent_states.csv")
         date_str = self.collective.current_date.strftime("%Y-%m-%d %H:%M:%S")
         
         if self.collective.cpp_engine:
-            # Логируем в CSV (старая логика)
-            self.collective.cpp_engine.save_states_csv(
-                states_file, 
-                date_str, 
-                self.first_log_states
-            )
-            # Логируем в ClickHouse (новая логика)
             if self.ch_logger:
-                self.ch_logger.log_agent_states(self.collective.current_step, 0, self.collective.cpp_engine)
-                # Логируем отношения (только если они изменились или по умолчанию)
-                self.ch_logger.log_agent_relations(self.collective.current_step, 0, self.collective.cpp_engine)
+                # В ClickHouse логируем каждое изменение
+                self.ch_logger.log_agent_states(self.collective.current_step, slot_id, self.collective.cpp_engine)
+                # Логируем отношения
+                self.ch_logger.log_agent_relations(self.collective.current_step, slot_id, self.collective.cpp_engine)
+            else:
+                # Фоллбек: пишем в CSV каждый шаг, раз ClickHouse не доступен
+                self.collective.cpp_engine.save_states_csv(
+                    states_file, 
+                    date_str, 
+                    self.first_log_states
+                )
+                self.first_log_states = False
         else:
             self.logger.log_agent_states(
                 states_file, 
@@ -198,23 +223,31 @@ class SimulationSession:
                 self.collective.agents, 
                 self.first_log_states
             )
-        self.first_log_states = False
+            self.first_log_states = False
 
-    def log_interactions(self, interactions):
+    def log_interactions(self, interactions, slot_id=0):
         """Записывает взаимодействия за день в файл."""
         interactions_file = os.path.join(self.output_dir, "interaction_log.csv")
         date_str = self.collective.current_date.strftime("%Y-%m-%d %H:%M:%S")
         
         if self.collective.cpp_engine:
-            # Логируем в CSV
-            self.collective.cpp_engine.save_interactions_csv(
-                interactions_file, 
-                date_str, 
-                self.first_log_interactions
-            )
-            # Логируем в ClickHouse
             if self.ch_logger:
-                self.ch_logger.log_interactions(self.collective.current_step, 0, self.collective.cpp_engine)
+                # В ClickHouse логируем каждое изменение
+                self.ch_logger.log_interactions(
+                    self.collective.current_step, 
+                    slot_id, 
+                    self.collective.cpp_engine,
+                    interactions_list=interactions,
+                    name_to_id=getattr(self.collective, '_id_map', None)
+                )
+            else:
+                # Фоллбек: пишем в CSV каждый шаг
+                self.collective.cpp_engine.save_interactions_csv(
+                    interactions_file, 
+                    date_str, 
+                    self.first_log_interactions
+                )
+                self.first_log_interactions = False
         else:
             self.logger.log_interactions(
                 interactions_file, 
@@ -222,7 +255,7 @@ class SimulationSession:
                 interactions, 
                 self.first_log_interactions
             )
-        self.first_log_interactions = False
+            self.first_log_interactions = False
 
     def reset(self, new_collective=None, seed=None):
         """Сбрасывает сессию симуляции."""

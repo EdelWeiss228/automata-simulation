@@ -1,3 +1,5 @@
 numpy
 pandas
 pybind11
+clickhouse-connect
+python-dotenv
