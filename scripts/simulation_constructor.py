@@ -140,14 +140,14 @@ class SimulationConstructor(tk.Tk):
             widget.destroy()
             
         if self.dist_var.get() == "Uniform":
-            ttk.Label(self.params_frame, text="Min (-3 to 3):").grid(row=0, column=0)
+            ttk.Label(self.params_frame, text="Min (-30 to 30):").grid(row=0, column=0)
             self.min_entry = ttk.Entry(self.params_frame, width=7)
-            self.min_entry.insert(0, "-3.0")
+            self.min_entry.insert(0, "-10")
             self.min_entry.grid(row=0, column=1, padx=5)
             
-            ttk.Label(self.params_frame, text="Max (-3 to 3):").grid(row=0, column=2)
+            ttk.Label(self.params_frame, text="Max (-30 to 30):").grid(row=0, column=2)
             self.max_entry = ttk.Entry(self.params_frame, width=7)
-            self.max_entry.insert(0, "3.0")
+            self.max_entry.insert(0, "10")
             self.max_entry.grid(row=0, column=3, padx=5)
         else:
             ttk.Label(self.params_frame, text="Mean (Среднее):").grid(row=0, column=0)

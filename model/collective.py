@@ -281,10 +281,10 @@ class Collective:
                     interactions.append((agent.name, target, "refusal"))
                     continue
 
-            success = random.random() < 0.5
+            sigma = 1 if random.random() < 0.5 else -1
             
-            InteractionStrategy.process_interaction_result(agent, target_agent, success)
-            interactions.append((agent.name, target, "success" if success else "fail"))
+            InteractionStrategy.process_interaction_result(agent, target_agent, sigma)
+            interactions.append((agent.name, target, "success" if sigma == 1 else "fail"))
             
         return interactions
 

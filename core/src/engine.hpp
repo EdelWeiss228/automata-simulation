@@ -16,7 +16,7 @@ struct Relation {
 struct Interaction {
     int from_idx;
     int to_idx;
-    int type; // 0: refusal, 1: success, 2: fail
+    int type; // 0: refusal, 1: success, -1: fail
 };
 
 struct ArchetypeConfig {
@@ -98,7 +98,7 @@ public:
     // Новые методы для ускорения шага
     float calculate_priority_score(int from_idx, int to_idx);
     int choose_target(int agent_idx);
-    void process_interaction(int from_idx, int to_idx, bool success);
+    void process_interaction(int from_idx, int to_idx, int sigma);
     void process_refusal(int from_idx, int to_idx);
     bool should_refuse(int agent_idx, int target_idx);
 

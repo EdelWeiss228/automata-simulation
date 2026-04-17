@@ -116,83 +116,77 @@ class InteractionStrategy:
     @staticmethod
     def process_refusal(agent, target_agent):
         """
-        Обработать отказ взаимодействия между агентами: бьет по уязвимой предикате
-        согласно атрибуту архетипа refusal_vulnerability.
+        Обработать отказ взаимодействия между агентами.
+        Штраф получает только инициатор (agent), так как его чаяния не оправдались.
+        Тот, кто отказал (target_agent), не меняет своего мнения об инициаторе.
         """
         s_i = getattr(agent, 'sensitivity', 1.0)
-        s_target = getattr(target_agent, 'sensitivity', 1.0)
 
-        # Инициатор (agent) расстроен отказом
         if target_agent.name not in agent.relations:
             from core.agent_factory import AgentFactory
             AgentFactory.initialize_agent_relations(agent, [target_agent.name])
 
         vuln_i = getattr(agent.archetype, 'refusal_vulnerability', 0)
-        
+        penalty = 20 * s_i # Умеренный штраф (-2.0 в старой шкале)
+
         if vuln_i == 0:
             agent.relations[target_agent.name]['utility'] = agent.limit_predicate_value(
-                agent.relations[target_agent.name].get('utility', 0) - 25 * s_i
+                agent.relations[target_agent.name].get('utility', 0) - penalty
             )
         elif vuln_i == 1:
             agent.relations[target_agent.name]['affinity'] = agent.limit_predicate_value(
-                agent.relations[target_agent.name].get('affinity', 0) - 25 * s_i
+                agent.relations[target_agent.name].get('affinity', 0) - penalty
             )
         else:
             agent.relations[target_agent.name]['trust'] = agent.limit_predicate_value(
-                agent.relations[target_agent.name].get('trust', 0) - 25 * s_i
+                agent.relations[target_agent.name].get('trust', 0) - penalty
             )
 
-        # Целевой агент (target_agent) тоже охладевает, если отказал
-        if agent.name not in target_agent.relations:
-            from core.agent_factory import AgentFactory
-            AgentFactory.initialize_agent_relations(target_agent, [agent.name])
-
-        vuln_t = getattr(target_agent.archetype, 'refusal_vulnerability', 0)
-        
-        if vuln_t == 0:
-            target_agent.relations[agent.name]['utility'] = target_agent.limit_predicate_value(
-                target_agent.relations[agent.name].get('utility', 0) - 15 * s_target
-            )
-        elif vuln_t == 1:
-            target_agent.relations[agent.name]['affinity'] = target_agent.limit_predicate_value(
-                target_agent.relations[agent.name].get('affinity', 0) - 15 * s_target
-            )
-        else:
-            target_agent.relations[agent.name]['trust'] = target_agent.limit_predicate_value(
-                target_agent.relations[agent.name].get('trust', 0) - 15 * s_target
-            )
+        # Тот, кто отказал, не меняет мнения. Логика изменений убрана.
 
     @staticmethod
-    def process_interaction_result(agent, target_agent, success):
+    def process_interaction_result(agent, target_agent, sigma):
         """
-        Обработать результат взаимодействия и обновить отношения.
+        Обработать результат взаимодействия (Sigma) и обновить отношения.
+        Влияние зависит от знака первичной эмоции:
+        - Успех (1) усиливает позитив (x2.0) и гасит негатив (x0.5)
+        - Неудача (-1) гасит позитив (x0.5) и раздувает негатив (x2.0)
         """
         s_i = getattr(agent, "sensitivity", 1.0)
         s_t = getattr(target_agent, "sensitivity", 1.0)
         
-        if success:
-            delta_primary = 20 * s_i
-            delta_trust = 10 * s_i
-            
-            for a, t_obj, s in [(agent, target_agent, s_i), (target_agent, agent, s_t)]:
-                t_name = t_obj.name
-                if t_name not in a.relations:
-                    from core.agent_factory import AgentFactory
-                    AgentFactory.initialize_agent_relations(a, [t_name])
-                
-                a.relations[t_name]['affinity'] = a.limit_predicate_value(a.relations[t_name].get('affinity', 0) + delta_primary)
-                a.relations[t_name]['utility'] = a.limit_predicate_value(a.relations[t_name].get('utility', 0) + delta_primary)
-                a.relations[t_name]['trust'] = a.limit_predicate_value(a.relations[t_name].get('trust', 0) + delta_trust)
-        else:
-            delta_trust_fail = 20 * s_i
-            delta_others_fail = 5 * s_i
-            
-            for a, t_obj, s in [(agent, target_agent, s_i), (target_agent, agent, s_t)]:
-                t_name = t_obj.name
-                if t_name not in a.relations:
-                    from core.agent_factory import AgentFactory
-                    AgentFactory.initialize_agent_relations(a, [t_name])
+        # Получаем знак и силу первичной эмоции инициатора
+        _, e_val = agent.get_primary_emotion()
+        
+        # Определяем множитель на основе Сигма-модели
+        multiplier = 1.0
+        if sigma == 1: # Успех
+            multiplier = 2.0 if e_val >= 0 else 0.5
+        elif sigma == -1: # Неудача
+            multiplier = 0.5 if e_val >= 0 else 2.0
 
-                a.relations[t_name]['trust'] = a.limit_predicate_value(a.relations[t_name].get('trust', 0) - delta_trust_fail)
-                a.relations[t_name]['affinity'] = a.limit_predicate_value(a.relations[t_name].get('affinity', 0) - delta_others_fail)
-                a.relations[t_name]['utility'] = a.limit_predicate_value(a.relations[t_name].get('utility', 0) - delta_others_fail)
+        # Базовые дельты в x10
+        base_affinity = 15 * multiplier
+        base_trust = 10 * multiplier
+        
+        # При неудаче (-1) доверие всегда падает сильнее, а аффинити страдает от 'шума'
+        if sigma == -1:
+            base_trust = -20 * multiplier
+            base_affinity = -5 * multiplier
+
+        for a, t_obj, s in [(agent, target_agent, s_i), (target_agent, agent, s_t)]:
+            t_name = t_obj.name
+            if t_name not in a.relations:
+                from core.agent_factory import AgentFactory
+                AgentFactory.initialize_agent_relations(a, [t_name])
+            
+            # Применяем изменения
+            a.relations[t_name]['affinity'] = a.limit_predicate_value(
+                a.relations[t_name].get('affinity', 0) + int(base_affinity * s)
+            )
+            a.relations[t_name]['utility'] = a.limit_predicate_value(
+                a.relations[t_name].get('utility', 0) + int(base_affinity * s)
+            )
+            a.relations[t_name]['trust'] = a.limit_predicate_value(
+                a.relations[t_name].get('trust', 0) + int(base_trust * s)
+            )

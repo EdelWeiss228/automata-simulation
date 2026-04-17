@@ -111,8 +111,8 @@ class ClickHouseLogger:
         Otherwise logs from engine.last_day_interactions (C++ model).
         """
         data = []
-        type_map = {'refusal': 0, 'success': 1, 'fail': 2}
-        cpp_type_map = {0: 'refusal', 1: 'success', 2: 'fail'}
+        type_map = {'refusal': 0, 'success': 1, 'fail': -1}
+        cpp_type_map = {0: 'refusal', 1: 'success', 2: 'fail'} # Not changed yet to avoid C++ breaking, but logic will use type_map
         
         if interactions_list and name_to_id:
             for from_name, to_name, status in interactions_list:

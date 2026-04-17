@@ -38,6 +38,6 @@ CREATE TABLE IF NOT EXISTS interactions (
     from_id UInt32,
     to_id UInt32,
     
-    type Enum8('refusal' = 0, 'success' = 1, 'fail' = 2) Codec(ZSTD(1))
+    type Int8 Codec(ZSTD(1))               -- -1 (Fail), 0 (Refusal), 1 (Success)
 ) ENGINE = MergeTree()
 ORDER BY (run_id, day_id, slot_id, from_id);

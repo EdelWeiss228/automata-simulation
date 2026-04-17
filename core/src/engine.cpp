@@ -180,60 +180,66 @@ int Engine::choose_target(int agent_idx) {
     return candidates.back();
 }
 
-void Engine::process_interaction(int from_idx, int to_idx, bool success) {
+void Engine::process_interaction(int from_idx, int to_idx, int sigma) {
     float s_i = state.sensitivities[from_idx];
     float s_t = state.sensitivities[to_idx];
     
-    if (success) {
-        int delta_primary = (int)(20.0f * s_i); // 2.0 * 10
-        int delta_trust = (int)(10.0f * s_i);
-        
-        // i -> target
-        int base_it = (from_idx * num_agents + to_idx) * 3;
-        state.relations[base_it + 1] = std::max(-100, std::min(100, state.relations[base_it + 1] + delta_primary));
-        state.relations[base_it + 0] = std::max(-100, std::min(100, state.relations[base_it + 0] + delta_primary));
-        state.relations[base_it + 2] = std::max(-100, std::min(100, state.relations[base_it + 2] + delta_trust));
-        
-        // target -> i
-        int dt_primary = (int)(20.0f * s_t);
-        int dt_trust = (int)(10.0f * s_t);
-        int base_ti = (to_idx * num_agents + from_idx) * 3;
-        state.relations[base_ti + 1] = std::max(-100, std::min(100, state.relations[base_ti + 1] + dt_primary));
-        state.relations[base_ti + 0] = std::max(-100, std::min(100, state.relations[base_ti + 0] + dt_primary));
-        state.relations[base_ti + 2] = std::max(-100, std::min(100, state.relations[base_ti + 2] + dt_trust));
-    } else {
-        int delta_trust_fail = (int)(20.0f * s_i);
-        int delta_others_fail = (int)(5.0f * s_i);
-        
-        int base_it = (from_idx * num_agents + to_idx) * 3;
-        state.relations[base_it + 2] = std::max(-100, std::min(100, state.relations[base_it + 2] - delta_trust_fail));
-        state.relations[base_it + 1] = std::max(-100, std::min(100, state.relations[base_it + 1] - delta_others_fail));
-        state.relations[base_it + 0] = std::max(-100, std::min(100, state.relations[base_it + 0] - delta_others_fail));
-
-        int dt_trust_fail = (int)(20.0f * s_t);
-        int dt_others_fail = (int)(5.0f * s_t);
-        int base_ti = (to_idx * num_agents + from_idx) * 3;
-        state.relations[base_ti + 2] = std::max(-100, std::min(100, state.relations[base_ti + 2] - dt_trust_fail));
-        state.relations[base_ti + 1] = std::max(-100, std::min(100, state.relations[base_ti + 1] - dt_others_fail));
-        state.relations[base_ti + 0] = std::max(-100, std::min(100, state.relations[base_ti + 0] - dt_others_fail));
+    // 1. Находим первичную эмоцию инициатора
+    int primary_axis = 0;
+    int max_val = -1;
+    for (int a = 0; a < SimulationState::NUM_AXES; ++a) {
+        int v = std::abs(state.emotions[from_idx * SimulationState::NUM_AXES + a]);
+        if (v > max_val) {
+            max_val = v;
+            primary_axis = a;
+        }
     }
+    int e_val = state.emotions[from_idx * SimulationState::NUM_AXES + primary_axis];
+
+    // 2. Рассчитываем множитель (Sigma Model v6.2)
+    float multiplier = 1.0f;
+    if (sigma == 1) { // Успех
+        multiplier = (e_val >= 0) ? 2.0f : 0.5f;
+    } else if (sigma == -1) { // Неудача
+        multiplier = (e_val >= 0) ? 0.5f : 2.0f;
+    }
+
+    // 3. Базовые дельты (scale x10)
+    float base_affinity = 15.0f * multiplier;
+    float base_trust = 10.0f * multiplier;
+    
+    if (sigma == -1) {
+        base_trust = -20.0f * multiplier;
+        base_affinity = -5.0f * multiplier;
+    }
+
+    // Применяем к инициатору (i -> target)
+    int base_it = (from_idx * num_agents + to_idx) * 3;
+    state.relations[base_it + 0] = std::max(-100, std::min(100, (int)(state.relations[base_it + 0] + base_affinity * s_i)));
+    state.relations[base_it + 1] = std::max(-100, std::min(100, (int)(state.relations[base_it + 1] + base_affinity * s_i)));
+    state.relations[base_it + 2] = std::max(-100, std::min(100, (int)(state.relations[base_it + 2] + base_trust * s_i)));
+
+    // Применяем к цели (target -> i)
+    int base_ti = (to_idx * num_agents + from_idx) * 3;
+    state.relations[base_ti + 0] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 0] + base_affinity * s_t)));
+    state.relations[base_ti + 1] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 1] + base_affinity * s_t)));
+    state.relations[base_ti + 2] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 2] + base_trust * s_t)));
 }
 
 void Engine::process_refusal(int from_idx, int to_idx) {
     float s_i = state.sensitivities[from_idx];
-    float s_t = state.sensitivities[to_idx];
     
-    int vuln_i = state.archetype_configs[state.agent_archetypes[from_idx]].refusal_vulnerability;
+    // Штраф получает только инициатор (from_idx)
+    int arch_idx = state.agent_archetypes[from_idx];
+    int vuln_i = state.archetype_configs[arch_idx].refusal_vulnerability;
     int base_it = (from_idx * num_agents + to_idx) * 3;
-    if (vuln_i == 0) state.relations[base_it + 0] = std::max(-100, std::min(100, (int)(state.relations[base_it + 0] - 25.0f * s_i)));
-    else if (vuln_i == 1) state.relations[base_it + 1] = std::max(-100, std::min(100, (int)(state.relations[base_it + 1] - 25.0f * s_i)));
-    else state.relations[base_it + 2] = std::max(-100, std::min(100, (int)(state.relations[base_it + 2] - 25.0f * s_i)));
-    
-    int vuln_t = state.archetype_configs[state.agent_archetypes[to_idx]].refusal_vulnerability;
-    int base_ti = (to_idx * num_agents + from_idx) * 3;
-    if (vuln_t == 0) state.relations[base_ti + 0] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 0] - 15.0f * s_t)));
-    else if (vuln_t == 1) state.relations[base_ti + 1] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 1] - 15.0f * s_t)));
-    else state.relations[base_ti + 2] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 2] - 15.0f * s_t)));
+    float penalty = 20.0f * s_i;
+
+    if (vuln_i == 0) state.relations[base_it + 0] = std::max(-100, std::min(100, (int)(state.relations[base_it + 0] - penalty)));
+    else if (vuln_i == 1) state.relations[base_it + 1] = std::max(-100, std::min(100, (int)(state.relations[base_it + 1] - penalty)));
+    else state.relations[base_it + 2] = std::max(-100, std::min(100, (int)(state.relations[base_it + 2] - penalty)));
+
+    // Тот, кто отказал (to_idx), не меняет своего мнения об инициаторе.
 }
 
 void Engine::apply_relation_decay() {
@@ -310,28 +316,36 @@ void Engine::react_to_emotions() {
                 if (i == j) continue;
                 int base = (i * num_agents + j) * 3;
                 
-                // JOY_SADNESS -> Affinity
+                // 0: SADNESS_JOY -> Affinity
                 if (axis == 0) {
                     state.relations[base + 1] = std::max(-100, std::min(100, (int)(state.relations[base + 1] + val * k_factor * s_i)));
                 }
-                // ANGER_HUMILITY -> Trust
+                // 1: FEAR_CALM -> Trust
+                else if (axis == 1) {
+                    state.relations[base + 2] = std::max(-100, std::min(100, (int)(state.relations[base + 2] + val * k_factor * s_i)));
+                }
+                // 2: ANGER_HUMILITY -> Trust (2.0x weight for Anger)
                 else if (axis == 2) {
                     float factor = (val < 0) ? 2.0f : 1.0f;
                     state.relations[base + 2] = std::max(-100, std::min(100, (int)(state.relations[base + 2] + val * k_factor * factor * s_i)));
                 }
-                // FEAR_CALM -> Trust
-                else if (axis == 1) {
-                    state.relations[base + 2] = std::max(-100, std::min(100, (int)(state.relations[base + 2] + val * k_factor * s_i)));
-                }
-                // LOVE_ALIENATION -> Trust & Affinity
-                else if (axis == 6) {
-                    state.relations[base + 2] = std::max(-100, std::min(100, (int)(state.relations[base + 2] + val * k_factor * s_i)));
-                    state.relations[base + 1] = std::max(-100, std::min(100, (int)(state.relations[base + 1] + val * k_factor * s_i)));
-                }
-                // DISGUST_ACCEPTANCE -> Utility & Affinity
+                // 3: DISGUST_ACCEPTANCE -> Utility & Affinity
                 else if (axis == 3) {
                     state.relations[base + 1] = std::max(-100, std::min(100, (int)(state.relations[base + 1] + val * k_factor * s_i)));
                     state.relations[base + 0] = std::max(-100, std::min(100, (int)(state.relations[base + 0] + val * k_factor * s_i)));
+                }
+                // 4: HABIT_SURPRISE -> Utility
+                else if (axis == 4) {
+                    state.relations[base + 0] = std::max(-100, std::min(100, (int)(state.relations[base + 0] + val * k_factor * s_i)));
+                }
+                // 5: SHAME_CONFIDENCE -> Trust
+                else if (axis == 5) {
+                    state.relations[base + 2] = std::max(-100, std::min(100, (int)(state.relations[base + 2] + val * k_factor * s_i)));
+                }
+                // 6: ALIENATION_OPENNESS -> Trust & Affinity
+                else if (axis == 6) {
+                    state.relations[base + 2] = std::max(-100, std::min(100, (int)(state.relations[base + 2] + val * k_factor * s_i)));
+                    state.relations[base + 1] = std::max(-100, std::min(100, (int)(state.relations[base + 1] + val * k_factor * s_i)));
                 }
             }
         }
@@ -381,9 +395,9 @@ void Engine::perform_daily_cycle(int interactions_per_day) {
                     process_refusal(i, target);
                     last_day_interactions.push_back({i, target, 0}); // 0: refusal
                 } else {
-                    bool success = (rand() % 100) < 50;
-                    process_interaction(i, target, success);
-                    last_day_interactions.push_back({i, target, success ? 1 : 2}); // 1: success, 2: fail
+                    int sigma = ((rand() % 100) < 50) ? 1 : -1;
+                    process_interaction(i, target, sigma);
+                    last_day_interactions.push_back({i, target, sigma}); // 1: success, -1: fail
                 }
             } else {
                 // Decay for all when no target chosen (as in Collective.py)
