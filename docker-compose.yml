@@ -8,7 +8,7 @@ services:
       # These credentials will be used if you want to create a specific user/db.
       # By default, ClickHouse creates a 'default' user with an empty password.
       - CLICKHOUSE_USER=default
-      - CLICKHOUSE_PASSWORD="" 
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD}
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
     ports:
       - "8123:8123" # HTTP port (used by clickhouse-connect default)

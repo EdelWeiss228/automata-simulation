@@ -24,7 +24,7 @@ scripts/*.json
 
 # IDEs & System
 .DS_Store
-.vscode/
+.vscode/,
 .idea/
 .git 2/
 
@@ -45,3 +45,4 @@ CONTEXT_STATE_SNAPSHOT.md
 # Temporary Scratch Files
 scratch/
 
+clickhouse/users.d/
