@@ -12,8 +12,12 @@ class SimulationSession:
     Класс, инкапсулирующий логику сессии симуляции.
     Отвечает за управление коллективом, шаги времени и сохранение данных.
     """
-    def __init__(self, collective=None, output_dir="data/output"):
-        self.collective = collective if collective else Collective()
+    def __init__(self, collective=None, seed=None, output_dir="data/output"):
+        if collective:
+            self.collective = collective
+        else:
+            self.collective = Collective(seed=seed)
+            
         self.logger = DataLogger()
         self.ch_logger = None
         if ClickHouseLogger:
@@ -152,10 +156,11 @@ class SimulationSession:
         return True
 
     def run_day(self):
-        """Выполняет один цикл симуляции дня и логирует результаты."""
         # Начальный лог состояний перед первым шагом
         if not self.simulation_started:
             self.collective._sync_to_cpp()
+            if self.ch_logger:
+                self.ch_logger.log_agent_registry(self.collective)
             self.log_states(slot_id=0)
             self.simulation_started = True
 

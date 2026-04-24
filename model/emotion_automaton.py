@@ -12,6 +12,20 @@ class EmotionAxis(str, Enum):
     SHAME_CONFIDENCE = 'shame_confidence'
     ALIENATION_OPENNESS = 'alienation_openness'
 
+    def get_localized_label(self, value: float) -> str:
+        """Возвращает название эмоции из курсовой в зависимости от знака (v6.9.31)."""
+        mapping = {
+            'sadness_joy': ('Радость', 'Печаль'),
+            'fear_calm': ('Спокойствие', 'Страх'),
+            'anger_humility': ('Смирение', 'Гнев'),
+            'disgust_acceptance': ('Принятие', 'Отвращение'),
+            'habit_surprise': ('Удивление', 'Привычка'),
+            'shame_confidence': ('Уверенность', 'Стыд'),
+            'alienation_openness': ('Открытость', 'Отчуждение')
+        }
+        pos, neg = mapping.get(self.value, (self.value, self.value))
+        return pos if value >= 0 else neg
+
 class EmotionAutomaton:
     """
     Класс, моделирующий эмоциональные состояния агента на основе выбранного архетипа.

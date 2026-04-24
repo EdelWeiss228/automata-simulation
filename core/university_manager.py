@@ -1,271 +1,175 @@
-from core.agent_factory import AgentFactory
 import random
 import math
 from typing import List, Dict
+from core.agent_factory import AgentFactory
 from model.constants import SportType, AgentStatus
 from model.agent import Agent
 
 class UniversityManager:
-    """Управляющий структурой университета и расписанием (v4.5: Русские имена)."""
+    """Управляющий структурой университета (v6.9.29: Русские имена)."""
     
     FACULTY_NAMES = ["П", "Ф", "Р", "М", "Эк"]
-    START_YEAR = 22
+    MASTER_FACULTIES = ["ММ", "ПМ", "ПО", "ЭкМ", "РМ", "ГП"]
     
-    # База имен для русификации (v4.5)
-    NAMES_M = ["Александр", "Дмитрий", "Максим", "Сергей", "Андрей", "Алексей", "Артем", "Илья", "Кирилл", "Михаил", "Никита", "Матвей", "Роман", "Егор", "Иван"]
-    NAMES_F = ["Мария", "Анастасия", "Анна", "Виктория", "Екатерина", "Наталья", "Елена", "Дарья", "Алиса", "София", "Юлия", "Ольга", "Татьяна", "Ирина", "Полина"]
-    SURNAMES = ["Иванов", "Петров", "Смирнов", "Сергеев", "Волков", "Кузнецов", "Васильев", "Романов", "Козлов", "Лебедев", "Новиков", "Морозов", "Павлов", "Соколов", "Федоров"]
+    NAMES_M = ["Иван", "Александр", "Сергей", "Дмитрий", "Андрей", "Алексей", "Максим", "Евгений", "Михаил", "Владимир", "Никита", "Артем", "Игорь"]
+    SURNAMES_M = ["Иванов", "Петров", "Сидоров", "Смирнов", "Кузнецов", "Попов", "Васильев", "Соколов", "Михайлов", "Новиков", "Федоров", "Морозов"]
+    
+    NAMES_F = ["Мария", "Анна", "Елена", "Ольга", "Наталья", "Екатерина", "Татьяна", "Ирина", "Светлана", "Юлия", "Виктория", "Анастасия", "Дарья"]
+    SURNAMES_F = ["Иванова", "Петрова", "Сидорова", "Смирнова", "Кузнецова", "Попова", "Васильева", "Соколова", "Михайлова", "Новикова", "Федорова", "Морозова"]
 
-    def __init__(self, faculties=5, streams_per_faculty=5, groups_per_stream=3):
+    def __init__(self, faculties=5, streams_per_faculty=4, groups_per_stream=3, start_academic_year=2022):
         self.faculties_count = faculties
         self.streams_per_faculty = streams_per_faculty
         self.groups_per_stream = groups_per_stream
-        
-        # Структура: faculties -> streams -> groups -> list of agent_names
-        self.structure = {}
-        self.schedules = {} # group_id -> {day_index: [pair1_room, pair2_room, ...]}
-        
-        # Аудитории
-        self.rooms_info = {} # room_id -> {"capacity": int, "x": int, "y": int, "width": int, "height": int}
+        self.start_academic_year = start_academic_year
+        self.rooms_info = {} 
         self._initialize_rooms()
+        self.generate_schedules()
 
     def _initialize_rooms(self):
-        """Создает физическую разметку аудиторий (v4.5: Возврат к номерам №)."""
-        room_size = 180
-        padding = 20
-        
-        # 1. Лекционные залы (потоковые) - 4 ряда по 200 пикселей (до y=800)
+        padding = 40
+        l_w, l_h = 240, 480
         for s_idx in range(25):
-            f_idx = s_idx // 5
-            s_idx_in_f = s_idx % 5
-            
-            f_name = self.FACULTY_NAMES[f_idx]
-            year = self.START_YEAR + s_idx_in_f
-            room_id = f"Aud_{f_name}_{year}_L"
-            
-            col = s_idx % 8
-            row = s_idx // 8
-            
+            room_id = f"Aud_{self.FACULTY_NAMES[s_idx // 5]}_{str(self.start_academic_year - (s_idx % 5))[2:]}_L"
             self.rooms_info[room_id] = {
-                "capacity": 100, 
-                "type": "LECTURE",
-                "display_name": f"№{101 + s_idx}",
-                "x": padding + col * (room_size + padding),
-                "y": padding + row * (room_size + padding),
-                "width": room_size,
-                "height": room_size
+                "capacity": 102, "type": "LECTURE", "display_name": f"№{101 + s_idx} (Л)",
+                "x": padding + (s_idx % 4) * (l_w + padding), "y": padding + (s_idx // 4) * (l_h + padding),
+                "width": l_w, "height": l_h
             }
-
-        # 2. Коридор (Центральное пространство) - Теперь МЕЖДУ лекциями и семинарами (v4.7)
-        # Лекции заканчиваются на y=800. Холл начнем с 850.
-        corridor_y = 850
-        corridor_h = 450
-        self.rooms_info["CORRIDOR"] = {
-            "capacity": 2000,
-            "type": "CORRIDOR",
-            "display_name": "КОРИДОР / ХОЛЛ",
-            "x": padding,
-            "y": corridor_y,
-            "width": 8 * (room_size + padding),
-            "height": corridor_h
-        }
-
-        # 3. Семинарские комнаты (групповые) - Начнем ПОСЛЕ коридора
-        # Коридор заканчивается на 850 + 450 = 1300. Семинары начнем с 1350.
-        offset_y_seminars = 1350
+        self.rooms_info["CORRIDOR"] = {"capacity": 1500, "type": "CORRIDOR", "display_name": "ХОЛЛ", "x": padding, "y": 3800, "width": 1100, "height": 600}
+        s_w, s_h = 240, 240
         for g_idx in range(75):
-            f_idx = g_idx // 15
-            s_idx_in_f = (g_idx % 15) // 3
-            g_num = (g_idx % 3) + 1
-            
-            f_name = self.FACULTY_NAMES[f_idx]
-            year = self.START_YEAR + s_idx_in_f
-            room_id = f"Aud_{f_name}_{year}_{g_num}_S"
-            
-            col = g_idx % 8
-            row = g_idx // 8
-            
+            room_id = f"Aud_{self.FACULTY_NAMES[g_idx // 15]}_{str(self.start_academic_year - ((g_idx % 15) // 3))[2:]}_{(g_idx % 3) + 1}_S"
             self.rooms_info[room_id] = {
-                "capacity": 30,
-                "type": "SEMINAR",
-                "display_name": f"№{201 + g_idx}",
-                "x": padding + col * (room_size + padding),
-                "y": offset_y_seminars + row * (room_size + padding),
-                "width": room_size,
-                "height": room_size
+                "capacity": 30, "type": "SEMINAR", "display_name": f"№{201 + g_idx}",
+                "x": padding + (g_idx % 5) * (s_w + padding), "y": 4500 + (g_idx // 5) * (s_h + padding),
+                "width": s_w, "height": s_h
             }
-            
-        # 4. Спортзал (Gym) - Еще ниже
-        # Семинары (75 шт, 10 рядов) закончатся на 1350 + 10*200 = 3350.
-        self.rooms_info["GYM"] = {
-            "capacity": 1000,
-            "type": "GYM",
-            "display_name": "СПОРТЗАЛ",
-            "x": padding,
-            "y": 3400,
-            "width": room_size * 6,
-            "height": room_size * 3
-        }
+        self.rooms_info["GYM"] = {"capacity": 1000, "type": "GYM", "display_name": "СПОРТЗАЛ", "x": padding, "y": 9000, "width": 1200, "height": 600}
 
-    def get_seat_coordinates(self, room_id, student_index_in_room):
-        """Возвращает координаты (x, y) для студента (v4.6: Разряженность и рандом)."""
+    def get_room_cols(self, room_id: str) -> int:
+        info = self.rooms_info.get(room_id, {})
+        rtype = info.get("type", "SEMINAR")
+        if rtype in ["CORRIDOR", "GYM"]: return 40
+        return 6
+
+    def get_seat_coordinates(self, room_id, s_idx):
         info = self.rooms_info.get(room_id)
         if not info: return 0, 0
-        
-        # Рассадка рядами внутри комнаты (Адаптивно)
-        margin = 35
-        available_w = info["width"] - 2 * margin
-        available_h = info["height"] - 2 * margin
-        
-        # Оцениваем оптимальное кол-во колонок исходя из пропорций
-        if info.get("type") == "CORRIDOR":
-            cols = 45 # Больше колонок для длинного холла
-        elif info.get("type") == "LECTURE":
-            cols = 10
-        elif info.get("type") == "GYM":
-            cols = 20
-        else:
-            cols = 5
-            
-        row = student_index_in_room // cols
-        col = student_index_in_room % cols
-        
-        # Шаг рассадки
-        rows_needed = math.ceil(info["capacity"] / cols)
-        step_x = available_w / (cols - 1) if cols > 1 else 0
-        step_y = available_h / (rows_needed - 1) if rows_needed > 1 else 0
-        
-        # Базовые координаты
-        res_x = info["x"] + margin + col * step_x
-        res_y = info["y"] + margin + row * step_y
-        
-        # v4.6: Добавляем "дриблинг" (jitter) для коридоров и зала, чтобы не было ровных шеренг
-        if info.get("type") in ["CORRIDOR", "GYM"]:
-            res_x += random.uniform(-15, 15)
-            res_y += random.uniform(-15, 15)
-            
-        return res_x, res_y
+        cols = self.get_room_cols(room_id)
+        mx, my = 35, 45 
+        step_x = (info["width"] - 2*mx) / (cols - 1) if cols > 1 else 0
+        rows_num = math.ceil(info["capacity"] / cols)
+        step_y = (info["height"] - 2*my) / (rows_num - 1) if rows_num > 1 else 10
+        rx = info["x"] + mx + (s_idx % cols) * step_x
+        ry = info["y"] + my + (s_idx // cols) * step_y
+        if info["type"] in ["CORRIDOR", "GYM"]:
+            rnd = random.Random(s_idx + hash(room_id))
+            rx += rnd.uniform(-15, 15); ry += rnd.uniform(-15, 15)
+        return rx, ry
 
-    def generate_structure(self, agent_names: List[str]):
-        """Распределяет агентов по иерархии (v4.3: Реалистичные названия)."""
-        total_groups = self.faculties_count * self.streams_per_faculty * self.groups_per_stream
-        agents_per_group = len(agent_names) // total_groups
-        
-        agent_idx = 0
-        for f in range(self.faculties_count):
-            f_name = self.FACULTY_NAMES[f]
-            self.structure[f_name] = {}
-            for s in range(self.streams_per_faculty):
-                year = self.START_YEAR + s
-                stream_id = f"{f_name}-{year}"
-                self.structure[f_name][stream_id] = {}
-                for g in range(self.groups_per_stream):
-                    group_id = f"{f_name}-{year}-{g+1}"
-                    self.structure[f_name][stream_id][group_id] = []
-                    
-                    # Наполняем группу
-                    for _ in range(agents_per_group):
-                        if agent_idx < len(agent_names):
-                            self.structure[f_name][stream_id][group_id].append(agent_names[agent_idx])
-                            agent_idx += 1
-        return self.structure
+    def get_desk_geometry(self, room_id, s_idx):
+        info = self.rooms_info.get(room_id)
+        if not info or info["type"] not in ["LECTURE", "SEMINAR"]: return None
+        sx, sy = self.get_seat_coordinates(room_id, s_idx)
+        cols = self.get_room_cols(room_id)
+        step_x = (info["width"] - 70) / (cols - 1)
+        return {"dx": sx - 6, "dy": sy + 5, "dw": step_x + 12, "dh": 8}
 
     def generate_schedules(self):
-        """Генерирует расписание (v4.4: Синхронизация лекций для потока)."""
+        self.schedules = {}
         for f in range(self.faculties_count):
             f_name = self.FACULTY_NAMES[f]
             for s in range(self.streams_per_faculty):
-                year = self.START_YEAR + s
-                
-                # 1. Сначала генерируем ОБЩУЮ сетку лекций для всего потока (года)
-                # Чтобы все 3 группы были на лекции одновременно
-                stream_lecture_slots = {} # day -> list of bool (is_lecture)
-                for day in range(6):
-                    # В день макс 4 слота. Определим, какие из них лекционные (30% шанс)
-                    slots = []
-                    for p in range(4):
-                        slots.append(random.random() < 0.3)
-                    stream_lecture_slots[day] = slots
-
-                # 2. Теперь для каждой группы применяем лекции и добавляем семинары
+                year_suffix = str(self.start_academic_year - s)[2:]
+                stream_lecture_slots = {day: [random.random() < 0.3 for _ in range(4)] for day in range(6)}
                 for g in range(self.groups_per_stream):
-                    g_num = g + 1
-                    group_id = f"{f_name}-{year}-{g_num}"
-                    
+                    group_id = f"{f_name}-{year_suffix}-{g+1}"
                     group_schedule = {}
                     for day in range(6):
                         pairs = []
-                        # Всего пытаемся заполнить 4 слота, но итоговое кол-во пар 2-4
-                        target_pairs = random.randint(2, 4)
-                        
                         for p in range(4):
-                            if len(pairs) >= target_pairs: break
-                            
-                            if stream_lecture_slots[day][p]:
-                                # Если это лекционный слот для потока - все идут в лекторий
-                                pairs.append(f"Aud_{f_name}_{year}_L")
-                            else:
-                                # Иначе семинар или зал (индивидуально для группы)
-                                rand = random.random()
-                                if rand < 0.15: # 15% шанс физкультуры
-                                    pairs.append("GYM")
-                                else:
-                                    pairs.append(f"Aud_{f_name}_{year}_{g_num}_S")
-                        
+                            if stream_lecture_slots[day][p]: pairs.append(f"Aud_{f_name}_{year_suffix}_L")
+                            else: pairs.append("GYM" if random.random() < 0.1 else f"Aud_{f_name}_{year_suffix}_{g+1}_S")
                         group_schedule[day] = pairs
                     self.schedules[group_id] = group_schedule
+        for m_name in self.MASTER_FACULTIES:
+            for year in [1, 2]:
+                group_id = f"{m_name}-M{year}-1"
+                group_schedule = {}
+                for day in range(6):
+                    pairs = []
+                    for p in range(4):
+                        # У магистров больше шансов на лекции и свободное время (v6.9.34)
+                        if random.random() < 0.4: 
+                            # Генерируем случайную лекционную аудиторию
+                            f_code = self.FACULTY_NAMES[random.randint(0,4)]
+                            y_code = str(self.start_academic_year - random.randint(0, 4))[2:]
+                            pairs.append(f"Aud_{f_code}_{y_code}_L")
+                        else: 
+                            pairs.append("GYM" if random.random() < 0.2 else "CORRIDOR")
+                    group_schedule[day] = pairs
+                self.schedules[group_id] = group_schedule
 
-    def get_group_schedule(self, group_id, day_index):
-        return self.schedules.get(group_id, {}).get(day_index, [])
+    def get_group_schedule(self, group_id, day_idx):
+        return getattr(self, 'schedules', {}).get(group_id, {}).get(day_idx, [])
 
-    def create_university_agents(self) -> List[Agent]:
-        """Создает студентов с случайными русскими именами (v4.5)."""
-        import numpy as np
+    def _generate_human_name(self) -> str:
+        if random.random() < 0.5:
+            return f"{random.choice(self.NAMES_M)} {random.choice(self.SURNAMES_M)}"
+        return f"{random.choice(self.NAMES_F)} {random.choice(self.SURNAMES_F)}"
+
+    def create_university_agents(self, total_bac=1500, total_mag=180, bachelor_counts=None, master_counts=None) -> List[Agent]:
+        from core.agent_factory import AgentFactory
         from model.archetypes import ArchetypeEnum
-        
-        total_students = self.faculties_count * self.streams_per_faculty * self.groups_per_stream * 25
         agents = []
+        b_counts = bachelor_counts or {}
+        m_counts = master_counts or {}
         
-        sensitivities = np.random.uniform(0.1, 3.0, total_students)
-        archetypes_list = list(ArchetypeEnum)
-        archetype_indices = np.random.randint(0, len(archetypes_list), total_students)
-        
-        idx = 0
+        def build_pool(counts, total):
+            pool = []
+            arch_list = list(ArchetypeEnum)
+            for name, count in counts.items():
+                arch = next(a for a in arch_list if a.name == name)
+                pool.extend([arch] * int(count))
+            while len(pool) < total:
+                pool.append(random.choice(arch_list))
+            random.shuffle(pool)
+            return pool[:total]
+
+        bac_pool = build_pool(b_counts, total_bac)
+        mag_pool = build_pool(m_counts, total_mag)
+
         for f in range(self.faculties_count):
+            if not bac_pool: break
             f_name = self.FACULTY_NAMES[f]
             for s in range(self.streams_per_faculty):
-                year = self.START_YEAR + s
+                if not bac_pool: break
+                year_suffix = str(self.start_academic_year - s)[2:]
                 for g in range(self.groups_per_stream):
-                    g_num = g + 1
-                    group_id = f"{f_name}-{year}-{g_num}"
+                    if not bac_pool: break
+                    group_id = f"{f_name}-{year_suffix}-{g+1}"
                     for i in range(25):
-                        # Рандомное русское имя
-                        is_fem = random.random() < 0.5
-                        base_name = random.choice(self.NAMES_F if is_fem else self.NAMES_M)
-                        surname = random.choice(self.SURNAMES)
-                        if is_fem and (surname.endswith("ов") or surname.endswith("ев")):
-                            surname += "а"
-                        
-                        unique_name = f"{base_name} {surname} ({f_name}-{year}-{g_num}-{i+1})"
-                        
-                        agent = AgentFactory.create_agent(
-                            unique_name, 
-                            archetype_enum=archetypes_list[archetype_indices[idx]],
-                            sensitivity=float(sensitivities[idx])
-                        )
-                        agent.set_university_info(f_name, f"{f_name}-{year}", group_id)
+                        if not bac_pool: break
+                        # Уникальный ID: S-П-22-1-01 (v6.9.32)
+                        agent_id = f"S-{group_id}-{i+1:02d}"
+                        agent = AgentFactory.create_agent(self._generate_human_name(), archetype_enum=bac_pool.pop(), agent_id=agent_id)
+                        agent.set_university_info(f_name, f"{f_name}-{year_suffix}", group_id)
                         agents.append(agent)
-                        idx += 1
+
+        # 3. Генерация магистров
+        for m_idx, m_name in enumerate(self.MASTER_FACULTIES):
+            if not mag_pool: break
+            for year in [1, 2]:
+                if not mag_pool: break
+                group_id = f"{m_name}-M{year}-1"
+                for i in range(15):
+                    if not mag_pool: break
+                    # Униканый ID: M-ММ-M1-01
+                    agent_id = f"M-{group_id}-{i+1:02d}"
+                    agent = AgentFactory.create_agent(self._generate_human_name(), archetype_enum=mag_pool.pop(), agent_id=agent_id)
+                    agent.degree_type = "MASTER"
+                    parent_faculty = self.FACULTY_NAMES[m_idx % len(self.FACULTY_NAMES)]
+                    agent.set_university_info(parent_faculty, f"{m_name}-M{year}", group_id)
+                    agents.append(agent)
         return agents
-
-    def get_all_groups(self) -> List[str]:
-        """Возвращает плоский список всех существующих ID групп."""
-        groups = []
-        for f in range(self.faculties_count):
-            f_name = self.FACULTY_NAMES[f]
-            for s in range(self.streams_per_faculty):
-                year = self.START_YEAR + s
-                for g in range(self.groups_per_stream):
-                    groups.append(f"{f_name}-{year}-{g+1}")
-        return groups
-

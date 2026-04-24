@@ -4,6 +4,7 @@ from model.university_collective import UniversityCollective
 from model.constants import AgentStatus, TimeSlotType
 from gui.color_utils import get_emotion_color
 import math
+import random
 
 NODE_RADIUS = 6
 INTERACTION_COLOR = "#FFD700" # Золотистый для связей
@@ -38,7 +39,7 @@ class ToolTip:
 class UniversityGUI(tk.Toplevel):
     def __init__(self, parent, collective: UniversityCollective):
         super().__init__(parent)
-        self.title("Университет: Карта Кампуса (V3.2)")
+        self.title("Университет: Карта Кампуса")
         self.geometry("1100x850")
         
         self.collective = collective
@@ -61,8 +62,8 @@ class UniversityGUI(tk.Toplevel):
         self.canvas_frame = tk.Frame(self.main_frame)
         self.canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Увеличиваем scrollregion для больших карт
-        self.canvas = tk.Canvas(self.canvas_frame, bg='#FFFFFF', scrollregion=(0, 0, 2000, 4500))
+        # Увеличиваем scrollregion для больших карт (v6.9.33: Больше высоты для GYM)
+        self.canvas = tk.Canvas(self.canvas_frame, bg='#FFFFFF', scrollregion=(0, 0, 2500, 12000))
         self.h_scroll = tk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
         self.v_scroll = tk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
         
@@ -74,9 +75,40 @@ class UniversityGUI(tk.Toplevel):
         self.canvas_frame.grid_rowconfigure(0, weight=1)
         self.canvas_frame.grid_columnconfigure(0, weight=1)
 
-        # Правая панель (Темная тема для контраста)
-        self.side_panel = tk.Frame(self.main_frame, width=300, padx=15, pady=15, bg='#2C3E50')
-        self.side_panel.pack(side=tk.RIGHT, fill=tk.Y)
+        # Правая панель (Темная тема для контраста) со скроллом (v6.7)
+        self.side_container = tk.Frame(self.main_frame, width=320, bg='#2C3E50')
+        self.side_container.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.side_canvas = tk.Canvas(self.side_container, width=300, bg='#2C3E50', highlightthickness=0)
+        self.side_scroll = tk.Scrollbar(self.side_container, orient="vertical", command=self.side_canvas.yview)
+        
+        # Основной фрейм внутри канваса
+        self.side_panel = tk.Frame(self.side_canvas, bg='#2C3E50', padx=10, pady=15)
+        self.side_canvas.configure(yscrollcommand=self.side_scroll.set)
+        
+        self.side_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.side_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        self.side_window = self.side_canvas.create_window((0, 0), window=self.side_panel, anchor="nw")
+        
+        # Настройка скролла и авто-ширины
+        self.canvas.bind("<Configure>", lambda e: self.canvas.config(scrollregion=self.canvas.bbox("all")))
+        self.canvas.bind("<Enter>", lambda e: self.canvas.focus_set())
+        
+        self.master.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.master.bind_all("<Button-4>", self._on_mousewheel)
+        self.master.bind_all("<Button-5>", self._on_mousewheel)
+        
+        def _on_side_configure(event):
+            self.side_canvas.configure(scrollregion=self.side_canvas.bbox("all"))
+            self.side_canvas.itemconfig(self.side_window, width=event.width)
+            
+        self.side_panel.bind("<Configure>", _on_side_configure)
+        
+        # Поддержка колесика мыши (macOS style)
+        def _on_mousewheel(event):
+            self.side_canvas.yview_scroll(int(-1*(event.delta)), "units")
+        self.side_canvas.bind_all("<MouseWheel>", _on_mousewheel)
 
         tk.Label(self.side_panel, text="ПАРАМЕТРЫ СРЕДЫ", font=('Arial', 14, 'bold'), bg='#2C3E50', fg='#ECF0F1').pack(pady=10)
         
@@ -131,6 +163,29 @@ class UniversityGUI(tk.Toplevel):
         self.selected_agent = None # Имя выбранного агента
         self.selection_circle = None # Canvas ID круга выделения
 
+        # --- ДЕТАЛИ СЦЕНАРИЯ (v6.8: Именованные для обновления) ---
+        scen_frame = tk.LabelFrame(self.side_panel, text=" ПАРАМЕТРЫ ЗАПУСКА ", bg='#2C3E50', fg='#ECF0F1', padx=10, pady=10)
+        scen_frame.pack(fill=tk.X, pady=5)
+        
+        self.lbl_seed = tk.Label(scen_frame, text="Seed: -", bg='#2C3E50', fg='#3498DB', font=('Arial', 9, 'bold'))
+        self.lbl_seed.pack(anchor='w')
+        self.lbl_acad_year = tk.Label(scen_frame, text="Акад. год: -", bg='#2C3E50', fg='#ECF0F1', font=('Arial', 9))
+        self.lbl_acad_year.pack(anchor='w')
+        self.lbl_master_info = tk.Label(scen_frame, text="Шанс остаться в магистратуре: -", bg='#2C3E50', fg='#BC8F8F', font=('Arial', 9))
+        self.lbl_master_info.pack(anchor='w')
+
+        # --- РАСПРЕДЕЛЕНИЕ АРХЕТИПОВ ---
+        arch_frame = tk.LabelFrame(self.side_panel, text=" СОСТАВ КОЛЛЕКТИВА ", bg='#2C3E50', fg='#ECF0F1', padx=10, pady=10)
+        arch_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(arch_frame, text="БАКАЛАВРИАТ:", bg='#2C3E50', fg='#F1C40F', font=('Arial', 9, 'bold')).pack(anchor='w', pady=(5, 2))
+        self.lbl_bac_dist = tk.Label(arch_frame, text="-", bg='#2C3E50', fg='#ECF0F1', font=('Arial', 8), justify=tk.LEFT)
+        self.lbl_bac_dist.pack(anchor='w')
+            
+        tk.Label(arch_frame, text="МАГИСТРАТУРА:", bg='#2C3E50', fg='#F39C12', font=('Arial', 9, 'bold')).pack(anchor='w', pady=(10, 2))
+        self.lbl_mag_dist = tk.Label(arch_frame, text="-", bg='#2C3E50', fg='#ECF0F1', font=('Arial', 8), justify=tk.LEFT)
+        self.lbl_mag_dist.pack(anchor='w')
+
         # Легенда локаций
         legend_frame = tk.LabelFrame(self.side_panel, text="Легенда: Зоны", bg='#2C3E50', fg='#ECF0F1', padx=5, pady=5)
         legend_frame.pack(fill=tk.X, pady=5)
@@ -150,6 +205,40 @@ class UniversityGUI(tk.Toplevel):
             f.pack(fill=tk.X)
             tk.Label(f, bg=color, width=2).pack(side=tk.LEFT, padx=3)
             tk.Label(f, text=text, font=('Arial', 8), bg='#2C3E50', fg='#ECF0F1').pack(side=tk.LEFT)
+
+        # Легенда Сценария (v6.5)
+        self.scenario_frame = tk.LabelFrame(self.side_panel, text="ПАРАМЕТРЫ СЦЕНАРИЯ", bg='#2C3E50', fg='#F1C40F', padx=5, pady=10)
+        self.scenario_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=10)
+        
+        self.lbl_scen_year = tk.Label(self.scenario_frame, text="Старт: -", font=('Arial', 9), bg='#2C3E50', fg='#ECF0F1', anchor='w')
+        self.lbl_scen_year.pack(fill=tk.X)
+        self.lbl_scen_master = tk.Label(self.scenario_frame, text="Шанс Магистратуры: -", font=('Arial', 9), bg='#2C3E50', fg='#ECF0F1', anchor='w')
+        self.lbl_scen_master.pack(fill=tk.X)
+        self.lbl_scen_desc = tk.Label(self.scenario_frame, text="Профиль: -", font=('Arial', 8, 'italic'), bg='#2C3E50', fg='#BDC3C7', anchor='w', wraplength=200)
+        self.lbl_scen_desc.pack(fill=tk.X)
+
+        self.update_scenario_labels()
+
+    def update_scenario_labels(self):
+        """Обновляет текстовые метки настроек сценария."""
+        if not hasattr(self, 'lbl_scen_year'): return
+        config = getattr(self.collective, 'config', {})
+        start_year = config.get("start_year", 2024)
+        m_chance = config.get("master_chance", 0.3)
+        self.lbl_scen_year.config(text=f"Начальный год: {start_year}")
+        self.lbl_scen_master.config(text=f"Шанс Магистратуры: {m_chance*100:.0f}%")
+        
+        # Описание профиля
+        weights = config.get("archetype_weights", {})
+        if not weights:
+            desc = "Сбалансированный"
+        elif weights.get("ERUDITION", 1) > 2:
+            desc = "Техно-Профиль (Упор на ПМИ)"
+        elif weights.get("HARMONY", 1) > 2:
+            desc = "Гуманитарный / Психология"
+        else:
+            desc = "Индивидуальный"
+        self.lbl_scen_desc.config(text=f"Стратегия: {desc}")
 
         # События мыши и клавиатуры
         self.canvas.bind("<Motion>", self.on_mouse_move)
@@ -279,8 +368,10 @@ class UniversityGUI(tk.Toplevel):
 
     def draw_map(self):
         rooms = self.collective.uni_manager.rooms_info
+        max_y = 0
         for room_id, info in rooms.items():
             x, y, w, h = info['x'], info['y'], info['width'], info['height']
+            if y + h > max_y: max_y = y + h
             rtype = info.get('type', 'SEMINAR')
             
             # Цвета в зависимости от типа
@@ -297,7 +388,7 @@ class UniversityGUI(tk.Toplevel):
                 border_color = "#FF9800"
             elif rtype == "CORRIDOR":
                 bg_color = "#F5F5F5"
-                border_color = "#9E9E9E"
+                border_color = "" # Убираем перегородки (v6.9.13)
 
             rect_id = self.canvas.create_rectangle(
                 x * self.zoom_level, y * self.zoom_level, 
@@ -312,8 +403,39 @@ class UniversityGUI(tk.Toplevel):
                 x * self.zoom_level + 5, y * self.zoom_level + 5, 
                 text=display_label, anchor='nw', 
                 font=('Arial', int(8 * self.zoom_level), 'bold'), 
-                fill='#34495E' # Темно-серый для контраста
+                fill='#34495E' 
             )
+
+            # Отрисовка парт (v6.9.16: С просветами между ними)
+            if rtype in ["LECTURE", "SEMINAR"]:
+                capacity = info.get("capacity", 30)
+                for s_idx in range(0, capacity, 2):
+                    desk = self.collective.uni_manager.get_desk_geometry(room_id, s_idx)
+                    if not desk: continue
+                    
+                    # Рисуем парту, используя единые координаты из модели (v6.9.19)
+                    x1 = desk["dx"] * self.zoom_level
+                    y1 = desk["dy"] * self.zoom_level
+                    x2 = (desk["dx"] + desk["dw"]) * self.zoom_level
+                    y2 = (desk["dy"] + desk["dh"]) * self.zoom_level
+                    
+                    self.canvas.create_rectangle(x1, y1, x2, y2, 
+                                                 fill="#ECEFF1", outline="#B0BEC5", width=1)
+
+        # Установка области скролла (v6.9.23: Спортзал на y=9000)
+        self.canvas.config(scrollregion=(0, 0, 1500 * self.zoom_level, (max_y + 400) * self.zoom_level))
+
+    def _on_mousewheel(self, event):
+        """Универсальная плавная обработка прокрутки (v6.9.23)."""
+        if event.num == 4: # Linux Up
+            self.canvas.yview_scroll(-3, "units")
+        elif event.num == 5: # Linux Down
+            self.canvas.yview_scroll(3, "units")
+        else: # macOS / Windows
+            # В macOS delta обычно маленькая, в Windows кратна 120
+            if abs(event.delta) < 1: return
+            move = -1 if event.delta > 0 else 1
+            self.canvas.yview_scroll(move * 3, "units")
 
     def update_agent_positions(self, custom_interactions=None):
         # Удаляем старые связи и точки
@@ -330,29 +452,38 @@ class UniversityGUI(tk.Toplevel):
         current_rooms = self.collective.current_rooms
         positions = {} # name -> (x, y) для отрисовки линий
         
-        # Обновляем точки агентов
-        for room_id, student_names in current_rooms.items():
-            for idx, name in enumerate(student_names):
-                agent = self.collective.agents.get(name)
-                if not agent or agent.status == AgentStatus.HOME: continue
+        # Обновляем точки агентов (v6.9.13: Строгая синхронизация с местами)
+        for name, agent in self.collective.agents.items():
+            if getattr(agent, 'status', None) == AgentStatus.HOME: continue
+            
+            # Получаем реальное место из коллектива
+            seat_idx = self.collective.agent_current_seat.get(name)
+            if seat_idx is None: continue
+            
+            # Определяем, в какой комнате должен быть агент
+            room_id = None
+            for r_id, students in current_rooms.items():
+                if name in students:
+                    room_id = r_id
+                    break
+            if not room_id: continue
                 
-                campus_count += 1
-                rx, ry = self.collective.uni_manager.get_seat_coordinates(room_id, idx)
-                x, y = rx * self.zoom_level, ry * self.zoom_level
-                positions[name] = (x, y)
-                
-                # Цвет на основе актуальной эмоции
-                emotion_name, value = agent.get_primary_emotion()
-                color = get_emotion_color(emotion_name, value)
-                
-                r = NODE_RADIUS * self.zoom_level
-                dot_id = self.canvas.create_oval(
-                    x - r, y - r,
-                    x + r, y + r,
-                    fill=color, outline='#333333', width=1
-                )
-                self.agent_dots[name] = dot_id
-                self.agent_names_by_id[dot_id] = name
+            campus_count += 1
+            rx, ry = self.collective.uni_manager.get_seat_coordinates(room_id, seat_idx)
+            x, y = rx * self.zoom_level, ry * self.zoom_level
+            positions[name] = (x, y)
+            
+            # Отрисовка
+            emotion_name, value = agent.get_primary_emotion()
+            color = get_emotion_color(emotion_name, value)
+            r = NODE_RADIUS * self.zoom_level
+            
+            dot_id = self.canvas.create_oval(
+                x - r, y - r, x + r, y + r,
+                fill=color, outline='#333333', width=1
+            )
+            self.agent_dots[name] = dot_id
+            self.agent_names_by_id[dot_id] = name
 
         # Отрисовка линий взаимодействия
         interactions_to_show = custom_interactions if custom_interactions is not None else getattr(self.collective, 'last_interactions', [])
@@ -362,25 +493,67 @@ class UniversityGUI(tk.Toplevel):
                 p1, p2 = positions[s1], positions[s2]
                 if status == "success":
                     color = "#FFD700" # Золотой
-                    width = 2
+                    width = 1
                 elif status == "refusal":
                     color = "#95A5A6" # Серый/Серебряный
                     width = 1
                 else: # fail
                     color = "#FF4500" # Оранжево-красный
-                    width = 2
+                    width = 1
                     
                 line_id = self.canvas.create_line(p1[0], p1[1], p2[0], p2[1], fill=color, width=width, dash=(4,4))
                 self.interaction_lines.append(line_id)
 
-        # Статистика
+        # Обновление дешборда
+        self.update_side_panel(campus_count, interactions_to_show)
+
+    def update_side_panel(self, campus_count, interactions):
+        """Обновляет все информационные панели справа (v6.8)."""
+        # 1. Дата и Академический Календарь
+        date = self.collective.current_date
+        month = date.month
+        day_name = date.strftime('%A')
+        
+        # Определяем семестр
+        if month in [7, 8]:
+            status = "Летние каникулы"
+        elif 2 <= month <= 6:
+            status = f"Весенний семестр {date.year}"
+        else:
+            status = f"Осенний семестр {date.year}"
+            
+        self.lbl_date.config(text=f"{day_name}, {date.day:02d} {date.strftime('%B')}")
+        self.lbl_acad_year.config(text=f"Статус: {status}")
+        
+        # 2. Слот
         current_slot = self.collective.day_schedule_slots[self.collective.current_slot_idx - 1] if self.collective.current_slot_idx > 0 else "Начало дня"
         slot_name = current_slot.value if hasattr(current_slot, 'value') else current_slot
         self.lbl_slot.config(text=f"СЛОТ: {slot_name}")
-        self.lbl_date.config(text=f"{self.collective.current_date.strftime('%A, %d %b %Y')}")
-        self.lbl_stats.config(text=f"В кампусе: {campus_count} из {len(self.collective.agents)}\n\n"
-                                   f"Статус: {slot_name}\n"
-                                   f"Взаимодействий: {len(interactions_to_show)}")
+        
+        # 3. Инфо о сценарии
+        config = getattr(self.collective, 'config', {})
+        self.lbl_seed.config(text=f"Seed: {getattr(self.collective, 'seed', 'N/A')}")
+        self.lbl_master_info.config(text=f"Шанс остаться в магистратуре: {int(config.get('master_chance', 0.3)*100)}%")
+        
+        # 4. Демография
+        bac_counts = {}
+        mag_counts = {}
+        from model.archetypes import ArchetypeEnum
+        for a in self.collective.agents.values():
+            is_master = getattr(a, 'degree_type', 'BACHELOR') == 'MASTER'
+            target = mag_counts if is_master else bac_counts
+            
+            # Получаем красивое имя архетипа (v6.9.30)
+            arch_enum = getattr(a.automaton, 'archetype_enum', None)
+            nm = arch_enum.localized if arch_enum else a.archetype.name
+            target[nm] = target.get(nm, 0) + 1
+            
+        self.lbl_bac_dist.config(text="\n".join([f"  {k}: {v}" for k, v in sorted(bac_counts.items())]))
+        self.lbl_mag_dist.config(text="\n".join([f"  {k}: {v}" for k, v in sorted(mag_counts.items())]))
+        
+        # 5. Общая статистика
+        self.lbl_stats.config(text=f"В кампусе: {campus_count} из {len(self.collective.agents)}\n"
+                                   f"Взаимодействий: {len(interactions)}")
 
     def next_step(self):
         interactions = self.collective.perform_next_step()
@@ -446,13 +619,20 @@ class UniversityGUI(tk.Toplevel):
                 
                 # Учитываем зум при проверке дистанции до агента
                 if dist < 15 * self.zoom_level and item[0] in self.agent_names_by_id:
-                    name = self.agent_names_by_id[item[0]]
-                    agent = self.collective.agents[name]
-                    info = (f"Имя: {name}\n"
+                    agent_id = self.agent_names_by_id[item[0]]
+                    agent = self.collective.agents[agent_id]
+                    
+                    # Локализация для тултипа (v6.9.32)
+                    arch_enum = getattr(agent.automaton, 'archetype_enum', None)
+                    arch_name = arch_enum.localized if arch_enum else agent.archetype.name
+                    
+                    primary_emotion = agent.get_primary_emotion()[0]
+                    
+                    info = (f"Имя: {agent.name} ({agent_id})\n"
                             f"Группа: {agent.group_id}\n"
-                            f"Путь: {agent.archetype.name}\n"
+                            f"Архетип: {arch_name}\n"
                             f"Спорт: {int(agent.sportiness*100)}% | Прогулы: {int(agent.skip_tendency*100)}%\n"
-                            f"Эмоция: {agent.get_primary_emotion()[0]}")
+                            f"Эмоция: {primary_emotion}")
                     self.tooltip.show_tip(info, event.x_root, event.y_root)
                     return
         
@@ -467,6 +647,6 @@ class UniversityGUI(tk.Toplevel):
             self.draw_map()
             self.update_agent_positions()
             
-            # Обновляем scrollregion
-            self.canvas.config(scrollregion=(0, 0, 2500 * self.zoom_level, 5000 * self.zoom_level))
+            # Обновляем scrollregion (v6.9.33)
+            self.canvas.config(scrollregion=(0, 0, 3000 * self.zoom_level, 12000 * self.zoom_level))
             self.lbl_zoom.config(text=f"Масштаб: {int(self.zoom_level * 100)}%")

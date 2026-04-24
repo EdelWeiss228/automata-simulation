@@ -61,9 +61,9 @@ class Collective:
             AgentFactory.initialize_agent_relations(agent, list(self.agents.keys()))
 
     def add_agent(self, agent):
-        """Добавить агента в коллектив."""
+        """Добавляет агента в коллектив (v6.9.32: Исправлено)."""
         agent.group = self
-        self.agents[agent.name] = agent
+        self.agents[agent.id] = agent
         self.agent_count += 1
 
     def add_player(self, player):
@@ -72,22 +72,23 @@ class Collective:
         AgentFactory.initialize_player_relations(player, list(self.agents.keys()), self.agents)
 
     def introduce_new_agent(self, new_agent):
-        """Ввести нового агента и установить связи."""
+        """Ввести нового агента и установить связи (v6.9.36)."""
         self.add_agent(new_agent)
-        # Инициализируем отношения с остальными
+        # Инициализируем отношения с остальными (по ID)
         AgentFactory.initialize_agent_relations(new_agent, list(self.agents.keys()))
         # И у остальных с ним
+        new_id = new_agent.id
         for other_agent in self.agents.values():
-            if other_agent.name != new_agent.name:
-                AgentFactory.initialize_agent_relations(other_agent, [new_agent.name])
+            if other_agent.id != new_id:
+                AgentFactory.initialize_agent_relations(other_agent, [new_id])
 
-    def get_agent(self, name):
-        """Получить агента по имени."""
-        return self.agents.get(name)
+    def get_agent(self, agent_id):
+        """Получить агента по его уникальному ID (v6.9.36)."""
+        return self.agents.get(agent_id)
 
-    def get_agent_by_name(self, name):
-        """Получить агента по имени (синоним get_agent)."""
-        return self.agents.get(name)
+    def get_agent_by_name(self, agent_id):
+        """Синоним get_agent (по ID)."""
+        return self.agents.get(agent_id)
 
     def update_relation(self, subject_name, object_name, **relations):
         """Обновить отношения между агентами."""

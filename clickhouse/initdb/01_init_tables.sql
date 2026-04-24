@@ -42,3 +42,13 @@ CREATE TABLE IF NOT EXISTS interactions (
     type Enum8('refusal' = 0, 'success' = 1, 'fail' = 2) Codec(ZSTD(1))
 ) ENGINE = MergeTree()
 ORDER BY (run_id, day_id, slot_id, from_id);
+
+CREATE TABLE IF NOT EXISTS agent_registry (
+    run_id UUID Codec(ZSTD(3)),          -- ID сценария
+    agent_id UInt32,                     -- Числовой ID агента (используется в симуляции)
+    string_id String,                    -- Уникальный строковой ID (например S-П-22-1-03)
+    name String,                         -- Имя агента
+    group_id String,                     -- ID группы
+    archetype String                     -- Архетип
+) ENGINE = MergeTree()
+ORDER BY (run_id, agent_id);

@@ -147,6 +147,44 @@ class ClickHouseLogger:
                 'run_id', 'day_id', 'slot_id', 'from_id', 'to_id', 'type'
             ])
 
+    def log_agent_registry(self, collective):
+        """
+        Логирует реестр агентов: связывает числовые ID (из C++ ядра) со строковыми ID и метаданными.
+        Вызывается один раз в начале симуляции.
+        """
+        if not self.client: return
+        
+        data = []
+        n = len(collective.agents)
+        if hasattr(collective, '_reverse_id_map'):
+            for i in range(n):
+                string_id = collective._reverse_id_map.get(i)
+                if not string_id: continue
+                
+                agent = collective.agents.get(string_id)
+                if not agent: continue
+                
+                name = getattr(agent, 'name', string_id)
+                group_id = getattr(agent, 'group_id', 'Unknown')
+                
+                arch_enum = getattr(agent.automaton, 'archetype_enum', None)
+                archetype = arch_enum.localized if arch_enum else getattr(agent.archetype, 'name', 'Harmony')
+                
+                row = [
+                    self.run_id,
+                    i,
+                    str(string_id),
+                    str(name),
+                    str(group_id),
+                    str(archetype)
+                ]
+                data.append(row)
+                
+            if data:
+                self.client.insert('agent_registry', data, column_names=[
+                    'run_id', 'agent_id', 'string_id', 'name', 'group_id', 'archetype'
+                ])
+
     def fetch_state(self, target_run_id: str, day_id: int, slot_id: int):
         """
         Retrieves a simulation snapshot from ClickHouse.

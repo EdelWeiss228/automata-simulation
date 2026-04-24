@@ -13,9 +13,24 @@ class ArchetypeEnum(Enum):
     TRAILBLAZE = 'Trailblaze'
     REMEMBRANCE = 'Remembrance'
 
+    @property
+    def localized(self):
+        mapping = {
+            'Erudition': 'Мудрец',
+            'Enigmata': 'Бунтарь',
+            'Harmony': 'Гармоничный',
+            'Hunt': 'Воин',
+            'Elation': 'Трикстер',
+            'Preservation': 'Страж',
+            'Nihility': 'Тайна',
+            'Trailblaze': 'Путеводитель',
+            'Remembrance': 'Память'
+        }
+        return mapping.get(self.value, self.value)
+
 
 class Archetype:
-    def __init__(self, name, weights, description, refusal_chance=0.3, decay_rate=0.1, temperature=1.0, refusal_vulnerability=0, emotion_effects=None, emotion_coefficients=None, scoring_config=None):
+    def __init__(self, name, weights, description, refusal_chance=0.3, decay_rate=0.1, temperature=1.0, refusal_vulnerability=0, emotion_effects=None, emotion_coefficients=None, scoring_config=None, context_adaptability=None, subject_resistance=None):
         self.name = name
         self.weights = weights
         self.description = description
@@ -23,6 +38,12 @@ class Archetype:
         self.decay_rate = decay_rate
         self.temperature = temperature
         self.refusal_vulnerability = refusal_vulnerability
+        self.context_adaptability = context_adaptability or {
+            'STUDY': 1.0,
+            'BREAK': 1.0,
+            'GYM': 1.0
+        }
+        # self.subject_resistance = subject_resistance or {} # Временно закомментировано (Задел на будущее - Влияние предметов)
         self.scoring_config = scoring_config or {
             "affinity": "linear",
             "utility": "linear",
@@ -73,7 +94,16 @@ ARCHETYPE_WEIGHTS = {
             "affinity": "linear",
             "utility": "log",
             "trust": "linear"
+        },
+        context_adaptability={
+            'STUDY': 2.0,   # Процветает на учебе
+            'BREAK': 0.5,   # Игнорирует разговоры в коридоре
+            'GYM': 0.5      # Пассивен в зале
         }
+        # subject_resistance={
+        #    "sadness_joy": 1.5, # Плюс к радости от зубрежки
+        #    "fear_calm": 0.5    # Меньше страха на парах
+        # }
     ),
     ArchetypeEnum.ENIGMATA: Archetype(
         name='Enigmata',
@@ -109,7 +139,12 @@ ARCHETYPE_WEIGHTS = {
         decay_rate=4,
         temperature=0.3,
         refusal_vulnerability=1,
-        scoring_config={"affinity": "sigmoid", "utility": "linear", "trust": "exp"}
+        scoring_config={"affinity": "sigmoid", "utility": "linear", "trust": "exp"},
+        context_adaptability={
+            'STUDY': 1.0,
+            'BREAK': 2.0,   # Максимум общения в коридоре
+            'GYM': 1.0
+        }
     ),
     ArchetypeEnum.HUNT: Archetype(
         name='Hunt',
@@ -127,7 +162,12 @@ ARCHETYPE_WEIGHTS = {
         decay_rate=12,
         temperature=0.1,
         refusal_vulnerability=2,
-        scoring_config={"affinity": "linear", "utility": "linear", "trust": "sigmoid"}
+        scoring_config={"affinity": "linear", "utility": "linear", "trust": "sigmoid"},
+        context_adaptability={
+            'STUDY': 0.5,
+            'BREAK': 1.0,
+            'GYM': 3.0      # Доминирует в спортзале (Спортсмен)
+        }
     ),
     ArchetypeEnum.ELATION: Archetype(
         name='Elation',

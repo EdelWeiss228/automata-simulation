@@ -22,7 +22,7 @@ class InteractionStrategy:
         """
         emotion_name, emotion_value = agent.get_primary_emotion()
         # Игрок отвечает на эмоцию
-        player.respond_to_agent(agent.name, emotion_name, emotion_value)
+        player.respond_to_agent(agent.id, emotion_name, emotion_value)
         
         # Агент обновляет отношение к игроку (delta теперь в x10)
         s_i = getattr(agent, 'sensitivity', 1.0)
@@ -54,10 +54,14 @@ class InteractionStrategy:
         return val_orig # linear по умолчанию
 
     @classmethod
-    def priority_score(cls, agent, target_name, metrics):
+    def priority_score(cls, agent, target_name, metrics, context=None):
         """
         Расчет приоритета цели на основе реляционных метрик.
+        v6.0: Если отношений еще нет (первокурсник), возвращаем 0.5 для равномерного Softmax.
         """
+        if not metrics:
+            return 0.5
+            
         config = getattr(agent.archetype, 'scoring_config', {})
         
         affinity = metrics.get('affinity', 0)
@@ -71,7 +75,14 @@ class InteractionStrategy:
 
         alpha = 1.5
         
-        return a_score + u_score + alpha * t_score
+        base_score = a_score + u_score + alpha * t_score
+        
+        # Влияние Среды (v5.5): Умножаем итоговый скор на коэффициент общительности в данном контексте
+        if context and hasattr(agent, 'context_adaptability'):
+            context_multiplier = agent.context_adaptability.get(context, 1.0)
+            base_score *= context_multiplier
+            
+        return base_score
 
     @staticmethod
     def categorize_relationships(agent):
@@ -116,41 +127,37 @@ class InteractionStrategy:
     @staticmethod
     def process_refusal(agent, target_agent):
         """
-        Обработать отказ взаимодействия между агентами.
-        Штраф получает только инициатор (agent), так как его чаяния не оправдались.
-        Тот, кто отказал (target_agent), не меняет своего мнения об инициаторе.
+        Обработать отказ взаимодействия между агентами (v6.9.35).
         """
         s_i = getattr(agent, 'sensitivity', 1.0)
 
-        if target_agent.name not in agent.relations:
+        if target_agent.id not in agent.relations:
             from core.agent_factory import AgentFactory
-            AgentFactory.initialize_agent_relations(agent, [target_agent.name])
+            AgentFactory.initialize_agent_relations(agent, [target_agent.id])
 
         vuln_i = getattr(agent.archetype, 'refusal_vulnerability', 0)
         penalty = 20 * s_i # Умеренный штраф (-2.0 в старой шкале)
 
         if vuln_i == 0:
-            agent.relations[target_agent.name]['utility'] = agent.limit_predicate_value(
-                agent.relations[target_agent.name].get('utility', 0) - penalty
+            agent.relations[target_agent.id]['utility'] = agent.limit_predicate_value(
+                agent.relations[target_agent.id].get('utility', 0) - penalty
             )
         elif vuln_i == 1:
-            agent.relations[target_agent.name]['affinity'] = agent.limit_predicate_value(
-                agent.relations[target_agent.name].get('affinity', 0) - penalty
+            agent.relations[target_agent.id]['affinity'] = agent.limit_predicate_value(
+                agent.relations[target_agent.id].get('affinity', 0) - penalty
             )
         else:
-            agent.relations[target_agent.name]['trust'] = agent.limit_predicate_value(
-                agent.relations[target_agent.name].get('trust', 0) - penalty
+            agent.relations[target_agent.id]['trust'] = agent.limit_predicate_value(
+                agent.relations[target_agent.id].get('trust', 0) - penalty
             )
 
         # Тот, кто отказал, не меняет мнения. Логика изменений убрана.
 
     @staticmethod
-    def process_interaction_result(agent, target_agent, sigma):
+    def process_interaction_result(agent, target_agent, sigma, context=None):
         """
         Обработать результат взаимодействия (Sigma) и обновить отношения.
-        Влияние зависит от знака первичной эмоции:
-        - Успех (1) усиливает позитив (x2.0) и гасит негатив (x0.5)
-        - Неудача (-1) гасит позитив (x0.5) и раздувает негатив (x2.0)
+        v5.5: Интеграция контекста (STUDY, GYM, BREAK).
         """
         s_i = getattr(agent, "sensitivity", 1.0)
         s_t = getattr(target_agent, "sensitivity", 1.0)
@@ -173,20 +180,24 @@ class InteractionStrategy:
         if sigma == -1:
             base_trust = -20 * multiplier
             base_affinity = -5 * multiplier
-
-        for a, t_obj, s in [(agent, target_agent, s_i), (target_agent, agent, s_t)]:
-            t_name = t_obj.name
-            if t_name not in a.relations:
-                from core.agent_factory import AgentFactory
-                AgentFactory.initialize_agent_relations(a, [t_name])
             
-            # Применяем изменения
-            a.relations[t_name]['affinity'] = a.limit_predicate_value(
-                a.relations[t_name].get('affinity', 0) + int(base_affinity * s)
+        # Влияние Среды (v5.5): Динамический мультипликатор получения опыта отношений в контесте
+        c_i = agent.context_adaptability.get(context, 1.0) if hasattr(agent, 'context_adaptability') and context else 1.0
+        c_t = target_agent.context_adaptability.get(context, 1.0) if hasattr(target_agent, 'context_adaptability') and context else 1.0
+
+        for a, t_obj, s, c_mod in [(agent, target_agent, s_i, c_i), (target_agent, agent, s_t, c_t)]:
+            t_id = t_obj.id
+            if t_id not in a.relations:
+                from core.agent_factory import AgentFactory
+                AgentFactory.initialize_agent_relations(a, [t_id])
+            
+            # Применяем изменения с учетом чувствительности (s) и адаптивности к контексту (c_mod)
+            a.relations[t_id]['affinity'] = a.limit_predicate_value(
+                a.relations[t_id].get('affinity', 0) + int(base_affinity * s * c_mod)
             )
-            a.relations[t_name]['utility'] = a.limit_predicate_value(
-                a.relations[t_name].get('utility', 0) + int(base_affinity * s)
+            a.relations[t_id]['utility'] = a.limit_predicate_value(
+                a.relations[t_id].get('utility', 0) + int(base_affinity * s * c_mod)
             )
-            a.relations[t_name]['trust'] = a.limit_predicate_value(
-                a.relations[t_name].get('trust', 0) + int(base_trust * s)
+            a.relations[t_id]['trust'] = a.limit_predicate_value(
+                a.relations[t_id].get('trust', 0) + int(base_trust * s * c_mod)
             )

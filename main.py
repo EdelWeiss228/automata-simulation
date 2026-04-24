@@ -1,109 +1,104 @@
 import argparse
 import sys
 import os
+import json
 
 def main():
-    parser = argparse.ArgumentParser(description="Automata Simulation Engine v5.0")
+    parser = argparse.ArgumentParser(description="Automata Simulation Engine v6.7")
     parser.add_argument("--scenario", type=str, help="Path to scenario JSON file")
     parser.add_argument("--steps", type=int, help="Number of steps to run (overrides scenario)")
     parser.add_argument("--silent", "--headless", action="store_true", help="Run in silent mode (no GUI)")
     parser.add_argument("--gui", action="store_true", help="Force GUI mode")
-    parser.add_argument("--university", action="store_true", help="Launch directly into University map")
+    parser.add_argument("--university", "--uni", action="store_true", help="Launch directly into University map")
+    parser.add_argument("--seed", type=int, help="Seed for reproducibility")
     parser.add_argument("--create-scenario", type=str, metavar="PATH", help="Generate a template scenario JSON and exit")
-    parser.add_argument("--version", action="version", version="Automata Simulation Engine v5.0")
+    parser.add_argument("--version", action="version", version="Automata Simulation Engine v6.7")
     
     args = parser.parse_args()
 
-    # Defer imports to avoid initializing GUI if not needed
-    from model.simulation_session import SimulationSession
-    from model.collective import Collective
-    from model.university_collective import UniversityCollective
-    
-    session = SimulationSession()
-
+    # Early exit for scenario creation
     if args.create_scenario:
+        from model.simulation_session import SimulationSession
+        session = SimulationSession(seed=args.seed)
         session.create_template_scenario(args.create_scenario)
         sys.exit(0)
 
-    # If scenario is provided, we use the unified run logic
-    if args.scenario:
-        if args.silent or (not args.gui and not sys.stdin.isatty()):
-            # Headless run from scenario
-            session.load_scenario(args.scenario)
-            if args.steps:
-                session.total_steps = args.steps
-                
-            if args.university:
-                if not isinstance(session.collective, UniversityCollective):
-                    # Convert to university
-                    univ = UniversityCollective(seed=session.collective.seed)
-                    session.reset(new_collective=univ)
-            
-            steps = args.steps if args.steps is not None else session.total_steps
-            print(f"Запуск сценария {os.path.basename(args.scenario)} ({steps} шагов)...", flush=True)
-            for step in range(steps):
-                session.run_day()
-                print(f"Шаг {step+1}/{steps} завершен", flush=True)
-        else:
-            # GUI run from scenario
-            try:
-                from gui.simulation_gui import SimulationGUI
-                from gui.university_gui import UniversityGUI
-            except ImportError:
-                print("Error: GUI components not available.", file=sys.stderr)
-                sys.exit(1)
-                
-            session.load_scenario(args.scenario)
-            if args.steps:
-                session.total_steps = args.steps
-            
-            if args.university:
-                # Force University mode if loading from scenario
-                if not isinstance(session.collective, UniversityCollective):
-                    print("Warning: Scenario is not a University scenario, but --university was specified. Converting...")
-                    univ = UniversityCollective(seed=session.collective.seed)
-                    session.reset(new_collective=univ)
-                
-                app = UniversityGUI(None, session.collective)
-                app.session = session # Link session for logging
-                # Tk root is needed if we launch it directly
-                import tkinter as tk
-                root = app.master
-                root.withdraw() # Hide the empty root
-                app.protocol("WM_DELETE_WINDOW", sys.exit)
-                app.mainloop()
-            else:
-                app = SimulationGUI(session=session)
-                app.mainloop()
-    else:
-        # Default behavior (New World) or manual launch
-        if args.silent:
-            print("Error: Silent mode requires a scenario file (--scenario).", file=sys.stderr)
-            sys.exit(1)
-        
+    # 1. Handle University Mode (Robust GUI launch)
+    if args.university:
+        print("[System] Loading University Mode...", flush=True)
         try:
-            from gui.simulation_gui import SimulationGUI
-            from gui.university_gui import UniversityGUI
-        except ImportError:
-            print("Error: GUI components not available.", file=sys.stderr)
-            sys.exit(1)
-            
-        if args.university:
-            # Direct University Launch without scenario
-            univ = UniversityCollective()
-            session.reset(new_collective=univ)
-            
-            # Show map directly
             import tkinter as tk
-            root = tk.Tk()
-            root.withdraw()
+            from tkinter import messagebox
+            from gui.university_setup_wizard import UniversitySetupWizard
+        except ImportError as e:
+            print(f"Error: GUI dependencies missing: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        root = tk.Tk()
+        root.title("University Loader")
+        root.geometry("1x1+0+0") 
+        
+        print("[System] Opening Setup Wizard...", flush=True)
+        wizard = UniversitySetupWizard(root)
+        root.wait_window(wizard)
+        
+        config = wizard.result_config
+        if not config:
+            print("[System] Setup cancelled.")
+            sys.exit(0)
+
+        print("[System] Initializing University Core...", flush=True)
+        try:
+            from model.university_collective import UniversityCollective
+            from model.simulation_session import SimulationSession
+            from gui.university_gui import UniversityGUI
+            
+            # Priority: Wizard/JSON Seed > CLI Argument Seed
+            effective_seed = config.get("seed", args.seed)
+            univ = UniversityCollective(seed=effective_seed, config=config)
+            session = SimulationSession(collective=univ)
+            
+            if args.steps:
+                session.total_steps = args.steps
+                
+            print("[System] Launching Campus Map...", flush=True)
             app = UniversityGUI(root, univ)
             app.session = session
+            root.withdraw()
+            
             app.protocol("WM_DELETE_WINDOW", sys.exit)
             app.mainloop()
-        else:
-            app = SimulationGUI(session=session)
-            app.mainloop()
+        except Exception as e:
+            import traceback
+            error_msg = f"Critical Error:\n{e}\n\n{traceback.format_exc()}"
+            print(error_msg, file=sys.stderr)
+            messagebox.showerror("Fatal Error", error_msg)
+            sys.exit(1)
+        return
+
+    # 2. Standard Simulation Branch
+    from model.simulation_session import SimulationSession
+    session = SimulationSession(seed=args.seed)
+    
+    if args.scenario:
+        session.load_scenario(args.scenario)
+        if args.steps:
+            session.total_steps = args.steps
+
+    is_headless = args.silent or (not args.gui and not sys.stdin.isatty())
+    
+    if is_headless:
+        if not args.scenario:
+            print("Error: Silent mode requires a scenario file (--scenario).", file=sys.stderr)
+            sys.exit(1)
+        steps = args.steps if args.steps is not None else session.total_steps
+        for step in range(steps):
+            session.run_day()
+        print("Done.")
+    else:
+        from gui.simulation_gui import SimulationGUI
+        app = SimulationGUI(session=session)
+        app.mainloop()
 
 if __name__ == "__main__":
     main()

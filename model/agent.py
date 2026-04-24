@@ -17,15 +17,20 @@ class Agent:
     def __init__(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
         name,
+        id=None,
+        archetype=None,
         emotions=None,
         emotion_effects=None,
         emotion_coefficients=None,
-        sensitivity: int = 10,
-        archetype=None,
+        sensitivity: float = 1.0,
         sportiness: Optional[float] = None,
         skip_tendency: Optional[float] = None,
+        course_year: int = 1,
+        enrollment_year: int = 2024,
+        degree_type: str = "BACHELOR",
     ):
         self.name = name
+        self.id = id if id else name
         self.automaton = EmotionAutomaton()
         if archetype:
             self.automaton.set_archetype(archetype)
@@ -39,12 +44,21 @@ class Agent:
         self.skip_tendency = skip_tendency if skip_tendency is not None else random.uniform(0, 0.3)
         self.status = AgentStatus.HOME
         
+        # Жизненный цикл (v6.0)
+        self.course_year = course_year
+        self.enrollment_year = enrollment_year
+        self.degree_type = degree_type
+        
         # Иерархия
         self.faculty = None
         self.stream = None
         self.group_id = None
         self.current_pair_index = -1
         self.seated_next_to = None
+        
+        # Контекст и Предметы (v5.5)
+        self.context_adaptability = self.archetype.context_adaptability if self.archetype else {'STUDY': 1.0, 'BREAK': 1.0, 'GYM': 1.0}
+        # self.subject_resistance = self.archetype.subject_resistance if self.archetype else {} # Задел на будущее
 
         self.emotion_effects = emotion_effects or self.archetype.emotion_effects
         self.emotion_coefficients = emotion_coefficients or self.archetype.emotion_coefficients
@@ -87,23 +101,20 @@ class Agent:
         return dict(self.relations)
 
     def get_primary_emotion(self):
-        """
-        Определяет основную эмоцию.
-        """
-        max_abs = 0
-        candidates = []
-        for name, pair in self.automaton.pairs.items():
-            val_abs = abs(pair.value)
-            if val_abs > max_abs:
-                max_abs = val_abs
-                candidates = [(name, pair.value)]
-            elif val_abs == max_abs and val_abs > 0:
-                candidates.append((name, pair.value))
+        """Возвращает название и интенсивность доминирующей эмоции (v6.9.31)."""
+        max_pair = None
+        max_val = -1
+        for axis, pair in self.automaton.pairs.items():
+            if abs(pair.value) > max_val:
+                max_val = abs(pair.value)
+                max_pair = (axis, pair.value)
         
-        if not candidates:
-            return None, 0
-            
-        return random.choice(candidates)
+        if not max_pair or max_val == 0:
+            return "Нейтрально", 0
+        
+        axis, val = max_pair
+        label = axis.get_localized_label(val)
+        return label, val
 
     def react_to_relations(self):
         """
@@ -205,7 +216,7 @@ class Agent:
         
         for target_name, relation in self.relations.items():
             target_agent = self.get_agent(target_name)
-            if not target_agent or target_agent.classify_relationship(self.name) == "avoid":
+            if not target_agent or target_agent.classify_relationship(self.id) == "avoid":
                 continue
 
             avg_rel = (relation["affinity"] + relation["trust"] + relation["utility"]) // 3
