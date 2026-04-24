@@ -59,8 +59,8 @@ void Engine::influence_emotions() {
             float t_ij = (float)state.relations[base_ij + 2];
             
             float effect_strength = (a_ij + t_ij + u_ij) / 3.0f;
-            // Уменьшаем common_factor, т.к. значения выросли в 10 раз
-            float common_factor = std::abs(effect_strength) * state.sensitivities[j] * 0.001f;
+            // Увеличиваем common_factor для более динамичных эмоций (v6.9.37)
+            float common_factor = std::abs(effect_strength) * state.sensitivities[j] * 0.05f;
 
             int offset_j = j * SimulationState::NUM_AXES;
             for (int a = 0; a < SimulationState::NUM_AXES; ++a) {

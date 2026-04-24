@@ -4,7 +4,8 @@ class EmotionPair:
     """Класс для представления и управления значением пары противоположных эмоций."""
     def __init__(self, name, min_value=-30, max_value=30):
         self.name = name
-        self.value = 0
+        import random
+        self.value = random.randint(-30, 30)
         self.min_value = int(min_value)
         self.max_value = int(max_value)
 
