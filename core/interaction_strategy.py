@@ -20,7 +20,7 @@ class InteractionStrategy:
         """
         Обрабатывает инициативу агента по отношению к игроку.
         """
-        emotion_name, emotion_value = agent.get_primary_emotion()
+        emotion_name, _, emotion_value = agent.get_primary_emotion()
         # Игрок отвечает на эмоцию
         player.respond_to_agent(agent.id, emotion_name, emotion_value)
         
@@ -163,7 +163,7 @@ class InteractionStrategy:
         s_t = getattr(target_agent, "sensitivity", 1.0)
         
         # Получаем знак и силу первичной эмоции инициатора
-        _, e_val = agent.get_primary_emotion()
+        _, _, e_val = agent.get_primary_emotion()
         
         # Определяем множитель на основе Сигма-модели
         multiplier = 1.0

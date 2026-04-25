@@ -204,7 +204,7 @@ class SimulationGUI(tk.Tk):
         # Сразу красим, если агент уже со старыми эмоциями
         agent = self.session.collective.get_agent(agent_name)
         if agent:
-             emotion_name, value = agent.get_primary_emotion()
+             emotion_name, _, value = agent.get_primary_emotion()
              color = get_emotion_color(emotion_name, value)
              node.set_color(color)
         
@@ -267,7 +267,7 @@ class SimulationGUI(tk.Tk):
         # Обновление цветов
         for name, agent in self.session.collective.agents.items():
             if name in self.agent_nodes:
-                emotion_name, value = agent.get_primary_emotion()
+                emotion_name, _, value = agent.get_primary_emotion()
                 color = get_emotion_color(emotion_name, value)
                 self.agent_nodes[name].set_color(color)
 

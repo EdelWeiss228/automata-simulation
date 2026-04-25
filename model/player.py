@@ -55,7 +55,7 @@ class Player:
                 target_agent_name = approached_agents[choice - 1]
                 target_agent = agents_dict.get(target_agent_name)
 
-                emotion_name, emotion_value = target_agent.get_primary_emotion()
+                emotion_name, _, emotion_value = target_agent.get_primary_emotion()
                 print(
                     f"{target_agent.name} выбирает взаимодействие с вами. "
                     f"Его примарная эмоция: {emotion_name} с силой {emotion_value}."

@@ -110,11 +110,11 @@ class Agent:
                 max_pair = (axis, pair.value)
         
         if not max_pair or max_val == 0:
-            return "Нейтрально", 0
+            return "neutral", "Нейтрально", 0
         
         axis, val = max_pair
         label = axis.get_localized_label(val)
-        return label, val
+        return axis.value, label, val
 
     def react_to_relations(self):
         """
@@ -206,7 +206,7 @@ class Agent:
 
     def influence_emotions(self):
         """Влияет на эмоции других агентов (Python-запасной вариант)."""
-        primary_emotion_name, primary_emotion_value = self.get_primary_emotion()
+        primary_emotion_name, _, primary_emotion_value = self.get_primary_emotion()
         if not primary_emotion_value: return
 
         total_intensity = sum(abs(pair.value) for pair in self.automaton.pairs.values())

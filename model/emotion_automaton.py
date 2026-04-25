@@ -43,10 +43,11 @@ class EmotionAutomaton:
         self.weights = archetype_obj.weights
         self.pairs = {axis: EmotionPair(axis.value) for axis in EmotionAxis}
 
-    def adjust_emotion(self, axis: EmotionAxis, delta: float):
+    def adjust_emotion(self, axis: Union[EmotionAxis, str], delta: float):
         """Корректирует эмоцию по оси с учетом веса архетипа."""
         if axis in self.pairs:
-            weight = self.weights.get(axis, 1)
+            axis_key = axis.value if hasattr(axis, 'value') else axis
+            weight = self.weights.get(axis_key, 10) / 10.0
             self.pairs[axis].adjust(delta * weight)
 
     def set_emotion(self, axis: EmotionAxis, value: float):
@@ -96,6 +97,7 @@ class EmotionAutomaton:
         self.weights = archetype_obj.weights
         for axis, pair in self.pairs.items():
             original_value = pair.value
-            weight = self.weights.get(axis, 1)
+            axis_key = axis.value if hasattr(axis, 'value') else axis
+            weight = self.weights.get(axis_key, 10) / 10.0
             # Пересчитываем значение эмоции с учетом нового веса
             pair.set(original_value * weight)

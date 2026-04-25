@@ -59,8 +59,8 @@ void Engine::influence_emotions() {
             float t_ij = (float)state.relations[base_ij + 2];
             
             float effect_strength = (a_ij + t_ij + u_ij) / 3.0f;
-            // Увеличиваем common_factor для более динамичных эмоций (v6.9.37)
-            float common_factor = std::abs(effect_strength) * state.sensitivities[j] * 0.05f;
+            // Учитываем размер коллектива (num_agents), чтобы избежать экспоненциального взрыва эмоций при больших N.
+            float common_factor = ((std::abs(effect_strength) + 20.0f) * state.sensitivities[j] * 5.0f) / std::max(1, num_agents);
 
             int offset_j = j * SimulationState::NUM_AXES;
             for (int a = 0; a < SimulationState::NUM_AXES; ++a) {
@@ -74,16 +74,16 @@ void Engine::influence_emotions() {
                 
                 float r_sens = state.sensitivities[j];
                 // delta здесь - плавающее изменение, прибавляем к целому
-                state.relations[base_ji_rel + 0] = std::max(-100, std::min(100, (int)(state.relations[base_ji_rel + 0] + delta * state.emission_weights[weight_base + 0] * r_sens * 10.0f)));
-                state.relations[base_ji_rel + 1] = std::max(-100, std::min(100, (int)(state.relations[base_ji_rel + 1] + delta * state.emission_weights[weight_base + 1] * r_sens * 10.0f)));
-                state.relations[base_ji_rel + 2] = std::max(-100, std::min(100, (int)(state.relations[base_ji_rel + 2] + delta * state.emission_weights[weight_base + 2] * r_sens * 10.0f)));
+                state.relations[base_ji_rel + 0] = std::max(-100, std::min(100, (int)std::round(state.relations[base_ji_rel + 0] + delta * state.emission_weights[weight_base + 0] * r_sens * 10.0f)));
+                state.relations[base_ji_rel + 1] = std::max(-100, std::min(100, (int)std::round(state.relations[base_ji_rel + 1] + delta * state.emission_weights[weight_base + 1] * r_sens * 10.0f)));
+                state.relations[base_ji_rel + 2] = std::max(-100, std::min(100, (int)std::round(state.relations[base_ji_rel + 2] + delta * state.emission_weights[weight_base + 2] * r_sens * 10.0f)));
             }
 
         }
     }
 
     for (size_t k = 0; k < state.emotions.size(); ++k) {
-        state.emotions[k] = std::max(-30, std::min(30, (int)(state.emotions[k] + delta_emotions[k])));
+        state.emotions[k] = std::max(-30, std::min(30, (int)std::round(state.emotions[k] + delta_emotions[k])));
     }
 }
 
@@ -224,6 +224,7 @@ void Engine::process_interaction(int from_idx, int to_idx, int sigma) {
     state.relations[base_ti + 0] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 0] + base_affinity * s_t)));
     state.relations[base_ti + 1] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 1] + base_affinity * s_t)));
     state.relations[base_ti + 2] = std::max(-100, std::min(100, (int)(state.relations[base_ti + 2] + base_trust * s_t)));
+
 }
 
 void Engine::process_refusal(int from_idx, int to_idx) {

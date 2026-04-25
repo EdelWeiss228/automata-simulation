@@ -5,7 +5,7 @@ class EmotionPair:
     def __init__(self, name, min_value=-30, max_value=30):
         self.name = name
         import random
-        self.value = random.randint(-30, 30)
+        self.value = random.randint(-15, 15)
         self.min_value = int(min_value)
         self.max_value = int(max_value)
 

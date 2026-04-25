@@ -76,10 +76,10 @@ class UniversityGUI(tk.Toplevel):
         self.canvas_frame.grid_columnconfigure(0, weight=1)
 
         # Правая панель (Темная тема для контраста) со скроллом (v6.7)
-        self.side_container = tk.Frame(self.main_frame, width=320, bg='#2C3E50')
+        self.side_container = tk.Frame(self.main_frame, width=370, bg='#2C3E50')
         self.side_container.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        self.side_canvas = tk.Canvas(self.side_container, width=300, bg='#2C3E50', highlightthickness=0)
+        self.side_container.pack_propagate(False) # Фиксируем ширину (v6.8)
+        self.side_canvas = tk.Canvas(self.side_container, width=350, bg='#2C3E50', highlightthickness=0)
         self.side_scroll = tk.Scrollbar(self.side_container, orient="vertical", command=self.side_canvas.yview)
         
         # Основной фрейм внутри канваса
@@ -99,11 +99,14 @@ class UniversityGUI(tk.Toplevel):
         self.master.bind_all("<Button-4>", self._on_mousewheel)
         self.master.bind_all("<Button-5>", self._on_mousewheel)
         
-        def _on_side_configure(event):
+        def _on_frame_configure(event):
             self.side_canvas.configure(scrollregion=self.side_canvas.bbox("all"))
-            self.side_canvas.itemconfig(self.side_window, width=event.width)
             
-        self.side_panel.bind("<Configure>", _on_side_configure)
+        def _on_canvas_configure(event):
+            self.side_canvas.itemconfig(self.side_window, width=event.width)
+
+        self.side_panel.bind("<Configure>", _on_frame_configure)
+        self.side_canvas.bind("<Configure>", _on_canvas_configure)
         
         # Поддержка колесика мыши (macOS style)
         def _on_mousewheel(event):
@@ -115,7 +118,7 @@ class UniversityGUI(tk.Toplevel):
         self.lbl_date = tk.Label(self.side_panel, text="Дата", font=('Arial', 10), bg='#2C3E50', fg='#BDC3C7')
         self.lbl_date.pack()
 
-        self.lbl_slot = tk.Label(self.side_panel, text="Слот", font=('Arial', 12, 'bold'), bg='#2C3E50', fg='#3498DB')
+        self.lbl_slot = tk.Label(self.side_panel, text="Такт", font=('Arial', 12, 'bold'), bg='#2C3E50', fg='#3498DB')
         self.lbl_slot.pack(pady=10)
 
         self.lbl_zoom = tk.Label(self.side_panel, text="Масштаб: 100%", font=('Arial', 10), bg='#2C3E50', fg='#ECF0F1')
@@ -129,12 +132,12 @@ class UniversityGUI(tk.Toplevel):
         auto_frame = tk.Frame(self.side_panel, bg='#2C3E50')
         auto_frame.pack(fill=tk.X, pady=5)
 
-        self.btn_auto_slots = tk.Button(auto_frame, text="АВТО: ОДИН ДЕНЬ", command=self.toggle_auto_slots, 
-                                        bg='#8E44AD', fg='#2C3E50', font=('Arial', 9, 'bold'), height=2, width=12)
+        self.btn_auto_slots = tk.Button(auto_frame, text="АВТО: 1 ДЕНЬ", command=self.toggle_auto_slots, 
+                                        bg='#8E44AD', fg='#2C3E50', font=('Arial', 9, 'bold'), height=2, width=15)
         self.btn_auto_slots.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
 
-        self.btn_auto_days = tk.Button(auto_frame, text="АВТО: ВСЕ ДНИ", command=self.toggle_auto_days, 
-                                       bg='#2980B9', fg='#2C3E50', font=('Arial', 9, 'bold'), height=2, width=12)
+        self.btn_auto_days = tk.Button(auto_frame, text="АВТО: НЕПРЕРЫВНО", command=self.toggle_auto_days, 
+                                       bg='#2980B9', fg='#2C3E50', font=('Arial', 9, 'bold'), height=2, width=15)
         self.btn_auto_days.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
 
         # Кнопка сброса
@@ -205,6 +208,30 @@ class UniversityGUI(tk.Toplevel):
             f.pack(fill=tk.X)
             tk.Label(f, bg=color, width=2).pack(side=tk.LEFT, padx=3)
             tk.Label(f, text=text, font=('Arial', 8), bg='#2C3E50', fg='#ECF0F1').pack(side=tk.LEFT)
+
+        # Легенда Эмоций
+        emo_frame = tk.LabelFrame(self.side_panel, text="Легенда: Эмоции", bg='#2C3E50', fg='#ECF0F1', padx=5, pady=5)
+        emo_frame.pack(fill=tk.X, pady=5)
+        
+        emo_pairs = [
+            ("Печаль", "#0000FF", "Радость", "#FFFF00"),
+            ("Страх", "#ADD8E6", "Спокойствие", "#008000"),
+            ("Гнев", "#FF0000", "Смирение", "#20B2AA"),
+            ("Отвращение", "#800080", "Принятие", "#90EE90"),
+            ("Привычка", "#8B4513", "Удивление", "#FFA500"),
+            ("Стыд", "#808080", "Уверенность", "#FFD700"),
+            ("Отчуждение", "#2F4F4F", "Открытость", "#FF1493"),
+        ]
+        
+        for i, (e1, c1, e2, c2) in enumerate(emo_pairs):
+            tk.Label(emo_frame, bg=c1, width=2, relief=tk.SOLID).grid(row=i, column=0, padx=(2,4), pady=1, sticky='w')
+            tk.Label(emo_frame, text=e1, font=('Arial', 8), bg='#2C3E50', fg='#ECF0F1').grid(row=i, column=1, sticky='w')
+            tk.Label(emo_frame, text="—", font=('Arial', 8), bg='#2C3E50', fg='#BDC3C7').grid(row=i, column=2, padx=2)
+            tk.Label(emo_frame, text=e2, font=('Arial', 8), bg='#2C3E50', fg='#ECF0F1').grid(row=i, column=3, sticky='e')
+            tk.Label(emo_frame, bg=c2, width=2, relief=tk.SOLID).grid(row=i, column=4, padx=(4,2), pady=1, sticky='e')
+            
+        emo_frame.grid_columnconfigure(1, weight=1)
+        emo_frame.grid_columnconfigure(3, weight=1)
 
         # Легенда Сценария (v6.5)
         self.scenario_frame = tk.LabelFrame(self.side_panel, text="ПАРАМЕТРЫ СЦЕНАРИЯ", bg='#2C3E50', fg='#F1C40F', padx=5, pady=10)
@@ -352,8 +379,8 @@ class UniversityGUI(tk.Toplevel):
         
         # Останавливаем всё
         self.auto_mode = None
-        self.btn_auto_slots.config(text="АВТО: СЛОТЫ", bg='#8E44AD')
-        self.btn_auto_days.config(text="АВТО: ДНИ", bg='#2980B9')
+        self.btn_auto_slots.config(text="АВТО: 1 ДЕНЬ", bg='#8E44AD')
+        self.btn_auto_days.config(text="АВТО: НЕПРЕРЫВНО", bg='#2980B9')
         
         # Пересоздаем коллектив
         self.collective = UniversityCollective()
@@ -474,7 +501,7 @@ class UniversityGUI(tk.Toplevel):
             positions[name] = (x, y)
             
             # Отрисовка
-            emotion_name, value = agent.get_primary_emotion()
+            emotion_name, _, value = agent.get_primary_emotion()
             color = get_emotion_color(emotion_name, value)
             r = NODE_RADIUS * self.zoom_level
             
@@ -512,7 +539,12 @@ class UniversityGUI(tk.Toplevel):
         # 1. Дата и Академический Календарь
         date = self.collective.current_date
         month = date.month
-        day_name = date.strftime('%A')
+        
+        RUSSIAN_DAYS = {"Monday": "Пн", "Tuesday": "Вт", "Wednesday": "Ср", "Thursday": "Чт", "Friday": "Пт", "Saturday": "Сб", "Sunday": "Вс"}
+        RUSSIAN_MONTHS = {1: "янв", 2: "фев", 3: "мар", 4: "апр", 5: "мая", 6: "июн", 7: "июл", 8: "авг", 9: "сен", 10: "окт", 11: "ноя", 12: "дек"}
+        
+        day_name = RUSSIAN_DAYS.get(date.strftime('%A'), date.strftime('%A'))
+        month_name = RUSSIAN_MONTHS.get(month, "")
         
         # Определяем семестр
         if month in [7, 8]:
@@ -522,13 +554,13 @@ class UniversityGUI(tk.Toplevel):
         else:
             status = f"Осенний семестр {date.year}"
             
-        self.lbl_date.config(text=f"{day_name}, {date.day:02d} {date.strftime('%B')}")
+        self.lbl_date.config(text=f"{day_name}, {date.day:02d} {month_name} {date.year}")
         self.lbl_acad_year.config(text=f"Статус: {status}")
         
         # 2. Слот
         current_slot = self.collective.day_schedule_slots[self.collective.current_slot_idx - 1] if self.collective.current_slot_idx > 0 else "Начало дня"
         slot_name = current_slot.value if hasattr(current_slot, 'value') else current_slot
-        self.lbl_slot.config(text=f"СЛОТ: {slot_name}")
+        self.lbl_slot.config(text=f"ТАКТ: {slot_name}")
         
         # 3. Инфо о сценарии
         config = getattr(self.collective, 'config', {})
@@ -543,9 +575,16 @@ class UniversityGUI(tk.Toplevel):
             is_master = getattr(a, 'degree_type', 'BACHELOR') == 'MASTER'
             target = mag_counts if is_master else bac_counts
             
-            # Получаем красивое имя архетипа (v6.9.30)
+            # Получаем красивое имя архетипа (v6.9.38)
             arch_enum = getattr(a.automaton, 'archetype_enum', None)
-            nm = arch_enum.localized if arch_enum else a.archetype.name
+            if arch_enum:
+                nm = arch_enum.localized
+            else:
+                try:
+                    nm = ArchetypeEnum(a.archetype.name).localized
+                except ValueError:
+                    nm = a.archetype.name
+            
             target[nm] = target.get(nm, 0) + 1
             
         self.lbl_bac_dist.config(text="\n".join([f"  {k}: {v}" for k, v in sorted(bac_counts.items())]))
@@ -574,23 +613,23 @@ class UniversityGUI(tk.Toplevel):
     def toggle_auto_slots(self):
         if self.auto_mode == 'slots':
             self.auto_mode = None
-            self.btn_auto_slots.config(text="АВТО: СМИРНО", bg='#8E44AD')
+            self.btn_auto_slots.config(text="АВТО: 1 ДЕНЬ", bg='#8E44AD')
         else:
             # Отключаем другой режим если он был
             if self.auto_mode == 'days': self.toggle_auto_days()
             self.auto_mode = 'slots'
-            self.btn_auto_slots.config(text="СТОП", bg='#C0392B')
+            self.btn_auto_slots.config(text="ПАУЗА", bg='#C0392B')
             self.run_auto_step()
 
     def toggle_auto_days(self):
         if self.auto_mode == 'days':
             self.auto_mode = None
-            self.btn_auto_days.config(text="АВТО: ПОТОК", bg='#2980B9')
+            self.btn_auto_days.config(text="АВТО: НЕПРЕРЫВНО", bg='#2980B9')
         else:
             # Отключаем другой режим если он был
             if self.auto_mode == 'slots': self.toggle_auto_slots()
             self.auto_mode = 'days'
-            self.btn_auto_days.config(text="СТОП", bg='#C0392B')
+            self.btn_auto_days.config(text="ПАУЗА", bg='#C0392B')
             self.run_auto_days()
 
     def run_auto_step(self):
@@ -622,11 +661,18 @@ class UniversityGUI(tk.Toplevel):
                     agent_id = self.agent_names_by_id[item[0]]
                     agent = self.collective.agents[agent_id]
                     
-                    # Локализация для тултипа (v6.9.32)
+                    # Локализация для тултипа (v6.9.38)
                     arch_enum = getattr(agent.automaton, 'archetype_enum', None)
-                    arch_name = arch_enum.localized if arch_enum else agent.archetype.name
+                    if arch_enum:
+                        arch_name = arch_enum.localized
+                    else:
+                        from model.archetypes import ArchetypeEnum
+                        try:
+                            arch_name = ArchetypeEnum(agent.archetype.name).localized
+                        except ValueError:
+                            arch_name = agent.archetype.name
                     
-                    primary_emotion = agent.get_primary_emotion()[0]
+                    primary_emotion = agent.get_primary_emotion()[1]
                     
                     info = (f"Имя: {agent.name} ({agent_id})\n"
                             f"Группа: {agent.group_id}\n"
