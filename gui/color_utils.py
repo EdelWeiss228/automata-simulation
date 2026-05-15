@@ -1,6 +1,6 @@
 def get_emotion_color(emotion_name, value):
     """
-    Возвращает HEX-код цвета на основе примарной эмоции и её силы (-3..3).
+    Возвращает HEX-код цвета на основе примарной эмоции and её силы (-3..3).
     0 — белый. Крайние значения — насыщенные цвета.
     """
     if value == 0 or not emotion_name:
@@ -27,7 +27,7 @@ def get_emotion_color(emotion_name, value):
     # Сила эмоции (линейный градиент для шкалы x10)
     intensity = min(abs(value) / 30.0, 1.0)
     
-    # Интерполяция между белым (255,255,255) и целевым цветом
+    # Интерполяция между белым (255,255,255) and целевым цветом
     r = int(255 + (target_color[0] - 255) * intensity)
     g = int(255 + (target_color[1] - 255) * intensity)
     b = int(255 + (target_color[2] - 255) * intensity)

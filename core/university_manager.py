@@ -36,7 +36,7 @@ class UniversityManager:
                 "x": padding + (s_idx % 4) * (l_w + padding), "y": padding + (s_idx // 4) * (l_h + padding),
                 "width": l_w, "height": l_h
             }
-        self.rooms_info["CORRIDOR"] = {"capacity": 1500, "type": "CORRIDOR", "display_name": "ХОЛЛ", "x": padding, "y": 3800, "width": 1100, "height": 600}
+        self.rooms_info["CORRIDOR"] = {"capacity": 1500, "type": "CORRIDOR", "display_name": "ХОЛЛ", "x": padding, "y": 3800, "width": 1150, "height": 600}
         s_w, s_h = 240, 240
         for g_idx in range(75):
             room_id = f"Aud_{self.FACULTY_NAMES[g_idx // 15]}_{str(self.start_academic_year - ((g_idx % 15) // 3))[2:]}_{(g_idx % 3) + 1}_S"
@@ -45,12 +45,12 @@ class UniversityManager:
                 "x": padding + (g_idx % 5) * (s_w + padding), "y": 4500 + (g_idx // 5) * (s_h + padding),
                 "width": s_w, "height": s_h
             }
-        self.rooms_info["GYM"] = {"capacity": 1000, "type": "GYM", "display_name": "СПОРТЗАЛ", "x": padding, "y": 9000, "width": 1200, "height": 600}
+        self.rooms_info["GYM"] = {"capacity": 1000, "type": "GYM", "display_name": "СПОРТЗАЛ", "x": padding, "y": 9000, "width": 1260, "height": 600}
 
     def get_room_cols(self, room_id: str) -> int:
         info = self.rooms_info.get(room_id, {})
         rtype = info.get("type", "SEMINAR")
-        if rtype in ["CORRIDOR", "GYM"]: return 40
+        if rtype in ["CORRIDOR", "GYM"]: return 42
         return 6
 
     def get_seat_coordinates(self, room_id, s_idx):
@@ -65,7 +65,9 @@ class UniversityManager:
         ry = info["y"] + my + (s_idx // cols) * step_y
         if info["type"] in ["CORRIDOR", "GYM"]:
             rnd = random.Random(s_idx + hash(room_id))
-            rx += rnd.uniform(-15, 15); ry += rnd.uniform(-15, 15)
+            jx = (step_x / 3) if step_x > 0 else 5
+            jy = (step_y / 3) if step_y > 0 else 5
+            rx += rnd.uniform(-jx, jx); ry += rnd.uniform(-jy, jy)
         return rx, ry
 
     def get_desk_geometry(self, room_id, s_idx):
@@ -89,10 +91,18 @@ class UniversityManager:
                     for day in range(6):
                         pairs = []
                         for p in range(4):
-                            if stream_lecture_slots[day][p]: pairs.append(f"Aud_{f_name}_{year_suffix}_L")
-                            else: pairs.append("GYM" if random.random() < 0.1 else f"Aud_{f_name}_{year_suffix}_{g+1}_S")
+                            if random.random() < 0.15:
+                                pairs.append("EMPTY")
+                            elif stream_lecture_slots[day][p]: 
+                                pairs.append(f"Aud_{f_name}_{year_suffix}_L")
+                            else: 
+                                pairs.append("GYM" if random.random() < 0.1 else f"Aud_{f_name}_{year_suffix}_{g+1}_S")
                         group_schedule[day] = pairs
                     self.schedules[group_id] = group_schedule
+                    
+        all_lectures = [r for r in self.rooms_info if r.endswith("_L")]
+        all_seminars = [r for r in self.rooms_info if r.endswith("_S")]
+        
         for m_name in self.MASTER_FACULTIES:
             for year in [1, 2]:
                 group_id = f"{m_name}-M{year}-1"
@@ -100,19 +110,20 @@ class UniversityManager:
                 for day in range(6):
                     pairs = []
                     for p in range(4):
-                        # У магистров больше шансов на лекции и свободное время (v6.9.34)
-                        if random.random() < 0.4: 
-                            # Генерируем случайную лекционную аудиторию
-                            f_code = self.FACULTY_NAMES[random.randint(0,4)]
-                            y_code = str(self.start_academic_year - random.randint(0, 4))[2:]
-                            pairs.append(f"Aud_{f_code}_{y_code}_L")
+                        if random.random() < 0.15:
+                            pairs.append("EMPTY")
+                        elif random.random() < 0.3: 
+                            pairs.append(random.choice(all_lectures))
                         else: 
-                            pairs.append("GYM" if random.random() < 0.2 else "CORRIDOR")
+                            pairs.append("GYM" if random.random() < 0.1 else random.choice(all_seminars))
                     group_schedule[day] = pairs
                 self.schedules[group_id] = group_schedule
 
     def get_group_schedule(self, group_id, day_idx):
         return getattr(self, 'schedules', {}).get(group_id, {}).get(day_idx, [])
+
+    def get_all_groups(self) -> List[str]:
+        return list(getattr(self, 'schedules', {}).keys())
 
     def _generate_human_name(self) -> str:
         if random.random() < 0.5:
@@ -155,6 +166,7 @@ class UniversityManager:
                         agent_id = f"S-{group_id}-{i+1:02d}"
                         agent = AgentFactory.create_agent(self._generate_human_name(), archetype_enum=bac_pool.pop(), agent_id=agent_id)
                         agent.set_university_info(f_name, f"{f_name}-{year_suffix}", group_id)
+                        agent.course_year = s + 1
                         agents.append(agent)
 
         # 3. Генерация магистров
@@ -169,6 +181,7 @@ class UniversityManager:
                     agent_id = f"M-{group_id}-{i+1:02d}"
                     agent = AgentFactory.create_agent(self._generate_human_name(), archetype_enum=mag_pool.pop(), agent_id=agent_id)
                     agent.degree_type = "MASTER"
+                    agent.course_year = year
                     parent_faculty = self.FACULTY_NAMES[m_idx % len(self.FACULTY_NAMES)]
                     agent.set_university_info(parent_faculty, f"{m_name}-M{year}", group_id)
                     agents.append(agent)

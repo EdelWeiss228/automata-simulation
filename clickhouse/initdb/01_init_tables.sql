@@ -48,7 +48,18 @@ CREATE TABLE IF NOT EXISTS agent_registry (
     agent_id UInt32,                     -- Числовой ID агента (используется в симуляции)
     string_id String,                    -- Уникальный строковой ID (например S-П-22-1-03)
     name String,                         -- Имя агента
-    group_id String,                     -- ID группы
-    archetype String                     -- Архетип
+    course_year UInt8,                   -- Курс
+    group_id String,                     -- Идентификатор группы
+    faculty String,                      -- Факультет
+    archetype String,                    -- Архетип
+    degree_type Enum8('BACHELOR' = 0, 'MASTER' = 1)
 ) ENGINE = MergeTree()
 ORDER BY (run_id, agent_id);
+
+CREATE TABLE IF NOT EXISTS simulation_runs (
+    run_id UUID Codec(ZSTD(3)),
+    start_time DateTime DEFAULT now(),
+    run_name String Codec(ZSTD(3)),
+    description String Codec(ZSTD(3))
+) ENGINE = MergeTree()
+ORDER BY (start_time, run_id);

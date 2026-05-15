@@ -12,7 +12,7 @@ class SimulationSession:
     Класс, инкапсулирующий логику сессии симуляции.
     Отвечает за управление коллективом, шаги времени и сохранение данных.
     """
-    def __init__(self, collective=None, seed=None, output_dir="data/output"):
+    def __init__(self, collective=None, seed=None, output_dir="data/output", run_name="University Default", description=""):
         if collective:
             self.collective = collective
         else:
@@ -27,6 +27,10 @@ class SimulationSession:
                 print(f"Предупреждение: ClickHouse не доступен ({e}). Логирование в БД отключено.")
         
         self.run_id = self.ch_logger.run_id if self.ch_logger else None
+        
+        if self.ch_logger:
+            self.ch_logger.log_run_metadata(run_name, description)
+            
         self.output_dir = output_dir
         
         self.first_log_states = True
@@ -120,6 +124,21 @@ class SimulationSession:
             self.run_day()
             
         print("--- РАСЧЕТ ЗАВЕРШЕН ---", flush=True)
+
+    def run_semesters(self, num_semesters: int):
+        """Запускает симуляцию до достижения указанного количества семестров."""
+        print(f"Запуск симуляции на {num_semesters} семестров...", flush=True)
+        initial_semesters = getattr(self.collective, 'semesters_passed', 0)
+        target_semesters = initial_semesters + num_semesters
+        
+        step = 0
+        while getattr(self.collective, 'semesters_passed', 0) < target_semesters:
+            self.run_day()
+            step += 1
+            if step % 50 == 0:
+                print(f"Прошло {step} дней. Пройдено семестров: {self.collective.semesters_passed}/{target_semesters}", flush=True)
+                
+        print(f"--- РАСЧЕТ {num_semesters} СЕМЕСТРОВ ЗАВЕРШЕН (Всего дней: {step}) ---", flush=True)
 
     def load_state_from_clickhouse(self, run_id, day_id, slot_id=0):
         """

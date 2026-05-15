@@ -10,7 +10,7 @@ void Engine::influence_emotions() {
 
     #pragma omp parallel for
     for (int i = 0; i < num_agents; ++i) {
-        // 1. Находим основную эмоцию агента i
+// Находим основную эмоцию агента i
         int primary_axis = -1;
         float max_val = 0.0f;
         float total_intensity = 0.0f;
@@ -28,11 +28,11 @@ void Engine::influence_emotions() {
 
         if (max_val == 0.0f || total_intensity == 0.0f) continue;
 
-        // 2. Рассчитываем веса
+// Рассчитываем веса
         float weight_primary = std::abs(max_val) / total_intensity;
         float weight_secondary = (1.0f - weight_primary) / (SimulationState::NUM_AXES - 1);
 
-        // 3. Влияем на каждого агента j
+// Влияем на каждого агента j
         for (int j = 0; j < num_agents; ++j) {
             if (i == j) continue;
 
@@ -184,7 +184,7 @@ void Engine::process_interaction(int from_idx, int to_idx, int sigma) {
     float s_i = state.sensitivities[from_idx];
     float s_t = state.sensitivities[to_idx];
     
-    // 1. Находим первичную эмоцию инициатора
+// Находим первичную эмоцию инициатора
     int primary_axis = 0;
     int max_val = -1;
     for (int a = 0; a < SimulationState::NUM_AXES; ++a) {
@@ -196,7 +196,7 @@ void Engine::process_interaction(int from_idx, int to_idx, int sigma) {
     }
     int e_val = state.emotions[from_idx * SimulationState::NUM_AXES + primary_axis];
 
-    // 2. Рассчитываем множитель (Sigma Model v6.2)
+// Рассчитываем множитель (Sigma Model v6.2)
     float multiplier = 1.0f;
     if (sigma == 1) { // Успех
         multiplier = (e_val >= 0) ? 2.0f : 0.5f;
@@ -204,7 +204,7 @@ void Engine::process_interaction(int from_idx, int to_idx, int sigma) {
         multiplier = (e_val >= 0) ? 0.5f : 2.0f;
     }
 
-    // 3. Базовые дельты (scale x10)
+// Базовые дельты (scale x10)
     float base_affinity = 15.0f * multiplier;
     float base_trust = 10.0f * multiplier;
     
@@ -372,22 +372,22 @@ void Engine::apply_emotion_decay() {
 void Engine::perform_daily_cycle(int interactions_per_day) {
     last_day_interactions.clear();
     
-    // 0. Затухание отношений
+// Затухание отношений
     apply_relation_decay();
     
-    // 1. Реакция на текущие отношения
+// Реакция на текущие отношения
     react_to_relations();
     
-    // 1.1 Затухание эмоций
+// 1 Затухание эмоций
     apply_emotion_decay();
     
-    // 1.2 Влияние эмоций на отношения
+// 2 Влияние эмоций на отношения
     react_to_emotions();
     
-    // 2. Групповое влияние
+// Групповое влияние
     influence_emotions();
     
-    // 3. Взаимодействия
+// Взаимодействия
     for (int iter = 0; iter < interactions_per_day; ++iter) {
         for (int i = 0; i < num_agents; ++i) {
             int target = choose_target(i);

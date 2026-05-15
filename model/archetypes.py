@@ -49,7 +49,7 @@ class Archetype:
             "utility": "linear",
             "trust": "linear"
         }
-        # Форма функций обновления (раздел 6 и 4 Промта) - ТЕПЕРЬ В x10 ЦЕЛЫХ
+        # Форма функций обновления (раздел 6 and 4 Промта) - ТЕПЕРЬ В x10 ЦЕЛЫХ
         # НОРМАЛИЗАЦИЯ: Отрицательные значения (-) = плохо, Положительные (+) = хорошо
         self.emotion_effects = emotion_effects or {
             "sadness_joy": {"affinity": 10, "trust": 10},
@@ -76,7 +76,7 @@ class Archetype:
 ARCHETYPE_WEIGHTS = {
     ArchetypeEnum.ERUDITION: Archetype(
         name='Erudition',
-        description='Эрудиция (Ноус) — хладнокровный расчет, почтение к логике и знанию. Избегает эмоциональных крайностей, анализирует структуру мира.',
+        description='Эрудиция (Ноус) — хладнокровный расчет, почтение к логике and знанию. Избегает эмоциональных крайностей, анализирует структуру мира.',
         weights={
             'sadness_joy': 8,
             'fear_calm': 12,

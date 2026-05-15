@@ -19,7 +19,7 @@ class AgentStateDialog:
         notebook = ttk.Notebook(self.top)
         notebook.pack(fill='both', expand=True, padx=5, pady=5)
 
-        # Вкладка Архетип и Чувствительность
+        # Вкладка Архетип and Чувствительность
         frame_arch = ttk.Frame(notebook)
         notebook.add(frame_arch, text="Архетип")
 
@@ -31,12 +31,12 @@ class AgentStateDialog:
         self.combo.pack(pady=5)
 
         tk.Label(frame_arch, text="Чувствительность (0-30):", bg='#F8F9FA', fg='#212529', font=('Arial', 10, 'bold')).pack(pady=(15, 5))
-        self.sensitivity_scale = tk.Scale(frame_arch, from_=0, to=30, resolution=1, orient=tk.HORIZONTAL, 
+        self.sensitivity_scale = tk.Scale(frame_arch, from_=1, to=30, resolution=1, orient=tk.HORIZONTAL, 
                                           bg='#F8F9FA', fg='#212529', highlightthickness=0)
-        self.sensitivity_scale.set(agent.sensitivity)
+        self.sensitivity_scale.set(int(agent.sensitivity * 10))
         self.sensitivity_scale.pack(pady=5, fill='x', padx=30)
 
-        # Новые параметры v4.2: Спорт и Прогулы
+        # Новые параметры v4.2: Спорт and Прогулы
         tk.Label(frame_arch, text="Склонность к спорту (%):", bg='#F8F9FA', fg='#212529', font=('Arial', 10, 'bold')).pack(pady=(15, 5))
         self.sport_scale = tk.Scale(frame_arch, from_=0, to=100, orient=tk.HORIZONTAL, 
                                      bg='#F8F9FA', fg='#212529', highlightthickness=0)
@@ -104,8 +104,8 @@ class AgentStateDialog:
         self.other_agent_combo.bind("<<ComboboxSelected>>", self.load_relation_values)
 
         # Ползунки для предикатов
-        for label, attr in [("Trust (Доверие)", "trust_scale"), ("Affinity (Симпатия)", "affinity_scale"), 
-                             ("Utility (Выгода)", "utility_scale")]:
+        for label, attr in [("Trust (trust)", "trust_scale"), ("Affinity (affinity)", "affinity_scale"), 
+                             ("Utility (utility)", "utility_scale")]:
             tk.Label(frame_relations, text=label, bg='#F8F9FA', fg='#495057', font=('Arial', 8)).pack(pady=(5, 0))
             scale = tk.Scale(frame_relations, from_=-10, to=10, orient=tk.HORIZONTAL, 
                              bg='#F8F9FA', fg='#212529', highlightthickness=0)
@@ -149,7 +149,7 @@ class AgentStateDialog:
         for key, scale in self.emotion_vars.items():
             self.agent.automaton.set_emotion(key, scale.get())
 
-        self.agent.sensitivity = self.sensitivity_scale.get()
+        self.agent.sensitivity = self.sensitivity_scale.get() / 10.0
         self.agent.sportiness = self.sport_scale.get() / 100.0
         self.agent.skip_tendency = self.skip_scale.get() / 100.0
 

@@ -7,6 +7,7 @@ def main():
     parser = argparse.ArgumentParser(description="Automata Simulation Engine v6.7")
     parser.add_argument("--scenario", type=str, help="Path to scenario JSON file")
     parser.add_argument("--steps", type=int, help="Number of steps to run (overrides scenario)")
+    parser.add_argument("--semesters", "-sem", type=int, help="Number of semesters to run (for University mode)")
     parser.add_argument("--silent", "--headless", action="store_true", help="Run in silent mode (no GUI)")
     parser.add_argument("--gui", action="store_true", help="Force GUI mode")
     parser.add_argument("--university", "--uni", action="store_true", help="Launch directly into University map")
@@ -23,9 +24,35 @@ def main():
         session.create_template_scenario(args.create_scenario)
         sys.exit(0)
 
-    # 1. Handle University Mode (Robust GUI launch)
+# Handle University Mode (Robust GUI launch or Headless)
     if args.university:
         print("[System] Loading University Mode...", flush=True)
+        is_headless = args.silent or (not args.gui and not sys.stdin.isatty())
+        
+        if is_headless and args.scenario:
+            print("[System] Bypassing GUI (Headless mode active)...", flush=True)
+            with open(args.scenario, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            from model.university_collective import UniversityCollective
+            from model.simulation_session import SimulationSession
+            
+            effective_seed = config.get("seed", args.seed)
+            univ = UniversityCollective(seed=effective_seed, config=config)
+            session = SimulationSession(collective=univ)
+            
+            semesters = args.semesters if args.semesters else config.get("semesters", 8)
+            print(f"[System] Headless University Mode: Running {semesters} semesters...", flush=True)
+            
+            if hasattr(session, 'run_semesters'):
+                session.run_semesters(semesters)
+            else:
+                steps = args.steps if args.steps else config.get("steps", 100)
+                for _ in range(steps): session.run_day()
+                
+            print("Done.")
+            sys.exit(0)
+            
         try:
             import tkinter as tk
             from tkinter import messagebox
@@ -56,7 +83,9 @@ def main():
             # Priority: Wizard/JSON Seed > CLI Argument Seed
             effective_seed = config.get("seed", args.seed)
             univ = UniversityCollective(seed=effective_seed, config=config)
-            session = SimulationSession(collective=univ)
+            run_name = config.get("run_name", "Unnamed University Run")
+            description = config.get("description", "")
+            session = SimulationSession(collective=univ, run_name=run_name, description=description)
             
             if args.steps:
                 session.total_steps = args.steps
@@ -76,7 +105,7 @@ def main():
             sys.exit(1)
         return
 
-    # 2. Standard Simulation Branch
+# Standard Simulation Branch
     from model.simulation_session import SimulationSession
     session = SimulationSession(seed=args.seed)
     

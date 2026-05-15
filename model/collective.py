@@ -21,8 +21,8 @@ except ImportError:
 
 class Collective:
     """
-    Класс, представляющий коллектив агентов и игроков,
-    управляющий их взаимодействиями и отношениями.
+    Класс, представляющий коллектив агентов and игроков,
+    управляющий их взаимодействиями and отношениями.
     """
 
     def __init__(self, agents_data=None, relations_data=None, players_data=None, seed=None):
@@ -61,18 +61,18 @@ class Collective:
             AgentFactory.initialize_agent_relations(agent, list(self.agents.keys()))
 
     def add_agent(self, agent):
-        """Добавляет агента в коллектив (v6.9.32: Исправлено)."""
+        """Добавляет агента в коллектив."""
         agent.group = self
         self.agents[agent.id] = agent
         self.agent_count += 1
 
     def add_player(self, player):
-        """Добавить игрока и инициализировать его отношения."""
+        """Добавить игрока and инициализировать его отношения."""
         self.players.append(player)
         AgentFactory.initialize_player_relations(player, list(self.agents.keys()), self.agents)
 
     def introduce_new_agent(self, new_agent):
-        """Ввести нового агента и установить связи (v6.9.36)."""
+        """Ввести нового агента and установить связи."""
         self.add_agent(new_agent)
         # Инициализируем отношения с остальными (по ID)
         AgentFactory.initialize_agent_relations(new_agent, list(self.agents.keys()))
@@ -83,7 +83,7 @@ class Collective:
                 AgentFactory.initialize_agent_relations(other_agent, [new_id])
 
     def get_agent(self, agent_id):
-        """Получить агента по его уникальному ID (v6.9.36)."""
+        """Получить агента по его уникальному ID."""
         return self.agents.get(agent_id)
 
     def get_agent_by_name(self, agent_id):
@@ -150,7 +150,7 @@ class Collective:
             )
 
     def _sync_to_cpp(self):
-        """Прямая синхронизация всех агентов и их отношений в C++ структуру."""
+        """Прямая синхронизация всех агентов and их отношений в C++ структуру."""
         if not CPP_ENGINE_AVAILABLE:
             return
             
@@ -239,7 +239,7 @@ class Collective:
 
     def _run_cpp_influence(self):
         """
-        Запуск C++ движка и синхронизация результатов обратно в Python.
+        Запуск C++ движка and синхронизация результатов обратно в Python.
         """
         self._update_id_maps()
         n = len(self.agents)
@@ -359,7 +359,7 @@ class Collective:
             
             self.cpp_engine.perform_daily_cycle(interactions_per_day)
             
-            # Получаем записанные взаимодействия для логов и GUI
+            # Получаем записанные взаимодействия для логов and GUI
             interactions = []
             type_map = {0: "refusal", 1: "success", 2: "fail"}
             for interact in self.cpp_engine.last_day_interactions:
@@ -375,38 +375,38 @@ class Collective:
             return interactions
 
         # ПИТОНОВСКИЙ ВАРИАНТ (медленный)
-        # 0. Затухание отношений (Закон прощения)
+# Затухание отношений (Закон прощения)
         for agent in self.agents.values():
             agent.apply_relation_decay()
             
-        # 1. Реакция на текущие отношения
+# Реакция на текущие отношения
         for agent in self.agents.values():
             agent.react_to_relations()
         
-        # 1.1 Затухание эмоций
+# 1 Затухание эмоций
         for agent in self.agents.values():
             agent.apply_emotion_decay()
 
-        # 1.2 Влияние эмоций на отношения
+# 2 Влияние эмоций на отношения
         for agent in self.agents.values():
             agent.react_to_emotions()
         
-        # 2. Действия игроков
+# Действия игроков
         if interactive:
             for player in self.players:
                 player.choose_emotion()
                 player.choose_interaction(self.agents)
             
-        # 3. Групповое влияние эмоций
+# Групповое влияние эмоций
         self.influence_emotions()
         
-        # 4. Взаимодействия внутри коллектива
+# Взаимодействия внутри коллектива
         interactions = []
         for _ in range(interactions_per_day):
             day_interactions = self.make_interaction_decision()
             interactions.extend(day_interactions)
             
-        # 5. Инициатива агентов к игрокам
+# Инициатива агентов к игрокам
         for agent in self.agents.values():
             candidates = sorted(
                 agent.relations.items(),
@@ -419,14 +419,14 @@ class Collective:
                         InteractionStrategy.handle_player_interaction(agent, player)
                         break
 
-        # 6. Обновление внутренних счетчиков
+# Обновление внутренних счетчиков
         self.current_step += 1
         self.current_date += datetime.timedelta(days=1)
         
         return interactions
 
     def add_random_agent(self):
-        """Создает и добавляет случайного агента в коллектив."""
+        """Создает and добавляет случайного агента в коллектив."""
         existing_names = list(self.agents.keys())
         new_agent = AgentFactory.create_agent_with_relations(len(existing_names) + 1, existing_names)
         self.add_agent(new_agent)
@@ -445,7 +445,7 @@ class Collective:
         self.perform_full_day_cycle(interactions_per_day, interactive=True)
 
     def remove_agent(self, agent_name):
-        """Удалить агента из коллектива и очистить его упоминания из отношений других агентов."""
+        """Удалить агента из коллектива and очистить его упоминания из отношений других агентов."""
         if agent_name in self.agents:
             del self.agents[agent_name]
             for other_agent in self.agents.values():

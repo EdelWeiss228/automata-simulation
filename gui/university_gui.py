@@ -62,7 +62,7 @@ class UniversityGUI(tk.Toplevel):
         self.canvas_frame = tk.Frame(self.main_frame)
         self.canvas_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Увеличиваем scrollregion для больших карт (v6.9.33: Больше высоты для GYM)
+        # Увеличиваем scrollregion для больших карт 
         self.canvas = tk.Canvas(self.canvas_frame, bg='#FFFFFF', scrollregion=(0, 0, 2500, 12000))
         self.h_scroll = tk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
         self.v_scroll = tk.Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
@@ -75,10 +75,10 @@ class UniversityGUI(tk.Toplevel):
         self.canvas_frame.grid_rowconfigure(0, weight=1)
         self.canvas_frame.grid_columnconfigure(0, weight=1)
 
-        # Правая панель (Темная тема для контраста) со скроллом (v6.7)
+        # Правая панель (Темная тема для контраста) со скроллом 
         self.side_container = tk.Frame(self.main_frame, width=370, bg='#2C3E50')
         self.side_container.pack(side=tk.RIGHT, fill=tk.Y)
-        self.side_container.pack_propagate(False) # Фиксируем ширину (v6.8)
+        self.side_container.pack_propagate(False) # Фиксируем ширину 
         self.side_canvas = tk.Canvas(self.side_container, width=350, bg='#2C3E50', highlightthickness=0)
         self.side_scroll = tk.Scrollbar(self.side_container, orient="vertical", command=self.side_canvas.yview)
         
@@ -91,7 +91,7 @@ class UniversityGUI(tk.Toplevel):
         
         self.side_window = self.side_canvas.create_window((0, 0), window=self.side_panel, anchor="nw")
         
-        # Настройка скролла и авто-ширины
+        # Настройка скролла and авто-ширины
         self.canvas.bind("<Configure>", lambda e: self.canvas.config(scrollregion=self.canvas.bbox("all")))
         self.canvas.bind("<Enter>", lambda e: self.canvas.focus_set())
         
@@ -166,7 +166,7 @@ class UniversityGUI(tk.Toplevel):
         self.selected_agent = None # Имя выбранного агента
         self.selection_circle = None # Canvas ID круга выделения
 
-        # --- ДЕТАЛИ СЦЕНАРИЯ (v6.8: Именованные для обновления) ---
+        # --- ДЕТАЛИ СЦЕНАРИЯ  ---
         scen_frame = tk.LabelFrame(self.side_panel, text=" ПАРАМЕТРЫ ЗАПУСКА ", bg='#2C3E50', fg='#ECF0F1', padx=10, pady=10)
         scen_frame.pack(fill=tk.X, pady=5)
         
@@ -233,7 +233,7 @@ class UniversityGUI(tk.Toplevel):
         emo_frame.grid_columnconfigure(1, weight=1)
         emo_frame.grid_columnconfigure(3, weight=1)
 
-        # Легенда Сценария (v6.5)
+        # Легенда Сценария 
         self.scenario_frame = tk.LabelFrame(self.side_panel, text="ПАРАМЕТРЫ СЦЕНАРИЯ", bg='#2C3E50', fg='#F1C40F', padx=5, pady=10)
         self.scenario_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=10)
         
@@ -267,7 +267,7 @@ class UniversityGUI(tk.Toplevel):
             desc = "Индивидуальный"
         self.lbl_scen_desc.config(text=f"Стратегия: {desc}")
 
-        # События мыши и клавиатуры
+        # События мыши and клавиатуры
         self.canvas.bind("<Motion>", self.on_mouse_move)
         self.canvas.bind("<Button-1>", self.on_canvas_click)
         
@@ -277,7 +277,7 @@ class UniversityGUI(tk.Toplevel):
         self.canvas.bind("<ButtonPress-3>", self.scroll_start) # Правая кнопка для мышек без колеса
         self.canvas.bind("<B3-Motion>", self.scroll_move)
         
-        # Скроллинг мышью и тачпадом (Глобальный биндинг)
+        # Скроллинг мышью and тачпадом (Глобальный биндинг)
         self.bind_all("<MouseWheel>", self.on_mouse_wheel)  # Windows/macOS Vertical
         self.bind_all("<Shift-MouseWheel>", self.on_mouse_wheel_x) # macOS/Windows Horizontal
         self.bind_all("<Button-4>", self.on_mouse_wheel)    # Linux Up
@@ -415,7 +415,7 @@ class UniversityGUI(tk.Toplevel):
                 border_color = "#FF9800"
             elif rtype == "CORRIDOR":
                 bg_color = "#F5F5F5"
-                border_color = "" # Убираем перегородки (v6.9.13)
+                border_color = "" # Убираем перегородки 
 
             rect_id = self.canvas.create_rectangle(
                 x * self.zoom_level, y * self.zoom_level, 
@@ -433,14 +433,14 @@ class UniversityGUI(tk.Toplevel):
                 fill='#34495E' 
             )
 
-            # Отрисовка парт (v6.9.16: С просветами между ними)
+            # Отрисовка парт 
             if rtype in ["LECTURE", "SEMINAR"]:
                 capacity = info.get("capacity", 30)
                 for s_idx in range(0, capacity, 2):
                     desk = self.collective.uni_manager.get_desk_geometry(room_id, s_idx)
                     if not desk: continue
                     
-                    # Рисуем парту, используя единые координаты из модели (v6.9.19)
+                    # Рисуем парту, используя единые координаты из модели 
                     x1 = desk["dx"] * self.zoom_level
                     y1 = desk["dy"] * self.zoom_level
                     x2 = (desk["dx"] + desk["dw"]) * self.zoom_level
@@ -449,11 +449,11 @@ class UniversityGUI(tk.Toplevel):
                     self.canvas.create_rectangle(x1, y1, x2, y2, 
                                                  fill="#ECEFF1", outline="#B0BEC5", width=1)
 
-        # Установка области скролла (v6.9.23: Спортзал на y=9000)
+        # Установка области скролла 
         self.canvas.config(scrollregion=(0, 0, 1500 * self.zoom_level, (max_y + 400) * self.zoom_level))
 
     def _on_mousewheel(self, event):
-        """Универсальная плавная обработка прокрутки (v6.9.23)."""
+        """Универсальная плавная обработка прокрутки ."""
         if event.num == 4: # Linux Up
             self.canvas.yview_scroll(-3, "units")
         elif event.num == 5: # Linux Down
@@ -465,7 +465,7 @@ class UniversityGUI(tk.Toplevel):
             self.canvas.yview_scroll(move * 3, "units")
 
     def update_agent_positions(self, custom_interactions=None):
-        # Удаляем старые связи и точки
+        # Удаляем старые связи and точки
         for lid in self.interaction_lines:
             self.canvas.delete(lid)
         self.interaction_lines.clear()
@@ -479,7 +479,7 @@ class UniversityGUI(tk.Toplevel):
         current_rooms = self.collective.current_rooms
         positions = {} # name -> (x, y) для отрисовки линий
         
-        # Обновляем точки агентов (v6.9.13: Строгая синхронизация с местами)
+        # Обновляем точки агентов 
         for name, agent in self.collective.agents.items():
             if getattr(agent, 'status', None) == AgentStatus.HOME: continue
             
@@ -535,8 +535,8 @@ class UniversityGUI(tk.Toplevel):
         self.update_side_panel(campus_count, interactions_to_show)
 
     def update_side_panel(self, campus_count, interactions):
-        """Обновляет все информационные панели справа (v6.8)."""
-        # 1. Дата и Академический Календарь
+        """Обновляет все информационные панели справа ."""
+# Дата and Академический Календарь
         date = self.collective.current_date
         month = date.month
         
@@ -557,17 +557,17 @@ class UniversityGUI(tk.Toplevel):
         self.lbl_date.config(text=f"{day_name}, {date.day:02d} {month_name} {date.year}")
         self.lbl_acad_year.config(text=f"Статус: {status}")
         
-        # 2. Слот
+# Слот
         current_slot = self.collective.day_schedule_slots[self.collective.current_slot_idx - 1] if self.collective.current_slot_idx > 0 else "Начало дня"
         slot_name = current_slot.value if hasattr(current_slot, 'value') else current_slot
         self.lbl_slot.config(text=f"ТАКТ: {slot_name}")
         
-        # 3. Инфо о сценарии
+# Инфо о сценарии
         config = getattr(self.collective, 'config', {})
         self.lbl_seed.config(text=f"Seed: {getattr(self.collective, 'seed', 'N/A')}")
         self.lbl_master_info.config(text=f"Шанс остаться в магистратуре: {int(config.get('master_chance', 0.3)*100)}%")
         
-        # 4. Демография
+# Демография
         bac_counts = {}
         mag_counts = {}
         from model.archetypes import ArchetypeEnum
@@ -575,7 +575,7 @@ class UniversityGUI(tk.Toplevel):
             is_master = getattr(a, 'degree_type', 'BACHELOR') == 'MASTER'
             target = mag_counts if is_master else bac_counts
             
-            # Получаем красивое имя архетипа (v6.9.38)
+            # Получаем красивое имя архетипа 
             arch_enum = getattr(a.automaton, 'archetype_enum', None)
             if arch_enum:
                 nm = arch_enum.localized
@@ -590,7 +590,7 @@ class UniversityGUI(tk.Toplevel):
         self.lbl_bac_dist.config(text="\n".join([f"  {k}: {v}" for k, v in sorted(bac_counts.items())]))
         self.lbl_mag_dist.config(text="\n".join([f"  {k}: {v}" for k, v in sorted(mag_counts.items())]))
         
-        # 5. Общая статистика
+# Общая статистика
         self.lbl_stats.config(text=f"В кампусе: {campus_count} из {len(self.collective.agents)}\n"
                                    f"Взаимодействий: {len(interactions)}")
 
@@ -604,7 +604,7 @@ class UniversityGUI(tk.Toplevel):
              if self.auto_mode == 'days':
                  return
              
-             # Если мы в режиме СМИРНО (slots) или ручном — останавливаемся и показываем окно
+             # Если мы в режиме СМИРНО (slots) или ручном — останавливаемся and показываем окно
              if self.auto_mode == 'slots':
                  self.toggle_auto_slots() # Выключаем авто-режим
              
@@ -661,7 +661,7 @@ class UniversityGUI(tk.Toplevel):
                     agent_id = self.agent_names_by_id[item[0]]
                     agent = self.collective.agents[agent_id]
                     
-                    # Локализация для тултипа (v6.9.38)
+                    # Локализация для тултипа 
                     arch_enum = getattr(agent.automaton, 'archetype_enum', None)
                     if arch_enum:
                         arch_name = arch_enum.localized
@@ -693,6 +693,6 @@ class UniversityGUI(tk.Toplevel):
             self.draw_map()
             self.update_agent_positions()
             
-            # Обновляем scrollregion (v6.9.33)
+            # Обновляем scrollregion 
             self.canvas.config(scrollregion=(0, 0, 3000 * self.zoom_level, 12000 * self.zoom_level))
             self.lbl_zoom.config(text=f"Масштаб: {int(self.zoom_level * 100)}%")

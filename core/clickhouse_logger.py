@@ -7,7 +7,7 @@ import datetime
 
 class ClickHouseLogger:
     def __init__(self):
-        # Load environment variables from .env if present
+        # Загрузка environment variables from .env if present
         load_dotenv()
 
         self.host = os.getenv("CLICKHOUSE_HOST", "localhost")
@@ -32,10 +32,24 @@ class ClickHouseLogger:
 
         self.run_id = str(uuid.uuid4())
 
+    def log_run_metadata(self, run_name: str, description: str):
+        """Логирует метаданные (название и описание) симуляции для удобного поиска в БД."""
+        if not self.client:
+            return
+        
+        try:
+            self.client.insert(
+                'simulation_runs',
+                [[self.run_id, datetime.datetime.now(), run_name, description]],
+                column_names=['run_id', 'start_time', 'run_name', 'description']
+            )
+        except Exception as e:
+            print(f"Ошибка при сохранении метаданных симуляции: {e}")
+
     def log_agent_states(self, day_id: int, slot_id: int, engine):
         """
-        Extracts emotions from C++ engine and logs them to agent_states table.
-        Emotions vector is flattened N * 7.
+        Извлекает эмоциональные состояния из C++ ядра and сохраняет в agent_states таблицу.
+        Emotions вектор представлен плоским списком N * 7.
         """
         state = engine.state
         num_agents = state.num_agents
@@ -66,31 +80,31 @@ class ClickHouseLogger:
 
     def log_agent_relations(self, day_id: int, slot_id: int, engine):
         """
-        Extracts relations from C++ engine and logs them to agent_relations table.
-        Relations vector is flattened N * N * 3.
+        Extracts relations из C++ ядра and сохраняет в agent_relations таблицу.
+        Relations вектор представлен плоским списком N * N * 3.
         """
         state = engine.state
         n = state.num_agents
-        # relations mapping: (i * n + j) * 3 + [0:U, 1:A, 2:T]
+        # карта отношений: (i * n + j) * 3 + [0:U, 1:A, 2:T]
         relations = np.array(state.relations, dtype=np.int8).reshape((n, n, 3))
         
         data = []
         for i in range(n):
             for j in range(n):
-                if i == j: continue  # Skip self-relations if not needed, but prompt didn't specify
+                if i == j: continue  # Пропуск self-relations if not needed, but prompt didn't specify
                 row = [
                     self.run_id,
                     day_id,
                     slot_id,
-                    i, # subject_id
-                    j, # object_id
+                    i, # ID субъекта
+                    j, # ID объекта
                     int(relations[i, j, 0]), # utility
                     int(relations[i, j, 1]), # affinity
                     int(relations[i, j, 2])  # trust
                 ]
                 data.append(row)
                 
-                # Batch insert if data gets too large to save memory
+                # Пакетная вставка if data gets too large to save memory
                 if len(data) >= 100000:
                     self._flush_relations(data)
                     data = []
@@ -149,7 +163,7 @@ class ClickHouseLogger:
 
     def log_agent_registry(self, collective):
         """
-        Логирует реестр агентов: связывает числовые ID (из C++ ядра) со строковыми ID и метаданными.
+        Логирует реестр агентов: связывает числовые ID (из C++ ядра) со строковыми ID and метаданными.
         Вызывается один раз в начале симуляции.
         """
         if not self.client: return
@@ -189,7 +203,7 @@ class ClickHouseLogger:
         """
         Retrieves a simulation snapshot from ClickHouse.
         """
-        # Fetch emotions
+        # Получение emotions
         emotions_query = f"""
             SELECT agent_id, sadness_joy, fear_calm, anger_humility, disgust_acceptance, 
                    habit_surprise, shame_confidence, alienation_openness
@@ -199,9 +213,9 @@ class ClickHouseLogger:
         """
         emotions_res = self.client.query(emotions_query)
         
-        # Fetch relations
+        # Получение relations
         relations_query = f"""
-            SELECT subject_id, object_id, utility, affinity, trust
+            SELECT ID субъекта, ID объекта, utility, affinity, trust
             FROM agent_relations
             WHERE run_id = '{target_run_id}' AND day_id = {day_id} AND slot_id = {slot_id}
         """

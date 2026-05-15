@@ -12,7 +12,7 @@ from core.interaction_strategy import InteractionStrategy
 class UniversityCollective(Collective):
     """
     Расширенный коллектив для симуляции университета.
-    Управляет расписанием, локациями и специфическими правилами v3.0.
+    Управляет расписанием, локациями and специфическими правилами v3.0.
     """
 
     def __init__(self, seed=None, config=None):
@@ -21,7 +21,7 @@ class UniversityCollective(Collective):
             np.random.seed(seed)
         super().__init__(seed=seed)
         
-        # Загрузка конфига (v6.7)
+        # Загрузка конфига
         self.config = config or {}
         self.current_academic_year = self.config.get("start_year", 2024)
         self.current_date = datetime.date(self.current_academic_year, 9, 1)
@@ -30,6 +30,7 @@ class UniversityCollective(Collective):
         self.master_counts = self.config.get("master_counts", None)
         self.total_bac = self.config.get("total_bac", 1500)
         self.total_mag = self.config.get("total_mag", 120) # v6.9.27: Новый стандарт 120
+        self.semesters_passed = 0
         
         self.uni_manager = UniversityManager(start_academic_year=self.current_academic_year)
         self.uni_manager.generate_schedules()
@@ -37,7 +38,7 @@ class UniversityCollective(Collective):
         # Группировка для быстрого доступа
         self.groups_map = {} # group_id -> [agent_names]
         
-        # Заселяем университет согласно конфигу (v6.9.27)
+        # Заселяем университет согласно конфигу
         if not self.agents:
             initial_agents = self.uni_manager.create_university_agents(
                 total_bac=self.total_bac,
@@ -48,7 +49,7 @@ class UniversityCollective(Collective):
             for agent in initial_agents:
                 self.add_agent(agent)
                 
-            # Фиксируем "ДНК" университета для будущих поколений (v6.9.2)
+            # Фиксируем "ДНК" университета для будущих поколений
             from model.archetypes import ArchetypeEnum
             arch_list = list(ArchetypeEnum)
             
@@ -59,7 +60,7 @@ class UniversityCollective(Collective):
                     
                 counts = {arch.name: 0 for arch in arch_list}
                 for a in agents_subset:
-                    counts[a.archetype.name] += 1
+                    counts[a.archetype.name.upper()] += 1
                 total = len(agents_subset)
                 return [counts[arch.name]/total for arch in arch_list]
             
@@ -68,6 +69,8 @@ class UniversityCollective(Collective):
             
             self.bac_weights_list = calculate_weights(bac_agents, self.bachelor_counts)
             self.mag_weights_list = calculate_weights(mag_agents, self.master_counts)
+            
+            self._populate_initial_relations()
         
         # Очередь слотов для пошагового выполнения
         self.day_schedule_slots = [
@@ -79,11 +82,11 @@ class UniversityCollective(Collective):
         ]
         self.current_slot_idx = 0
         self.current_rooms = {} # room_id -> [agent_names] (для GUI)
-        self.agent_current_seat = {} # name -> seat_index (v6.9.13)
+        self.agent_current_seat = {} # name -> seat_index
         self.last_interactions = [] # [(name1, name2, status)] для линий связи
 
     def add_agent(self, agent):
-        """Добавить агента в коллектив и обновить иерархию групп."""
+        """Добавить агента в коллектив and обновить иерархию групп."""
         super().add_agent(agent)
         gid = getattr(agent, 'group_id', None)
         if gid:
@@ -92,8 +95,42 @@ class UniversityCollective(Collective):
             if agent.name not in self.groups_map[gid]:
                 self.groups_map[gid].append(agent.name)
 
+    def _populate_initial_relations(self):
+        """
+        Инициализация отношений между агентами (для тестов и реализма).
+        Режимы (initial_relations_mode):
+        - EMPTY: ни у кого нет изначальных отношений (все с нуля).
+        - RANDOM: у всех (даже 1 курса) есть случайные отношения внутри группы/потока.
+        - MIXED (по умолчанию): 1 курс пустой, 2-4 и магистратура-2 имеют отношения.
+        """
+        mode = self.config.get("initial_relations_mode", "MIXED")
+        if mode == "EMPTY":
+            return
+            
+        print(f"[System] Популяция изначальных отношений (Режим: {mode})...", flush=True)
+        
+        for name1, agent1 in self.agents.items():
+            if mode == "MIXED" and agent1.course_year == 1:
+                continue
+                
+            for name2, agent2 in self.agents.items():
+                if name1 == name2: continue
+                if mode == "MIXED" and agent2.course_year == 1:
+                    continue
+                    
+                # Согласно требованиям: 2-4 курсы и магистры 2-го года 100% знают друг더라
+                prob = 1.0
+                    
+                if prob > 0 and random.random() < prob:
+                    agent1.update_relation(
+                        name2,
+                        utility=random.randint(-100, 100),
+                        affinity=random.randint(-100, 100),
+                        trust=random.randint(-100, 100)
+                    )
+
     def remove_agent(self, agent_name):
-        """Удалить агента и очистить упоминания в группах."""
+        """Удалить агента and очистить упоминания в группах."""
         agent = self.get_agent(agent_name)
         if agent:
             gid = getattr(agent, 'group_id', None)
@@ -119,7 +156,7 @@ class UniversityCollective(Collective):
             self.current_step += 1
             self.current_date += datetime.timedelta(days=1)
             
-            # Академический цикл (v6.0)
+            # Академический цикл
             self._check_academic_cycle()
             
             self.current_slot_idx = 0 # СБРОС ИНДЕКСА ДЛЯ НОВОГО ДНЯ
@@ -128,12 +165,14 @@ class UniversityCollective(Collective):
 
         slot_type = self.day_schedule_slots[self.current_slot_idx]
         self.last_interactions = []
-        self.agent_current_seat = {} # Сброс мест (v6.9.13)
+        self.agent_current_seat = {} # Сброс мест
         
         # Сброс статусов
         if self.current_slot_idx == 0:
             for agent in self.agents.values():
-                agent.status = AgentStatus.IN_CLASS
+                agent.status = AgentStatus.HOME
+                agent.arrived_today = False
+                agent.left_campus_today = False
 
         interactions = []
 
@@ -174,7 +213,7 @@ class UniversityCollective(Collective):
         while True:
             interactions = self.perform_next_step()
             all_interactions.extend(interactions)
-            # Признак завершения дня и готовности к новому
+            # Признак завершения дня and готовности к новому
             if any(res == "New_Day_Ready" for _, _, res in interactions if isinstance(res, str)):
                 break
         
@@ -182,7 +221,7 @@ class UniversityCollective(Collective):
 
     def _seat_students(self, room_id, student_names, cols):
         """Алгоритм Умной Рассадки (Софтмакс)"""
-        # Получаем реальную вместимость комнаты (v6.9.7)
+        # Получаем реальную вместимость комнаты
         room_info = self.uni_manager.rooms_info.get(room_id, {})
         capacity = room_info.get("capacity", max(100, len(student_names)))
         
@@ -194,6 +233,13 @@ class UniversityCollective(Collective):
             empty_indices = [i for i, seat in enumerate(seated) if seat is None]
             if not empty_indices: break
                 
+            if room_id == "GYM":
+                cluster_id = int(agent.sportiness * 2.99) # 0, 1, or 2
+                slice_w = cols / 3.0
+                valid_empty = [i for i in empty_indices if int((i % cols) / slice_w) == cluster_id]
+                if valid_empty:
+                    empty_indices = valid_empty
+                
             seat_weights = []
             for i in empty_indices:
                 neighbors = []
@@ -204,7 +250,7 @@ class UniversityCollective(Collective):
                 
                 occupied_neighbors = [seated[n] for n in neighbors if n >= 0 and n < len(seated) and seated[n] is not None]
                 
-                # Добавляем базовый случайный вес, чтобы не кучковались в начале (v6.9.13)
+                # Добавляем базовый случайный вес, чтобы не кучковались в начале
                 base_weight = 0.5 + random.random() * 0.5
                 
                 if not occupied_neighbors:
@@ -256,27 +302,20 @@ class UniversityCollective(Collective):
         return seated
 
     def _interact_group(self, group_list, context) -> List[Tuple[str, str, str]]:
-        """Топология группового взаимодействия (Клика для <=5, Кольцо для >5)"""
+        """Топология группового взаимодействия (Клика для всех)"""
         if len(group_list) < 2: return []
         interactions = []
         
-        if len(group_list) <= 5:
-            # Клика (каждый с каждым)
-            for i in range(len(group_list)):
-                for j in range(i+1, len(group_list)):
-                    res = self._interact_pair(group_list[i], group_list[j], context)
-                    if res: interactions.append(res)
-        else:
-            # Кольцо (по кругу)
-            for i in range(len(group_list)):
-                s1 = group_list[i]
-                s2 = group_list[(i+1) % len(group_list)]
-                res = self._interact_pair(s1, s2, context)
+        # Клика (каждый с каждым)
+        for i in range(len(group_list)):
+            for j in range(i+1, len(group_list)):
+                res = self._interact_pair(group_list[i], group_list[j], context)
                 if res: interactions.append(res)
+                
         return interactions
 
     def _interact_in_room(self, seated, cols, context) -> List[Tuple[str, str, str]]:
-        """Вероятностный выбор собеседника (Neighborhood 4-Way) и создание групп"""
+        """Вероятностный выбор собеседника (Neighborhood 4-Way) and создание групп"""
         import math
         interactions = []
         active_indices = [i for i, name in enumerate(seated) if name is not None]
@@ -332,25 +371,57 @@ class UniversityCollective(Collective):
         
         room_assignments = {}
         for name, agent in self.agents.items():
-            if agent.status == AgentStatus.HOME: continue
+            if getattr(agent, 'left_campus_today', False): continue
+            
             if random.random() < agent.skip_tendency:
+                if getattr(agent, 'arrived_today', False):
+                    agent.left_campus_today = True
                 agent.status = AgentStatus.HOME
                 continue
                 
             schedule = self.uni_manager.get_group_schedule(agent.group_id, day_idx)
+            room_id = "EMPTY"
             if slot_idx < len(schedule):
                 room_id = schedule[slot_idx]
+                
+            if room_id == "EMPTY":
+                if not getattr(agent, 'arrived_today', False):
+                    agent.status = AgentStatus.HOME
+                else:
+                    # Проверяем, есть ли еще реальные пары сегодня
+                    has_more_classes = any(r != "EMPTY" for r in schedule[slot_idx+1:]) if slot_idx < len(schedule) else False
+                    
+                    if has_more_classes or random.random() < agent.sportiness:
+                        # Либо еще будут пары, либо хочет на спорт -> ждет в коридоре
+                        room_id = "CORRIDOR"
+                        agent.status = AgentStatus.BREAK
+                        if room_id not in room_assignments: room_assignments[room_id] = []
+                        room_assignments[room_id].append(name)
+                    else:
+                        # Пары кончились and спорт не интересен -> домой
+                        agent.status = AgentStatus.HOME
+                        agent.left_campus_today = True
+            else:
+                agent.arrived_today = True
+                agent.status = AgentStatus.IN_CLASS
                 if room_id not in room_assignments: room_assignments[room_id] = []
                 room_assignments[room_id].append(name)
                 
-        # Рассадка и общение
-        for room_id, students in room_assignments.items():
+        # Рассадка and общение
+        for room_id in room_assignments.keys():
+            students = room_assignments[room_id]
             cols = self.uni_manager.get_room_cols(room_id)
+            
+            # Для коридора форсируем максимально случайное перемешивание
+            if room_id == "CORRIDOR":
+                random.shuffle(students)
+                
             seated = self._seat_students(room_id, students, cols)
             
-            # Сохраняем места для GUI (v6.9.13)
+            # Сохраняем места для GUI
             for idx, name in enumerate(seated):
-                if name: self.agent_current_seat[name] = idx
+                if name: 
+                    self.agent_current_seat[name] = idx
                 
             self.current_rooms[room_id] = seated
             room_interactions = self._interact_in_room(seated, cols, context='STUDY')
@@ -359,11 +430,12 @@ class UniversityCollective(Collective):
         return interactions
 
     def _handle_break_slot(self):
-        """Перемена: рассадка по интересам (v6.9.13)"""
+        """Перемена: рассадка по интересам"""
         corridor_students = [n for n, a in self.agents.items() if a.status != AgentStatus.HOME]
         cols = self.uni_manager.get_room_cols("CORRIDOR")
         
         # Группируем людей в коридоре, чтобы группы общения были рядом
+        random.shuffle(corridor_students)
         seated = self._seat_students("CORRIDOR", corridor_students, cols)
         for idx, name in enumerate(seated):
             if name: self.agent_current_seat[name] = idx
@@ -382,7 +454,7 @@ class UniversityCollective(Collective):
             else:
                 agent.status = AgentStatus.HOME
 
-        # Спортзал: 2D Рассадка и взаимодействие (Группировки)
+        # Спортзал: 2D Рассадка and взаимодействие (Группировки)
         cols = self.uni_manager.get_room_cols("GYM")
         seated_gym = self._seat_students("GYM", gym_students, cols)
         for idx, name in enumerate(seated_gym):
@@ -394,13 +466,19 @@ class UniversityCollective(Collective):
 
     def _handle_sunday(self) -> List[Tuple[str, str, str]]:
         # Family Day
+        # Смещение эмоций в воскресенье
+        delta = random.randint(-30, 30)
         for agent in self.agents.values():
+            # Применяем единый случайный сдвиг ко всем семи измерениям
+            agent.emotion_vector = [
+                max(-30, min(30, e + delta)) for e in agent.emotion_vector
+            ]
             # Сброс стресса/эмоций (ближе к 0)
-            agent.automaton.apply_decay(5) # Было 0.5
+            agent.automaton.apply_decay(5)  # Было 0.5
             # Рандомное влияние семьи (x10)
             family_impact = random.randint(-10, 10)
             agent.automaton.adjust_emotion("joy_sadness", family_impact)
-            
+                
         self.current_date += datetime.timedelta(days=1)
         self.current_step += 1
         # Чтобы следующий шаг (понедельник) начался с первой пары
@@ -408,27 +486,35 @@ class UniversityCollective(Collective):
         return [("System", "All", "New_Day_Ready")]
 
     def _check_academic_cycle(self):
-        """Проверяет даты на наступление каникул или смену курса (v6.0)."""
+        """Проверяет даты на наступление каникул или смену курса. Логика семестров ВМК МГУ."""
         month = self.current_date.month
         day = self.current_date.day
-        
-        # 1. Прыжок через каникулы (Июль, Август)
+
+        # Летние каникулы (Июль, Август) → переход к осеннему семестру 1 сентября
         if month in [7, 8]:
             print(f">>> Наступили летние каникулы. Прыжок в новый учебный год...")
             self.current_date = datetime.date(self.current_date.year, 9, 1)
             self._handle_graduation_and_enrollment()
+            self.semesters_passed += 1
+            # Переинициализация эмоций в начале осеннего семестра
+            self._reinitialize_emotions()
+            print(f">>> Начало осеннего семестра {self.current_academic_year} года. Пройдено семестров: {self.semesters_passed}")
             return
 
-        # 2. Переход между семестрами (февраль - формальная отбивка)
+        # Переход между семестрами (февраль – начало весеннего семестра)
         if month == 2 and day == 1:
-            print(f">>> Начало весеннего семестра {self.current_academic_year} года.")
+            self.semesters_passed += 1
+            # Переинициализация эмоций в начале весеннего семестра
+            self._reinitialize_emotions()
+            print(f">>> Начало весеннего семестра {self.current_academic_year} года. Пройдено семестров: {self.semesters_passed}")
+            return
 
     def _handle_graduation_and_enrollment(self):
-        """Интеллектуальная ротация: Бакалавры -> Магистры (v6.3)."""
+        """Интеллектуальная ротация: Бакалавры -> Магистры."""
         new_enroll_year = self.current_academic_year
         print(f"--- АКАДЕМИЧЕСКАЯ РОТАЦИЯ: {new_enroll_year} ---")
         
-        # 1. Формируем списки выпускников по факультетам
+# Формируем списки выпускников по факультетам
         faculty_graduates = {f: [] for f in self.uni_manager.FACULTY_NAMES}
         graduates_to_remove = []
         continuants = []
@@ -437,7 +523,7 @@ class UniversityCollective(Collective):
         
         for name, agent in self.agents.items():
             if agent.degree_type == "BACHELOR" and agent.enrollment_year <= (self.current_academic_year - 3):
-                # Используем шанс из конфига (v6.4)
+                # Используем шанс из конфига
                 can_continue = agent.faculty in faculty_to_master
                 if can_continue and random.random() < self.master_chance:
                     agent.degree_type = "MASTER"
@@ -451,7 +537,7 @@ class UniversityCollective(Collective):
             elif agent.degree_type == "MASTER" and agent.enrollment_year <= (self.current_academic_year - 1):
                 graduates_to_remove.append(name)
 
-        # 2. Распределяем квоты в Магистратуру
+# Распределяем квоты в Магистратуру
         m_counts = {} # Сколько мест уже занято своими
         for c in continuants:
             m_counts[c.group_id] = m_counts.get(c.group_id, 0) + 1
@@ -469,7 +555,7 @@ class UniversityCollective(Collective):
         
         self.current_academic_year += 1
         
-        # 3. Физическое удаление и чистка памяти
+# Физическое удаление and чистка памяти
         for g_name in graduates_to_remove:
             self.remove_agent(g_name)
             
@@ -482,22 +568,27 @@ class UniversityCollective(Collective):
             
         print(f"----------------------------------------")
 
+    def _reinitialize_emotions(self):
+        """Переинициализировать эмоции всех агентов случайными целыми значениями в диапазоне [-30, 30]."""
+        for agent in self.agents.values():
+            agent.emotion_vector = [random.randint(-30, 30) for _ in range(7)]
+
     def _interact_pair(self, name1, name2, context=None) -> Tuple[str, str, str]:
         """
-        Моделирует взаимодействие пары (v4.6: Логика сигма {-1, 0, 1}).
+        Моделирует взаимодействие пары.
         v5.5: Принимает контекст (GYM, STUDY, BREAK).
         Возвращает (имя1, имя2, статус).
         """
         a1, a2 = self.agents[name1], self.agents[name2]
         
-        # 1. Проверка на ОТКАЗ (Sigma = 0)
+# Проверка на ОТКАЗ (Sigma = 0)
         # Отказ принимается вторым агентом
         refusal_chance = InteractionStrategy.calculate_refusal_chance(a2, a1)
         if random.random() < refusal_chance:
             InteractionStrategy.process_refusal(a1, a2)
             return (name1, name2, "refusal")
             
-        # 2. Определение УСПЕХА (Sigma = 1) или ПРОВАЛА (Sigma = -1)
+# Определение УСПЕХА (Sigma = 1) или ПРОВАЛА (Sigma = -1)
         # Базовая вероятность успеха зависит от Софтмакс-оценки
         score = InteractionStrategy.priority_score(a1, name2, a1.relations.get(name2, {}), context)
         import math

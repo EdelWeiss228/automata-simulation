@@ -3,7 +3,7 @@ import math
 
 class InteractionStrategy:
     """
-    Класс, инкапсулирующий стратегию выбора цели и обработки результатов взаимодействия.
+    Класс, инкапсулирующий стратегию выбора цели and обработки результатов взаимодействия.
     Вынесен из Collective для декомпозиции 'God Object'.
     """
 
@@ -77,7 +77,7 @@ class InteractionStrategy:
         
         base_score = a_score + u_score + alpha * t_score
         
-        # Влияние Среды (v5.5): Умножаем итоговый скор на коэффициент общительности в данном контексте
+        # Влияние Среды: Умножаем итоговый скор на коэффициент общительности в данном контексте
         if context and hasattr(agent, 'context_adaptability'):
             context_multiplier = agent.context_adaptability.get(context, 1.0)
             base_score *= context_multiplier
@@ -127,7 +127,7 @@ class InteractionStrategy:
     @staticmethod
     def process_refusal(agent, target_agent):
         """
-        Обработать отказ взаимодействия между агентами (v6.9.35).
+        Обработать отказ взаимодействия между агентами.
         """
         s_i = getattr(agent, 'sensitivity', 1.0)
 
@@ -156,13 +156,13 @@ class InteractionStrategy:
     @staticmethod
     def process_interaction_result(agent, target_agent, sigma, context=None):
         """
-        Обработать результат взаимодействия (Sigma) и обновить отношения.
+        Обработать результат взаимодействия (Sigma) and обновить отношения.
         v5.5: Интеграция контекста (STUDY, GYM, BREAK).
         """
         s_i = getattr(agent, "sensitivity", 1.0)
         s_t = getattr(target_agent, "sensitivity", 1.0)
         
-        # Получаем знак и силу первичной эмоции инициатора
+        # Получаем знак and силу первичной эмоции инициатора
         _, _, e_val = agent.get_primary_emotion()
         
         # Определяем множитель на основе Сигма-модели
@@ -181,7 +181,7 @@ class InteractionStrategy:
             base_trust = -20 * multiplier
             base_affinity = -5 * multiplier
             
-        # Влияние Среды (v5.5): Динамический мультипликатор получения опыта отношений в контесте
+        # Влияние Среды: Динамический мультипликатор получения опыта отношений в контесте
         c_i = agent.context_adaptability.get(context, 1.0) if hasattr(agent, 'context_adaptability') and context else 1.0
         c_t = target_agent.context_adaptability.get(context, 1.0) if hasattr(target_agent, 'context_adaptability') and context else 1.0
 
@@ -191,7 +191,7 @@ class InteractionStrategy:
                 from core.agent_factory import AgentFactory
                 AgentFactory.initialize_agent_relations(a, [t_id])
             
-            # Применяем изменения с учетом чувствительности (s) и адаптивности к контексту (c_mod)
+            # Применяем изменения с учетом чувствительности (s) and адаптивности к контексту (c_mod)
             a.relations[t_id]['affinity'] = a.limit_predicate_value(
                 a.relations[t_id].get('affinity', 0) + int(base_affinity * s * c_mod)
             )

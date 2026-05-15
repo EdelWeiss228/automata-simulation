@@ -22,14 +22,18 @@ class SimulationConstructor(tk.Tk):
         self.geometry("600x650")
         
         self.params = {
-            "total_agents": 1875,
-            "agent_counts": {arch.name: 0 for arch in ArchetypeEnum},
-            "emotion_dist": "Uniform", # Uniform or Normal
+            "total_bac": 1500,
+            "total_mag": 120,
+            "bachelor_counts": {arch.name: 0 for arch in ArchetypeEnum},
+            "master_counts": {arch.name: 0 for arch in ArchetypeEnum},
+            "emotion_dist": "Uniform",
             "emotion_params": {"min": -3.0, "max": 3.0, "mean": 0.0, "std": 1.0},
-            "steps": 100,
+            "semesters": 8,
+            "start_year": 2024,
+            "master_chance": 0.3,
             "seed": random.randint(0, 1000000),
             "silent_mode": True,
-            "university_mode": True # Forced University Mode
+            "university_mode": True
         }
         
         self.progress_var = tk.DoubleVar(value=0)
@@ -43,9 +47,14 @@ class SimulationConstructor(tk.Tk):
 
         top_frame = ttk.Frame(main_frame)
         top_frame.pack(fill=tk.X, pady=(0, 10))
-        ttk.Label(top_frame, text="Макс. количество агентов (N):", font=("Arial", 10, "bold")).pack(side=tk.LEFT)
-        self.total_entry = ttk.Entry(top_frame, width=10)
-        self.total_entry.insert(0, str(self.params["total_agents"]))
+        ttk.Label(top_frame, text="Название симуляции:", font=("Arial", 10)).pack(side=tk.LEFT)
+        self.run_name_entry = ttk.Entry(top_frame, width=20)
+        self.run_name_entry.insert(0, "Эксперимент 1")
+        self.run_name_entry.pack(side=tk.LEFT, padx=5)
+
+        ttk.Label(top_frame, text="Бакалавров:", font=("Arial", 10)).pack(side=tk.LEFT, padx=(10, 0))
+        self.total_entry = ttk.Entry(top_frame, width=8)
+        self.total_entry.insert(0, str(self.params["total_bac"]))
         self.total_entry.pack(side=tk.LEFT, padx=5)
         self.total_entry.bind("<KeyRelease>", lambda e: self.update_remainder_label())
 
@@ -63,7 +72,7 @@ class SimulationConstructor(tk.Tk):
             col = (i % 2) * 2
             ttk.Label(arch_frame, text=f"{arch.name}:").grid(row=row, column=col, sticky=tk.W, padx=5, pady=2)
             entry = ttk.Entry(arch_frame, width=10)
-            entry.insert(0, str(self.params["agent_counts"].get(arch.name, 0)))
+            entry.insert(0, str(self.params["bachelor_counts"].get(arch.name, 0)))
             entry.grid(row=row, column=col+1, sticky=tk.W, padx=5, pady=2)
             entry.bind("<KeyRelease>", lambda e: self.update_remainder_label())
             self.arch_entries[arch.name] = entry
@@ -94,15 +103,20 @@ class SimulationConstructor(tk.Tk):
         sim_frame = ttk.Frame(main_frame)
         sim_frame.pack(fill=tk.X, pady=5)
         
-        ttk.Label(sim_frame, text="Шагов (Дней):").grid(row=0, column=0, sticky=tk.W, padx=5)
+        ttk.Label(sim_frame, text="Семестров:").grid(row=0, column=0, sticky=tk.W, padx=5)
         self.steps_entry = ttk.Entry(sim_frame, width=10)
-        self.steps_entry.insert(0, str(self.params["steps"]))
+        self.steps_entry.insert(0, str(self.params["semesters"]))
         self.steps_entry.grid(row=0, column=1, sticky=tk.W, padx=5)
 
         ttk.Label(sim_frame, text="Seed (Случайное зерно):").grid(row=1, column=0, sticky=tk.W, padx=5)
-        self.seed_entry = ttk.Entry(sim_frame, width=10)
+        self.seed_entry = ttk.Entry(sim_frame, width=15)
         self.seed_entry.insert(0, str(self.params["seed"]))
-        self.seed_entry.grid(row=1, column=1, sticky=tk.W, padx=5)
+        self.seed_entry.grid(row=0, column=3, padx=5)
+        
+        ttk.Label(sim_frame, text="Инициализация отношений:").grid(row=1, column=0, pady=5)
+        self.relations_mode_var = tk.StringVar(value="MIXED")
+        self.relations_combo = ttk.Combobox(sim_frame, textvariable=self.relations_mode_var, values=["EMPTY", "RANDOM", "MIXED"], width=10, state="readonly")
+        self.relations_combo.grid(row=1, column=1, padx=5, sticky=tk.W)
 
         self.silent_var = tk.BooleanVar(value=True)
         # Checkbutton removed as per user request to avoid "slop" and enforce silent simulation by default
@@ -162,9 +176,11 @@ class SimulationConstructor(tk.Tk):
 
     def collect_params(self):
         try:
-            self.params["total_agents"] = int(self.total_entry.get())
+            self.params["total_bac"] = int(self.total_entry.get())
             for arch in ArchetypeEnum:
-                self.params["agent_counts"][arch.name] = int(self.arch_entries[arch.name].get())
+                val = int(self.arch_entries[arch.name].get())
+                self.params["bachelor_counts"][arch.name] = val
+                self.params["master_counts"][arch.name] = val # Пропорционально для магистров
             
             self.params["emotion_dist"] = self.dist_var.get()
             if self.params["emotion_dist"] == "Uniform":
@@ -174,9 +190,11 @@ class SimulationConstructor(tk.Tk):
                 self.params["emotion_params"]["mean"] = float(self.mean_entry.get())
                 self.params["emotion_params"]["std"] = float(self.std_entry.get())
             
-            self.params["steps"] = int(self.steps_entry.get())
+            self.params["semesters"] = int(self.steps_entry.get())
             self.params["seed"] = int(self.seed_entry.get())
-            self.params["silent_mode"] = self.silent_var.get()
+            self.params["run_name"] = self.run_name_entry.get()
+            self.params["initial_relations_mode"] = self.relations_mode_var.get()
+            self.params["silent_mode"] = True
             return True
         except ValueError as e:
             messagebox.showerror("Ошибка ввода", f"Пожалуйста, введите корректные числовые значения.\n{e}")
@@ -213,7 +231,7 @@ class SimulationConstructor(tk.Tk):
         self.run_btn.config(state=tk.DISABLED)
         
         # Always use --university and --silent as per research requirements
-        cmd = [sys.executable, main_path, "--scenario", config_path, "--silent", "--university"]
+        cmd = [sys.executable, main_path, "--scenario", config_path, "--silent", "--university", "--semesters", str(self.params["semesters"])]
         
         def monitor_process():
             try:
@@ -238,13 +256,19 @@ class SimulationConstructor(tk.Tk):
                         self.after(0, lambda p=perc: (self.progress_var.set(p * 0.2), self.status_var.set(f"Инициализация мира: {p}%")))
                         continue
                         
-                    # Парсинг шагов (20-100% бара)
-                    step_match = re.search(r"Шаг (\d+)/(\d+)", line)
+                    # Парсинг шагов (20-100% бара) - дни or семестры
+                    step_match = re.search(r"Пройдено семестров: (\d+)/(\d+)", line)
                     if step_match:
                         cur = int(step_match.group(1))
                         tot = int(step_match.group(2))
-                        progress = 20 + (cur / tot) * 80
-                        self.after(0, lambda pr=progress, c=cur, t=tot: (self.progress_var.set(pr), self.status_var.set(f"Симуляция: Шаг {c}/{t}")))
+                        progress = 20 + (cur / tot) * 80 if tot > 0 else 100
+                        self.after(0, lambda pr=progress, c=cur, t=tot: (self.progress_var.set(pr), self.status_var.set(f"Симуляция: Семестр {c}/{t}")))
+                        continue
+                        
+                    day_match = re.search(r"Прошло (\d+) дней", line)
+                    if day_match:
+                        days = int(day_match.group(1))
+                        self.after(0, lambda d=days: self.status_var.set(f"Симуляция: Прошло {d} дней..."))
                         continue
                         
                     # Статусные сообщения
