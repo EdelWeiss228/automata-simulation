@@ -14,35 +14,25 @@ class ClickHouseLogger:
         self.user = os.getenv("CLICKHOUSE_USER", "default")
         self.password = os.getenv("CLICKHOUSE_PASSWORD", "clickhouse_pass")
         self.run_id = str(uuid.uuid4())
+        self.host = os.getenv("CLICKHOUSE_HOST", "localhost")
+        self.port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
+        self.secure = os.getenv("CLICKHOUSE_SECURE", "False").lower() in ("true", "1", "yes")
+        
         self.relations_buffer = [] # Буфер для накопления данных за день
         
-        # Попытка 1: Локальный докер (localhost)
         try:
             self.client = clickhouse_connect.get_client(
-                host='localhost',
-                port=8123,
+                host=self.host,
+                port=self.port,
                 username=self.user,
                 password=self.password,
-                secure=False,
+                secure=self.secure,
                 settings={'insert_deduplicate': 0}
             )
-            print(f"ClickHouseLogger: Connected to LOCALHOST (Docker)", flush=True)
+            print(f"ClickHouseLogger: Успешно подключено к ClickHouse ({self.host}:{self.port})", flush=True)
         except Exception as e:
-            print(f"ClickHouseLogger: Локальный ClickHouse не найден, пробую ТУННЕЛЬ... ({e})", flush=True)
-            # Попытка 2: Удаленный туннель
-            try:
-                self.client = clickhouse_connect.get_client(
-                    host='db.georgytadjiev.ink',
-                    port=443,
-                    username=self.user,
-                    password=self.password,
-                    secure=True,
-                    settings={'insert_deduplicate': 0}
-                )
-                print(f"ClickHouseLogger: Connected to REMOTE (Cloudflare Tunnel)", flush=True)
-            except Exception as e2:
-                print(f"КРИТИЧЕСКАЯ ОШИБКА: ClickHouse недоступен ни локально, ни через туннель: {e2}", flush=True)
-                self.client = None
+            print(f"ПРЕДУПРЕЖДЕНИЕ: СУБД ClickHouse недоступна по адресу {self.host}:{self.port} ({e}). Логирование в БД будет отключено.", flush=True)
+            self.client = None
 
     def log_run_metadata(self, run_name: str, description: str, scenario_name: str = "default"):
         """Логирует метаданные (название и описание) симуляции для удобного поиска в БД."""
