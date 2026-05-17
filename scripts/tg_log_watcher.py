@@ -121,13 +121,20 @@ def get_detailed_progress():
         if not result.result_rows:
             return "📈 Пока нет данных в базе."
             
+        import datetime
+        start_date = datetime.date(2025, 9, 1)
+        months_ru = {
+            1: "Январь", 2: "Февраль", 3: "Март", 4: "Апрель", 5: "Май", 6: "Июнь",
+            7: "Июль", 8: "Август", 9: "Сентябрь", 10: "Октябрь", 11: "Ноябрь", 12: "Декабрь"
+        }
+        
         lines = ["📈 **Текущий прогресс (по базе):**"]
         for row in result.result_rows:
             name, day = row
-            # Примерный месяц
-            months = ["Сентябрь", "Октябрь", "Ноябрь", "Декабрь", "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь"]
-            m_idx = min(day // 30, len(months)-1)
-            lines.append(f"• `{name}`: **{day} день** ({months[m_idx]})")
+            # Рассчитываем точную дату от старта симуляции (1 сентября 2025)
+            sim_date = start_date + datetime.timedelta(days=int(day))
+            month_name = months_ru.get(sim_date.month, "Неизвестно")
+            lines.append(f"• `{name}`: **{day}-й день** ({month_name} {sim_date.year})")
             
         return "\n".join(lines)
     except Exception as e:
