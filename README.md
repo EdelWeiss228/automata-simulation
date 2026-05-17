@@ -147,4 +147,42 @@ start /B venv\Scripts\python scripts\tg_log_watcher.py > data\output\tg_bot.log 
 * 🚀 **Рестарт** — безопасное принудительное завершение всех фоновых процессов симулятора, очистка таблиц ClickHouse (`TRUNCATE`) и перезапуск симуляции с чистого листа.
 
 ---
+
+## 5. Развертывание и настройка СУБД ClickHouse
+
+СУБД **ClickHouse** используется в качестве аналитического хранилища для накопления и постобработки терабайт логов (состояния агентов, ежедневные матрицы отношений, пошаговые события) при долгосрочном моделировании.
+
+### 1. Быстрый запуск локального сервера (Docker)
+Рекомендуется использовать официальный образ ClickHouse в контейнере Docker:
+
+```bash
+docker run -d \
+  --name clickhouse-server \
+  -p 8123:8123 \
+  -p 9000:9000 \
+  --ulimit nofile=262144:262144 \
+  -e CLICKHOUSE_DB=default \
+  -e CLICKHOUSE_USER=default \
+  -e CLICKHOUSE_PASSWORD=clickhouse_pass \
+  clickhouse/clickhouse-server
+```
+
+### 2. Инициализация таблиц базы данных
+Для создания необходимых структур хранения примените SQL-скрипт схемы `data/clickhouse_schema.sql` удобным способом:
+
+* **Способ А (прямым HTTP-запросом):**
+  ```bash
+  curl -u default:clickhouse_pass -d @data/clickhouse_schema.sql http://localhost:8123/
+  ```
+
+* **Способ Б (через консоль внутри контейнера):**
+  ```bash
+  docker exec -i clickhouse-server clickhouse-client --user default --password clickhouse_pass --queries-file - < data/clickhouse_schema.sql
+  ```
+
+### 3. Автоматический файловер и защищенный туннель
+> [!NOTE]
+> В системе реализована технология отказоустойчивости (Lazy Fallback): если локальный инстанс СУБД недоступен, регистратор `ClickHouseLogger` автоматически переключит поток данных на удалённую реплику в облаке через защищённый туннель Cloudflare (`db.georgytadjiev.ink` на порту `443` по HTTPS). Это избавляет от необходимости обязательной настройки локальной базы при демонстрациях проекта на сторонних устройствах.
+
+---
 *Выполнено в рамках научно-исследовательской работы студентов отделения Прикладной математики и информатики.*
