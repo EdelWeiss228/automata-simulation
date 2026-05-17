@@ -1,0 +1,14 @@
+{
+    "scenario_name": "Run02_Enigmata_RANDOM",
+    "run_name": "Run02_Enigmata",
+    "description": "Research Batch. Archetype Dist: Run02_Enigmata. Relations Mode: RANDOM",
+    "bachelor_counts": {
+        "ENIGMATA": 1500
+    },
+    "master_counts": {
+        "ENIGMATA": 120
+    },
+    "initial_relations_mode": "RANDOM",
+    "semesters": 8,
+    "seed": 104754
+}

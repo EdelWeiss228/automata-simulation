@@ -125,6 +125,68 @@ class UniversityManager:
     def get_all_groups(self) -> List[str]:
         return list(getattr(self, 'schedules', {}).keys())
 
+    def create_new_cohort(self, academic_year, master_filled_counts=None, bachelor_weights=None, master_weights=None) -> List[Agent]:
+        from model.archetypes import ArchetypeEnum
+        agents = []
+        master_filled = master_filled_counts or {}
+        b_weights = bachelor_weights or {}
+        m_weights = master_weights or {}
+        
+        # 1. Новые бакалавры (1 курс)
+        year_suffix = str(academic_year)[2:]
+        for f in range(self.faculties_count):
+            f_name = self.FACULTY_NAMES[f]
+            # В ротации добавляем один новый набор (1-й курс)
+            for g in range(self.groups_per_stream):
+                group_id = f"{f_name}-{year_suffix}-{g+1}"
+                for i in range(25):
+                    agent_id = f"S-{group_id}-{i+1:02d}"
+                    arch = self._pick_archetype(b_weights)
+                    agent = AgentFactory.create_agent(self._generate_human_name(), archetype_enum=arch, agent_id=agent_id)
+                    agent.set_university_info(f_name, f"{f_name}-{year_suffix}", group_id)
+                    agent.course_year = 1
+                    agent.enrollment_year = academic_year
+                    agents.append(agent)
+                    
+        # 2. Новые магистры (1 курс)
+        for m_idx, m_name in enumerate(self.MASTER_FACULTIES):
+            group_id = f"{m_name}-M1-1"
+            already_filled = master_filled.get(group_id, 0)
+            to_add = max(0, 15 - already_filled)
+            for i in range(to_add):
+                agent_id = f"M-{group_id}-{already_filled + i + 1:02d}"
+                arch = self._pick_archetype(m_weights)
+                agent = AgentFactory.create_agent(self._generate_human_name(), archetype_enum=arch, agent_id=agent_id)
+                agent.degree_type = "MASTER"
+                agent.course_year = 1
+                agent.enrollment_year = academic_year
+                parent_faculty = self.FACULTY_NAMES[m_idx % len(self.FACULTY_NAMES)]
+                agent.set_university_info(parent_faculty, f"{m_name}-M1", group_id)
+                agents.append(agent)
+                
+        return agents
+
+    def _pick_archetype(self, weights):
+        from model.archetypes import ArchetypeEnum
+        arch_list = list(ArchetypeEnum)
+        if not weights:
+            return random.choice(arch_list)
+        
+        # weights может быть list (пропорции по порядку ArchetypeEnum) или dict {name: weight}
+        if isinstance(weights, list):
+            probs = weights
+            if sum(probs) == 0:
+                return random.choice(arch_list)
+            return random.choices(arch_list, weights=probs, k=1)[0]
+        else:
+            # dict формат
+            choices = list(weights.keys())
+            probs = [weights[c] for c in choices]
+            if sum(probs) == 0:
+                return random.choice(arch_list)
+            arch_name = random.choices(choices, weights=probs, k=1)[0]
+            return next(a for a in arch_list if a.name == arch_name)
+
     def _generate_human_name(self) -> str:
         if random.random() < 0.5:
             return f"{random.choice(self.NAMES_M)} {random.choice(self.SURNAMES_M)}"
@@ -140,9 +202,25 @@ class UniversityManager:
         def build_pool(counts, total):
             pool = []
             arch_list = list(ArchetypeEnum)
+            
+            # Маппинг устаревших/альтернативных имен к Honkai-архетипам
+            name_mapping = {
+                "INNOVATOR": "TRAILBLAZE",
+                "MEDIATOR": "HARMONY",
+                "DESTRUCTOR": "NIHILITY",
+                "PROTECTOR": "PRESERVATION",
+                "OPPORTUNIST": "ELATION",
+                "COMPETITOR": "HUNT",
+                "NONCONFORMIST": "ENIGMATA",
+                "ANALYST": "ERUDITION",
+                "REFLECTOR": "REMEMBRANCE"
+            }
+            
             for name, count in counts.items():
-                arch = next(a for a in arch_list if a.name == name)
-                pool.extend([arch] * int(count))
+                mapped_name = name_mapping.get(name.upper(), name.upper())
+                arch = next((a for a in arch_list if a.name == mapped_name), None)
+                if arch:
+                    pool.extend([arch] * int(count))
             while len(pool) < total:
                 pool.append(random.choice(arch_list))
             random.shuffle(pool)

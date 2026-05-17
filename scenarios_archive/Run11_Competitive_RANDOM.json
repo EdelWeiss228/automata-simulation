@@ -1,0 +1,18 @@
+{
+    "scenario_name": "Run11_Competitive_RANDOM",
+    "run_name": "Run11_Competitive",
+    "description": "Research Batch. Archetype Dist: Run11_Competitive. Relations Mode: RANDOM",
+    "bachelor_counts": {
+        "HUNT": 500,
+        "COMPETITOR": 500,
+        "NONCONFORMIST": 500
+    },
+    "master_counts": {
+        "HUNT": 40,
+        "COMPETITOR": 40,
+        "NONCONFORMIST": 40
+    },
+    "initial_relations_mode": "RANDOM",
+    "semesters": 8,
+    "seed": 39915
+}

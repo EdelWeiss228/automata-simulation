@@ -1,0 +1,10 @@
+{
+    "scenario_name": "Run08_Uniform_Random_RANDOM",
+    "run_name": "Run08_Uniform_Random",
+    "description": "Research Batch. Archetype Dist: Run08_Uniform_Random. Relations Mode: RANDOM",
+    "bachelor_counts": {},
+    "master_counts": {},
+    "initial_relations_mode": "RANDOM",
+    "semesters": 8,
+    "seed": 383046
+}

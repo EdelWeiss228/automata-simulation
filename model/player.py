@@ -18,24 +18,24 @@ class Player:
 
     def choose_emotion(self):
         """Позволяет игроку выбрать эмоцию и её силу."""
-        print("Выберите эмоцию для игрока:")
+        print("Выберите эмоцию для игрока:", flush=True)
         for i, emotion in enumerate(self.emotions, 1):
-            print(f"{i}. {emotion}")
+            print(f"{i}. {emotion}", flush=True)
 
         choice = int(input(f"Выберите номер эмоции (1-{len(self.emotions)}): "))
         if 1 <= choice <= len(self.emotions):
             self.current_emotion = self.emotions[choice - 1]
-            print(f"Эмоция игрока установлена на: {self.current_emotion}")
+            print(f"Эмоция игрока установлена на: {self.current_emotion}", flush=True)
 
             while True:
                 try:
                     self.emotion_value = int(input("Введите силу эмоции (-3 до 3): "))
                     if -3 <= self.emotion_value <= 3:
                         break
-                    print("Введите число от -3 до 3.")
+                    print("Введите число от -3 до 3.", flush=True)
                 except ValueError:
-                    print("Некорректный ввод. Введите целое число.")
-        print("Некорректный выбор. Попробуйте снова.")
+                    print("Некорректный ввод. Введите целое число.", flush=True)
+        print("Некорректный выбор. Попробуйте снова.", flush=True)
 
     def choose_interaction(self, agents_dict):
         """Позволяет игроку выбрать агента для взаимодействия."""
@@ -46,9 +46,9 @@ class Player:
         approached_agents = list(agents_dict.keys())
 
         if approached_agents:
-            print("Игрок может взаимодействовать с следующими агентами:")
+            print("Игрок может взаимодействовать с следующими агентами:", flush=True)
             for i, agent_name in enumerate(approached_agents, 1):
-                print(f"{i}. {agent_name}")
+                print(f"{i}. {agent_name}", flush=True)
 
             choice = int(input(f"Выберите номер агента (1-{len(approached_agents)}): "))
             if 1 <= choice <= len(approached_agents):
@@ -64,9 +64,9 @@ class Player:
                 self.choose_emotion()
                 self.interact_with_agent(target_agent)
             else:
-                print("Некорректный выбор. Попробуйте снова.")
+                print("Некорректный выбор. Попробуйте снова.", flush=True)
         else:
-            print("Нет агентов, которые подошли для взаимодействия.")
+            print("Нет агентов, которые подошли для взаимодействия.", flush=True)
 
     def interact_with_agent(self, target_agent):
         """Выполняет взаимодействие с выбранным агентом и обновляет отношения."""
@@ -91,7 +91,7 @@ class Player:
             target_agent.relations[self.name]['utility'] + delta
         )
 
-        print(f"Отношения с {target_agent.name} обновлены!")
+        print(f"Отношения с {target_agent.name} обновлены!", flush=True)
 
     def get_primary_emotion(self):
         """Возвращает текущую основную эмоцию и её силу."""
@@ -114,6 +114,6 @@ class Player:
             self.relations[agent_name]['affinity'] = limit(self.relations[agent_name]['affinity'] + response_value)
             self.relations[agent_name]['trust'] = limit(self.relations[agent_name]['trust'] + response_value)
             self.relations[agent_name]['utility'] = limit(self.relations[agent_name]['utility'] + response_value)
-            print(f"Отношения с {agent_name} обновлены на основе ответа игрока!")
+            print(f"Отношения с {agent_name} обновлены на основе ответа игрока!", flush=True)
         else:
-            print(f"Неизвестный агент: {agent_name}. Отношения не обновлены.")
+            print(f"Неизвестный агент: {agent_name}. Отношения не обновлены.", flush=True)

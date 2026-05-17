@@ -153,8 +153,30 @@ class UniversityCollective(Collective):
         if self.current_slot_idx >= len(self.day_schedule_slots):
             self.current_slot_idx = 0
             # Переходим к следующему дню
+            old_month = self.current_date.month
             self.current_step += 1
             self.current_date += datetime.timedelta(days=1)
+            
+            if self.current_date.month != old_month:
+                month_name = self.current_date.strftime("%B")
+                msg = f"  [Progress] Прошел месяц: {month_name} {self.current_date.year}"
+                print(msg, flush=True)
+                
+                # Отправляем в ТГ напрямую (параллельно принту)
+                try:
+                    token = os.getenv("TELEGRAM_BOT_TOKEN")
+                    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+                    if token and chat_id:
+                        import requests
+                        # Добавляем название сценария для контекста, если оно доступно
+                        prefix = f"[{getattr(self, 'scenario_name', 'SIM')}] "
+                        requests.post(
+                            f"https://api.telegram.org/bot{token}/sendMessage",
+                            json={"chat_id": chat_id, "text": prefix + msg},
+                            timeout=5
+                        )
+                except:
+                    pass
             
             # Академический цикл
             self._check_academic_cycle()
@@ -193,14 +215,22 @@ class UniversityCollective(Collective):
         self.last_interactions = interactions # Сохраняем для GUI
         
         # ОБНОВЛЕНИЕ ЭМОЦИЙ ПОСЛЕ КАЖДОГО СЛОТА (для живого обновления цветов)
-        for agent in self.agents.values():
-            # Если 10 слотов в день, делим стандартный decay на 2 для баланса
-            agent.apply_emotion_decay() # теперь внутри затухание 0.1 вместо 0.2
-            agent.react_to_relations()
-            agent.react_to_emotions()
-        
-        # Косвенное влияние эмоций в кампусе
-        self.influence_emotions()
+        from model.collective import CPP_ENGINE_AVAILABLE
+        if CPP_ENGINE_AVAILABLE:
+            self._sync_to_cpp(sync_relations=False)
+            self.cpp_engine.apply_emotion_decay()
+            self.cpp_engine.react_to_relations()
+            self.cpp_engine.react_to_emotions()
+            self.cpp_engine.influence_emotions()
+            self._sync_from_cpp(sync_relations=False)
+        else:
+            for agent in self.agents.values():
+                # Если 10 слотов в день, делим стандартный decay на 2 для баланса
+                agent.apply_emotion_decay() # теперь внутри затухание 0.1 вместо 0.2
+                agent.react_to_relations()
+                agent.react_to_emotions()
+            # Косвенное влияние эмоций в кампусе
+            self.influence_emotions()
         
         return interactions
 
@@ -220,26 +250,35 @@ class UniversityCollective(Collective):
         return all_interactions
 
     def _seat_students(self, room_id, student_names, cols):
-        """Алгоритм Умной Рассадки (Софтмакс)"""
-        # Получаем реальную вместимость комнаты
+        """Алгоритм Умной Рассадки (Софтмакс) — NumPy-оптимизированная версия"""
+        import numpy as np
+        
         room_info = self.uni_manager.rooms_info.get(room_id, {})
         capacity = room_info.get("capacity", max(100, len(student_names)))
         
         seated = [None] * capacity
-        random.shuffle(student_names) 
+        random.shuffle(student_names)
+        
+        MAX_CANDIDATES = 15  # Проверяем не все пустые, а случайные 15
         
         for student_name in student_names:
             agent = self.agents[student_name]
             empty_indices = [i for i, seat in enumerate(seated) if seat is None]
             if not empty_indices: break
-                
+            
+            # GYM: фильтр по зоне спортивности
             if room_id == "GYM":
-                cluster_id = int(agent.sportiness * 2.99) # 0, 1, or 2
+                cluster_id = int(agent.sportiness * 2.99)
                 slice_w = cols / 3.0
                 valid_empty = [i for i in empty_indices if int((i % cols) / slice_w) == cluster_id]
                 if valid_empty:
                     empty_indices = valid_empty
-                
+            
+            # Sampling: если пустых мест больше MAX_CANDIDATES, берем случайную выборку
+            if len(empty_indices) > MAX_CANDIDATES:
+                empty_indices = random.sample(empty_indices, MAX_CANDIDATES)
+            
+            # Вычисляем веса для каждого кандидатного места
             seat_weights = []
             for i in empty_indices:
                 neighbors = []
@@ -248,9 +287,8 @@ class UniversityCollective(Collective):
                 if i >= cols: neighbors.append(i - cols)
                 if i + cols < len(seated): neighbors.append(i + cols)
                 
-                occupied_neighbors = [seated[n] for n in neighbors if n >= 0 and n < len(seated) and seated[n] is not None]
+                occupied_neighbors = [seated[n] for n in neighbors if 0 <= n < len(seated) and seated[n] is not None]
                 
-                # Добавляем базовый случайный вес, чтобы не кучковались в начале
                 base_weight = 0.5 + random.random() * 0.5
                 
                 if not occupied_neighbors:
@@ -260,11 +298,10 @@ class UniversityCollective(Collective):
                     for n_name in occupied_neighbors:
                         metrics = agent.relations.get(n_name, {})
                         score = InteractionStrategy.priority_score(agent, n_name, metrics)
-                        # Усиливаем "социальную гравитацию"
-                        seat_p += math.exp(score * 1.5) 
+                        seat_p += math.exp(score * 1.5)
                     seat_weights.append(seat_p)
             
-            # РУЛЕТКА: Ранжируем места на основе софтмакс-весов
+            # РУЛЕТКА
             choices = list(zip(empty_indices, seat_weights))
             choices.sort(key=lambda x: random.random() * x[1], reverse=True)
             
@@ -278,7 +315,7 @@ class UniversityCollective(Collective):
                 
                 refused = False
                 for n_idx in neighbors:
-                    if n_idx >= 0 and n_idx < len(seated):
+                    if 0 <= n_idx < len(seated):
                         n_name = seated[n_idx]
                         if n_name:
                             n_agent = self.agents[n_name]
@@ -297,7 +334,9 @@ class UniversityCollective(Collective):
                     break
                     
             if not seated_successfully:
-                seated[random.choice(empty_indices)] = student_name
+                all_empty = [i for i, seat in enumerate(seated) if seat is None]
+                if all_empty:
+                    seated[random.choice(all_empty)] = student_name
                 
         return seated
 
@@ -492,13 +531,13 @@ class UniversityCollective(Collective):
 
         # Летние каникулы (Июль, Август) → переход к осеннему семестру 1 сентября
         if month in [7, 8]:
-            print(f">>> Наступили летние каникулы. Прыжок в новый учебный год...")
+            print(f">>> Наступили летние каникулы. Прыжок в новый учебный год...", flush=True)
             self.current_date = datetime.date(self.current_date.year, 9, 1)
             self._handle_graduation_and_enrollment()
             self.semesters_passed += 1
             # Переинициализация эмоций в начале осеннего семестра
             self._reinitialize_emotions()
-            print(f">>> Начало осеннего семестра {self.current_academic_year} года. Пройдено семестров: {self.semesters_passed}")
+            print(f">>> Начало осеннего семестра {self.current_academic_year} года. Пройдено семестров: {self.semesters_passed}", flush=True)
             return
 
         # Переход между семестрами (февраль – начало весеннего семестра)
@@ -506,13 +545,13 @@ class UniversityCollective(Collective):
             self.semesters_passed += 1
             # Переинициализация эмоций в начале весеннего семестра
             self._reinitialize_emotions()
-            print(f">>> Начало весеннего семестра {self.current_academic_year} года. Пройдено семестров: {self.semesters_passed}")
+            print(f">>> Начало весеннего семестра {self.current_academic_year} года. Пройдено семестров: {self.semesters_passed}", flush=True)
             return
 
     def _handle_graduation_and_enrollment(self):
         """Интеллектуальная ротация: Бакалавры -> Магистры."""
         new_enroll_year = self.current_academic_year
-        print(f"--- АКАДЕМИЧЕСКАЯ РОТАЦИЯ: {new_enroll_year} ---")
+        print(f"--- АКАДЕМИЧЕСКАЯ РОТАЦИЯ: {new_enroll_year} ---", flush=True)
         
 # Формируем списки выпускников по факультетам
         faculty_graduates = {f: [] for f in self.uni_manager.FACULTY_NAMES}
@@ -551,7 +590,7 @@ class UniversityCollective(Collective):
         for agent in new_batch:
             self.add_agent(agent)
             
-        print(f"Уходит студентов: {len(graduates_to_remove)}, Продолжают (Continuants): {len(continuants)}")
+        print(f"Уходит студентов: {len(graduates_to_remove)}, Продолжают (Continuants): {len(continuants)}", flush=True)
         
         self.current_academic_year += 1
         
@@ -565,8 +604,12 @@ class UniversityCollective(Collective):
                     if g_name in agent.relations:
                         del agent.relations[g_name]
                 agent.course_year = min(4 if agent.degree_type == "BACHELOR" else 2, agent.course_year + 1)
+        
+        # Инвалидируем C++ engine и немедленно обновляем карты ID и матрицу отношений
+        self.cpp_engine = None
+        self._update_id_maps()
             
-        print(f"----------------------------------------")
+        print(f"----------------------------------------", flush=True)
 
     def _reinitialize_emotions(self):
         """Переинициализировать эмоции всех агентов случайными целыми значениями в диапазоне [-30, 30]."""

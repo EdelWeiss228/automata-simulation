@@ -1,0 +1,14 @@
+{
+    "scenario_name": "Run06_Preservation_EMPTY",
+    "run_name": "Run06_Preservation",
+    "description": "Research Batch. Archetype Dist: Run06_Preservation. Relations Mode: EMPTY",
+    "bachelor_counts": {
+        "PRESERVATION": 1500
+    },
+    "master_counts": {
+        "PRESERVATION": 120
+    },
+    "initial_relations_mode": "EMPTY",
+    "semesters": 8,
+    "seed": 579682
+}

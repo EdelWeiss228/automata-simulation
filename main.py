@@ -39,9 +39,12 @@ def main():
             
             effective_seed = config.get("seed", args.seed)
             univ = UniversityCollective(seed=effective_seed, config=config)
-            session = SimulationSession(collective=univ)
+            run_name = config.get("run_name", "Headless University Run")
+            description = config.get("description", "")
+            scenario_name = config.get("scenario_name", os.path.basename(args.scenario))
+            session = SimulationSession(collective=univ, run_name=run_name, description=description, scenario_name=scenario_name)
             
-            semesters = args.semesters if args.semesters else config.get("semesters", 8)
+            semesters = args.semesters if args.semesters is not None else config.get("semesters", 8)
             print(f"[System] Headless University Mode: Running {semesters} semesters...", flush=True)
             
             if hasattr(session, 'run_semesters'):
@@ -50,7 +53,7 @@ def main():
                 steps = args.steps if args.steps else config.get("steps", 100)
                 for _ in range(steps): session.run_day()
                 
-            print("Done.")
+            print("Done.", flush=True)
             sys.exit(0)
             
         try:
@@ -58,7 +61,7 @@ def main():
             from tkinter import messagebox
             from gui.university_setup_wizard import UniversitySetupWizard
         except ImportError as e:
-            print(f"Error: GUI dependencies missing: {e}", file=sys.stderr)
+            print(f"Error: GUI dependencies missing: {e}", file=sys.stderr, flush=True)
             sys.exit(1)
 
         root = tk.Tk()
@@ -71,7 +74,7 @@ def main():
         
         config = wizard.result_config
         if not config:
-            print("[System] Setup cancelled.")
+            print("[System] Setup cancelled.", flush=True)
             sys.exit(0)
 
         print("[System] Initializing University Core...", flush=True)
@@ -85,7 +88,8 @@ def main():
             univ = UniversityCollective(seed=effective_seed, config=config)
             run_name = config.get("run_name", "Unnamed University Run")
             description = config.get("description", "")
-            session = SimulationSession(collective=univ, run_name=run_name, description=description)
+            scenario_name = config.get("scenario_name", "default")
+            session = SimulationSession(collective=univ, run_name=run_name, description=description, scenario_name=scenario_name)
             
             if args.steps:
                 session.total_steps = args.steps
@@ -100,7 +104,7 @@ def main():
         except Exception as e:
             import traceback
             error_msg = f"Critical Error:\n{e}\n\n{traceback.format_exc()}"
-            print(error_msg, file=sys.stderr)
+            print(error_msg, file=sys.stderr, flush=True)
             messagebox.showerror("Fatal Error", error_msg)
             sys.exit(1)
         return
@@ -118,12 +122,12 @@ def main():
     
     if is_headless:
         if not args.scenario:
-            print("Error: Silent mode requires a scenario file (--scenario).", file=sys.stderr)
+            print("Error: Silent mode requires a scenario file (--scenario).", file=sys.stderr, flush=True)
             sys.exit(1)
         steps = args.steps if args.steps is not None else session.total_steps
         for step in range(steps):
             session.run_day()
-        print("Done.")
+        print("Done.", flush=True)
     else:
         from gui.simulation_gui import SimulationGUI
         app = SimulationGUI(session=session)

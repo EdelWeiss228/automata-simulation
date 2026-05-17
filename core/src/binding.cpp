@@ -54,6 +54,10 @@ PYBIND11_MODULE(emotion_engine, m) {
       .def("set_archetype_config", &core_engine::Engine::set_archetype_config)
       .def("set_agent_archetype", &core_engine::Engine::set_agent_archetype)
       .def("influence_emotions", &core_engine::Engine::influence_emotions)
+      .def("apply_relation_decay", &core_engine::Engine::apply_relation_decay)
+      .def("react_to_relations", &core_engine::Engine::react_to_relations)
+      .def("react_to_emotions", &core_engine::Engine::react_to_emotions)
+      .def("apply_emotion_decay", &core_engine::Engine::apply_emotion_decay)
       .def("calculate_priority_score",
            &core_engine::Engine::calculate_priority_score)
       .def("choose_target", &core_engine::Engine::choose_target)

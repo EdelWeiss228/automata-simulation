@@ -52,3 +52,13 @@ CREATE TABLE IF NOT EXISTS agent_registry (
     archetype String                     -- Архетип
 ) ENGINE = MergeTree()
 ORDER BY (run_id, agent_id);
+
+-- Таблица 5: Метаданные симуляций
+CREATE TABLE IF NOT EXISTS simulation_runs (
+    run_id UUID,
+    start_time DateTime,
+    run_name String,
+    description String,
+    scenario_name String
+) ENGINE = MergeTree()
+ORDER BY (start_time, run_id);

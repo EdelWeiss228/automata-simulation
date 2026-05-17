@@ -1,0 +1,22 @@
+{
+    "scenario_name": "Run09_Normal_Social_MIXED",
+    "run_name": "Run09_Normal_Social",
+    "description": "Research Batch. Archetype Dist: Run09_Normal_Social. Relations Mode: MIXED",
+    "bachelor_counts": {
+        "HARMONY": 400,
+        "PRESERVATION": 400,
+        "INNOVATOR": 300,
+        "ERUDITION": 200,
+        "MEDIATOR": 200
+    },
+    "master_counts": {
+        "HARMONY": 32,
+        "PRESERVATION": 32,
+        "INNOVATOR": 24,
+        "ERUDITION": 16,
+        "MEDIATOR": 16
+    },
+    "initial_relations_mode": "MIXED",
+    "semesters": 8,
+    "seed": 2382
+}

@@ -45,5 +45,6 @@ CHANGELOG.md
 
 # Temporary Scratch Files
 scratch/
+*.pid
 
 clickhouse/users.d/

@@ -1,0 +1,14 @@
+{
+    "scenario_name": "Run02_Enigmata_MIXED",
+    "run_name": "Run02_Enigmata",
+    "description": "Research Batch. Archetype Dist: Run02_Enigmata. Relations Mode: MIXED",
+    "bachelor_counts": {
+        "ENIGMATA": 1500
+    },
+    "master_counts": {
+        "ENIGMATA": 120
+    },
+    "initial_relations_mode": "MIXED",
+    "semesters": 8,
+    "seed": 394046
+}

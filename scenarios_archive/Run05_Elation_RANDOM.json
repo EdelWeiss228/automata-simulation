@@ -1,0 +1,14 @@
+{
+    "scenario_name": "Run05_Elation_RANDOM",
+    "run_name": "Run05_Elation",
+    "description": "Research Batch. Archetype Dist: Run05_Elation. Relations Mode: RANDOM",
+    "bachelor_counts": {
+        "ELATION": 1500
+    },
+    "master_counts": {
+        "ELATION": 120
+    },
+    "initial_relations_mode": "RANDOM",
+    "semesters": 8,
+    "seed": 742267
+}

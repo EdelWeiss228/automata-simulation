@@ -1,0 +1,18 @@
+{
+    "scenario_name": "Run12_Academic_RANDOM",
+    "run_name": "Run12_Academic",
+    "description": "Research Batch. Archetype Dist: Run12_Academic. Relations Mode: RANDOM",
+    "bachelor_counts": {
+        "ERUDITION": 600,
+        "ANALYST": 600,
+        "REFLECTOR": 300
+    },
+    "master_counts": {
+        "ERUDITION": 48,
+        "ANALYST": 48,
+        "REFLECTOR": 24
+    },
+    "initial_relations_mode": "RANDOM",
+    "semesters": 8,
+    "seed": 399131
+}

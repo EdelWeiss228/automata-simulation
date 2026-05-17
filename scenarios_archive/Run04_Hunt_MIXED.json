@@ -1,0 +1,14 @@
+{
+    "scenario_name": "Run04_Hunt_MIXED",
+    "run_name": "Run04_Hunt",
+    "description": "Research Batch. Archetype Dist: Run04_Hunt. Relations Mode: MIXED",
+    "bachelor_counts": {
+        "HUNT": 1500
+    },
+    "master_counts": {
+        "HUNT": 120
+    },
+    "initial_relations_mode": "MIXED",
+    "semesters": 8,
+    "seed": 418731
+}

@@ -1,0 +1,18 @@
+{
+    "scenario_name": "Run10_Extremes_EMPTY",
+    "run_name": "Run10_Extremes",
+    "description": "Research Batch. Archetype Dist: Run10_Extremes. Relations Mode: EMPTY",
+    "bachelor_counts": {
+        "DESTRUCTOR": 500,
+        "PROTECTOR": 500,
+        "OPPORTUNIST": 500
+    },
+    "master_counts": {
+        "DESTRUCTOR": 40,
+        "PROTECTOR": 40,
+        "OPPORTUNIST": 40
+    },
+    "initial_relations_mode": "EMPTY",
+    "semesters": 8,
+    "seed": 816210
+}

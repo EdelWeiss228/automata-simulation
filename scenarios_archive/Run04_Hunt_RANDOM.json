@@ -1,0 +1,14 @@
+{
+    "scenario_name": "Run04_Hunt_RANDOM",
+    "run_name": "Run04_Hunt",
+    "description": "Research Batch. Archetype Dist: Run04_Hunt. Relations Mode: RANDOM",
+    "bachelor_counts": {
+        "HUNT": 1500
+    },
+    "master_counts": {
+        "HUNT": 120
+    },
+    "initial_relations_mode": "RANDOM",
+    "semesters": 8,
+    "seed": 234627
+}

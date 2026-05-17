@@ -12,11 +12,13 @@ class SimulationSession:
     Класс, инкапсулирующий логику сессии симуляции.
     Отвечает за управление коллективом, шаги времени и сохранение данных.
     """
-    def __init__(self, collective=None, seed=None, output_dir="data/output", run_name="University Default", description=""):
+    def __init__(self, collective=None, seed=None, output_dir="data/output", run_name="University Default", description="", scenario_name="default"):
         if collective:
             self.collective = collective
         else:
             self.collective = Collective(seed=seed)
+        
+        self.collective.scenario_name = scenario_name
             
         self.logger = DataLogger()
         self.ch_logger = None
@@ -24,12 +26,12 @@ class SimulationSession:
             try:
                 self.ch_logger = ClickHouseLogger()
             except Exception as e:
-                print(f"Предупреждение: ClickHouse не доступен ({e}). Логирование в БД отключено.")
+                print(f"Предупреждение: ClickHouse не доступен ({e}). Логирование в БД отключено.", flush=True)
         
         self.run_id = self.ch_logger.run_id if self.ch_logger else None
         
         if self.ch_logger:
-            self.ch_logger.log_run_metadata(run_name, description)
+            self.ch_logger.log_run_metadata(run_name, description, scenario_name)
             
         self.output_dir = output_dir
         
@@ -110,7 +112,7 @@ class SimulationSession:
             
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(template, f, indent=4, ensure_ascii=False)
-        print(f"Шаблон сценария успешно создан: {path}")
+        print(f"Шаблон сценария успешно создан: {path}", flush=True)
 
     def run_scenario(self, scenario_path, override_steps=None):
         """Полный цикл: загрузка -> инициализация -> запуск без GUI."""
@@ -145,10 +147,10 @@ class SimulationSession:
         Загружает состояние симуляции из ClickHouse (Time-Travel).
         """
         if not self.ch_logger:
-            print("Ошибка: ClickHouseLogger не инициализирован.")
+            print("Ошибка: ClickHouseLogger не инициализирован.", flush=True)
             return False
             
-        print(f"Загрузка состояния: run={run_id}, day={day_id}, slot={slot_id}...")
+        print(f"Загрузка состояния: run={run_id}, day={day_id}, slot={slot_id}...", flush=True)
         emotions, relations = self.ch_logger.fetch_state(run_id, day_id, slot_id)
         
         if not self.collective.cpp_engine:
@@ -171,7 +173,7 @@ class SimulationSession:
         # Синхронизация Python-объектов
         self.collective._sync_from_cpp(sync_relations=True)
         self.simulation_started = True
-        print("Состояние успешно восстановлено.")
+        print("Состояние успешно восстановлено.", flush=True)
         return True
 
     def run_day(self):
@@ -196,15 +198,26 @@ class SimulationSession:
                 if not is_day_ready:
                     all_interactions.extend(interactions)
                     
-                    # ОБЯЗАТЕЛЬНАЯ СИНХРОНИЗАЦИЯ: Университет работает на Python,
-                    # но логгер ClickHouse читает из C++. Синкаем перед логированием.
-                    if self.collective.cpp_engine:
-                        self.collective._sync_to_cpp()
-
                     # slot_id отражает состояние ПОСЛЕ совершения шага (1..9)
                     slot_id = self.collective.current_slot_idx
+                    is_last_slot = (slot_id >= len(self.collective.day_schedule_slots))
+                    
+                    # Логируем взаимодействия КАЖДЫЙ СЛОТ (нужно для чеклиста)
                     self.log_interactions(interactions, slot_id=slot_id)
-                    self.log_states(slot_id=slot_id)
+                    
+                    # Логируем состояния РАЗ В ДЕНЬ (последний слот) — 9x экономия
+                    if is_last_slot:
+                        self.log_states(slot_id=slot_id)
+                    
+                    # Синхронизация C++ и логирование отношений — РАЗ В 3 ДНЯ
+                    should_sync_rel = (is_last_slot and self.collective.current_step % 3 == 0)
+                    
+                    if self.collective.cpp_engine and is_last_slot:
+                        self.collective._sync_to_cpp(sync_relations=should_sync_rel)
+                    
+                    if should_sync_rel and self.ch_logger:
+                        self.ch_logger.log_agent_relations(self.collective.current_step, slot_id, self.collective.cpp_engine)
+                        self.ch_logger.flush_day_relations()
                 else:
                     break
         else:
@@ -228,10 +241,8 @@ class SimulationSession:
         
         if self.collective.cpp_engine:
             if self.ch_logger:
-                # В ClickHouse логируем каждое изменение
+                # В ClickHouse логируем каждое изменение состояния
                 self.ch_logger.log_agent_states(self.collective.current_step, slot_id, self.collective.cpp_engine)
-                # Логируем отношения
-                self.ch_logger.log_agent_relations(self.collective.current_step, slot_id, self.collective.cpp_engine)
             else:
                 # Фоллбек: пишем в CSV каждый шаг, раз ClickHouse не доступен
                 self.collective.cpp_engine.save_states_csv(

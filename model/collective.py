@@ -19,6 +19,92 @@ try:
 except ImportError:
     CPP_ENGINE_AVAILABLE = False
 
+class RelationsProxy:
+    def __init__(self, agent_name, collective):
+        self.agent_name = agent_name
+        self.collective = collective
+        
+    @property
+    def agent_idx(self):
+        return self.collective._id_map[self.agent_name]
+
+    def __getitem__(self, target_name):
+        if target_name not in self.collective._id_map:
+            raise KeyError(target_name)
+        target_idx = self.collective._id_map[target_name]
+        matrix = self.collective.relations_matrix
+        return {
+            'utility': int(matrix[self.agent_idx, target_idx, 0]),
+            'affinity': int(matrix[self.agent_idx, target_idx, 1]),
+            'trust': int(matrix[self.agent_idx, target_idx, 2])
+        }
+
+    def __setitem__(self, target_name, value):
+        if target_name not in self.collective._id_map:
+            return
+        target_idx = self.collective._id_map[target_name]
+        matrix = self.collective.relations_matrix
+        matrix[self.agent_idx, target_idx, 0] = value.get('utility', 0)
+        matrix[self.agent_idx, target_idx, 1] = value.get('affinity', 0)
+        matrix[self.agent_idx, target_idx, 2] = value.get('trust', 0)
+        
+        # Синхронизация с C++
+        if self.collective.cpp_engine:
+            self.collective.cpp_engine.set_relation(
+                self.agent_idx, target_idx,
+                int(value.get('utility', 0)),
+                int(value.get('affinity', 0)),
+                int(value.get('trust', 0))
+            )
+
+    def __delitem__(self, target_name):
+        if target_name in self.collective._id_map:
+            target_idx = self.collective._id_map[target_name]
+            self.collective.relations_matrix[self.agent_idx, target_idx] = 0
+            if self.collective.cpp_engine:
+                self.collective.cpp_engine.set_relation(self.agent_idx, target_idx, 0, 0, 0)
+
+    def get(self, target_name, default=None):
+        if target_name not in self.collective._id_map:
+            return default
+        return self[target_name]
+
+    def __contains__(self, target_name):
+        return target_name in self.collective._id_map
+
+    def keys(self):
+        for name in self.collective._id_map.keys():
+            if name != self.agent_name:
+                yield name
+
+    def values(self):
+        for name in self.keys():
+            yield self[name]
+
+    def items(self):
+        for name in self.keys():
+            yield name, self[name]
+
+    def __iter__(self):
+        return self.keys()
+
+    def __len__(self):
+        return len(self.collective._id_map) - 1
+
+    def copy(self):
+        return dict(self.items())
+
+    def clear(self):
+        self.collective.relations_matrix[self.agent_idx] = 0
+        if self.collective.cpp_engine:
+            n = self.collective.cpp_engine.state.num_agents
+            for j in range(n):
+                self.collective.cpp_engine.set_relation(self.agent_idx, j, 0, 0, 0)
+
+    def update(self, other):
+        for k, v in other.items():
+            self[k] = v
+
 class Collective:
     """
     Класс, представляющий коллектив агентов and игроков,
@@ -116,9 +202,56 @@ class Collective:
 
     def _update_id_maps(self):
         """Обновляет маппинг имен агентов в целочисленные индексы."""
-        names = sorted(self.agents.keys())
-        self._id_map = {name: i for i, name in enumerate(names)}
-        self._reverse_id_map = {i: name for name, i in self._id_map.items()}
+        names = list(self.agents.keys())
+        for p in self.players:
+            if p.name not in names:
+                names.append(p.name)
+        names = sorted(names)
+        
+        # Если состав изменился или матрица не создана
+        if not hasattr(self, 'relations_matrix') or len(self._id_map) != len(names) or set(self._id_map.keys()) != set(names):
+            old_id_map = self._id_map.copy()
+            old_matrix = self.relations_matrix if hasattr(self, 'relations_matrix') else None
+            
+            self._id_map = {name: i for i, name in enumerate(names)}
+            self._reverse_id_map = {i: name for name, i in self._id_map.items()}
+            
+            n = len(names)
+            new_matrix = np.zeros((n, n, 3), dtype=np.int8)
+            
+            for i, name in enumerate(names):
+                agent = self.agents.get(name)
+                if agent is None:
+                    for p in self.players:
+                        if p.name == name:
+                            agent = p
+                            break
+                if agent is None: continue
+                
+                old_relations = agent.relations
+                agent.relations = RelationsProxy(name, self)
+                
+                if isinstance(old_relations, dict):
+                    for target_name, rel in old_relations.items():
+                        if target_name in self._id_map:
+                            j = self._id_map[target_name]
+                            new_matrix[i, j, 0] = rel.get('utility', 0)
+                            new_matrix[i, j, 1] = rel.get('affinity', 0)
+                            new_matrix[i, j, 2] = rel.get('trust', 0)
+                elif isinstance(old_relations, RelationsProxy):
+                    if old_matrix is not None:
+                        for target_name, target_idx in old_id_map.items():
+                            if target_name in self._id_map:
+                                old_i = old_id_map[old_relations.agent_name]
+                                old_j = target_idx
+                                new_i = i
+                                new_j = self._id_map[target_name]
+                                new_matrix[new_i, new_j] = old_matrix[old_i, old_j]
+                            
+            self.relations_matrix = new_matrix
+        else:
+            self._id_map = {name: i for i, name in enumerate(names)}
+            self._reverse_id_map = {i: name for name, i in self._id_map.items()}
 
     def _sync_archetypes(self):
         """Синхронизирует конфигурации архетипов в C++."""
@@ -149,16 +282,16 @@ class Collective:
                 arch.scoring_config.get("trust", "linear")
             )
 
-    def _sync_to_cpp(self):
+    def _sync_to_cpp(self, sync_relations=True):
         """Прямая синхронизация всех агентов and их отношений в C++ структуру."""
         if not CPP_ENGINE_AVAILABLE:
             return
             
-        n = len(self.agents)
+        self._update_id_maps()
+        n = len(self._id_map)
         if not self.cpp_engine or self.cpp_engine.state.num_agents != n:
             import emotion_engine
             self.cpp_engine = emotion_engine.Engine(n)
-            self._update_id_maps()
             
         # Синхронизируем конфиги архетипов один раз (или при изменении состава)
         self._sync_archetypes()
@@ -173,69 +306,65 @@ class Collective:
         names_list = [self._reverse_id_map[i] for i in range(n)]
         self.cpp_engine.set_agent_names(names_list)
             
+        # Подготовка данных для массовой синхронизации (в 10-20 раз быстрее точечных вызовов)
+        emotions_arr = np.zeros((n, 7), dtype=np.int8)
+        sens_arr = np.zeros(n, dtype=np.float32)
+        arch_indices = np.zeros(n, dtype=np.int32)
+        
         for i in range(n):
             name = self._reverse_id_map[i]
-            agent = self.agents[name]
+            agent = self.agents.get(name)
+            if agent is None:
+                for p in self.players:
+                    if p.name == name:
+                        agent = p
+                        break
+            if agent is None: continue
             
-            # Sync archetypes
+            # Архитип
             arch_name = getattr(agent.archetype, "name", "Harmony")
-            self.cpp_engine.set_agent_archetype(i, self._arch_map.get(arch_name, 0))
+            arch_indices[i] = self._arch_map.get(arch_name, 0)
             
-            # Sync emotions
-            for axis_idx, axis in enumerate(EmotionAxis):
-                val = agent.automaton.pairs[axis].value
-                self.cpp_engine.set_emotion(i, axis_idx, val)
+            # Эмоции
+            if hasattr(agent, 'automaton') and agent.automaton:
+                for axis_idx, axis in enumerate(EmotionAxis):
+                    emotions_arr[i, axis_idx] = agent.automaton.pairs[axis].value
             
-            # Sync sensitivities
-            self.cpp_engine.state.sensitivities[i] = agent.sensitivity
+            # Чувствительность
+            sens_arr[i] = getattr(agent, 'sensitivity', 1.0)
 
-            # Sync Emission Weights (Archetype effects)
-            effects = getattr(agent, "emotion_effects", {})
-            for axis_idx, axis in enumerate(EmotionAxis):
-                axis_name = axis.value
-                ax_eff = effects.get(axis_name, {})
-                self.cpp_engine.set_emission_weight(
-                    i, axis_idx,
-                    ax_eff.get("utility", 0.0),
-                    ax_eff.get("affinity", 0.0),
-                    ax_eff.get("trust", 0.0)
-                )
+        # Массовая запись в C++ (через буферный протокол)
+        self.cpp_engine.state.emotions = emotions_arr.flatten()
+        self.cpp_engine.state.sensitivities = sens_arr
+        # Архитипы пока оставим через сеттер, если нет массового
+        for i in range(n):
+            self.cpp_engine.set_agent_archetype(i, int(arch_indices[i]))
 
-            # Sync Relations
-            for j in range(n):
-                target_name = self._reverse_id_map[j]
-                if target_name in agent.relations:
-                    rel = agent.relations[target_name]
-                    self.cpp_engine.set_relation(
-                        i, j,
-                        rel.get('utility', 0.0),
-                        rel.get('affinity', 0.0),
-                        rel.get('trust', 0.0)
-                    )
+        # Массовая синхронизация отношений (самый тяжелый блок)
+        if sync_relations:
+            self.cpp_engine.state.relations = self.relations_matrix.flatten()
 
     def _sync_from_cpp(self, sync_relations: bool = True):
         """Синхронизация данных из C++ обратно в Python объекты (для логов/GUI)."""
         if not self.cpp_engine: return
         
-        n = len(self.agents)
+        n = len(self._id_map)
+        # Если engine устарел (другое число агентов), пропускаем синхронизацию
+        if self.cpp_engine.state.num_agents != n:
+            return
         new_emotions = self.cpp_engine.state.emotions
         
         for i in range(n):
             name = self._reverse_id_map[i]
-            agent = self.agents[name]
+            agent = self.agents.get(name)
+            if agent is None: continue
             
-            for axis_idx, axis in enumerate(EmotionAxis):
-                agent.automaton.set_emotion(axis, new_emotions[i * 7 + axis_idx])
+            if hasattr(agent, 'automaton') and agent.automaton:
+                for axis_idx, axis in enumerate(EmotionAxis):
+                    agent.automaton.set_emotion(axis, new_emotions[i * 7 + axis_idx])
                 
-            if sync_relations:
-                new_relations = self.cpp_engine.state.relations
-                for j in range(n):
-                    target_name = self._reverse_id_map[j]
-                    if target_name in agent.relations:
-                        base = (i * n + j) * 3
-                        agent.relations[target_name]['utility'] = new_relations[base + 0]
-                        agent.relations[target_name]['affinity'] = new_relations[base + 1]
-                        agent.relations[target_name]['trust'] = new_relations[base + 2]
+        if sync_relations:
+            self.relations_matrix = np.array(self.cpp_engine.state.relations, dtype=np.int8).reshape((n, n, 3))
 
     def _run_cpp_influence(self):
         """

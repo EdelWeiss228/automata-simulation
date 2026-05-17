@@ -1,0 +1,15 @@
+{
+    "scenario_name": "TEST_Rotation_June",
+    "run_name": "TEST_Rotation",
+    "description": "Quick test: start in June to hit graduation in ~30 days",
+    "bachelor_counts": {
+        "HARMONY": 1500
+    },
+    "master_counts": {
+        "HARMONY": 120
+    },
+    "initial_relations_mode": "MIXED",
+    "semesters": 2,
+    "seed": 999,
+    "start_date": "2025-06-01"
+}

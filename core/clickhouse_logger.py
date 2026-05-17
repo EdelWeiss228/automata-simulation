@@ -4,35 +4,47 @@ import clickhouse_connect
 import uuid
 import numpy as np
 import datetime
+import time
 
 class ClickHouseLogger:
     def __init__(self):
         # Загрузка environment variables from .env if present
         load_dotenv()
 
-        self.host = os.getenv("CLICKHOUSE_HOST", "localhost")
-        self.port = int(os.getenv("CLICKHOUSE_PORT", 8123))
         self.user = os.getenv("CLICKHOUSE_USER", "default")
-        self.password = os.getenv("CLICKHOUSE_PASSWORD", "")
-        self.secure = os.getenv("CLICKHOUSE_SECURE", "False").lower() == "true"
+        self.password = os.getenv("CLICKHOUSE_PASSWORD", "clickhouse_pass")
+        self.run_id = str(uuid.uuid4())
+        self.relations_buffer = [] # Буфер для накопления данных за день
         
+        # Попытка 1: Локальный докер (localhost)
         try:
             self.client = clickhouse_connect.get_client(
-                host=self.host,
-                port=self.port,
+                host='localhost',
+                port=8123,
                 username=self.user,
                 password=self.password,
-                secure=self.secure,
+                secure=False,
                 settings={'insert_deduplicate': 0}
             )
-            print(f"ClickHouseLogger: Connected to {self.host}:{self.port}")
+            print(f"ClickHouseLogger: Connected to LOCALHOST (Docker)", flush=True)
         except Exception as e:
-            print(f"Предупреждение: ClickHouse не доступен ({e}). Логирование в БД отключено.")
-            self.client = None
+            print(f"ClickHouseLogger: Локальный ClickHouse не найден, пробую ТУННЕЛЬ... ({e})", flush=True)
+            # Попытка 2: Удаленный туннель
+            try:
+                self.client = clickhouse_connect.get_client(
+                    host='db.georgytadjiev.ink',
+                    port=443,
+                    username=self.user,
+                    password=self.password,
+                    secure=True,
+                    settings={'insert_deduplicate': 0}
+                )
+                print(f"ClickHouseLogger: Connected to REMOTE (Cloudflare Tunnel)", flush=True)
+            except Exception as e2:
+                print(f"КРИТИЧЕСКАЯ ОШИБКА: ClickHouse недоступен ни локально, ни через туннель: {e2}", flush=True)
+                self.client = None
 
-        self.run_id = str(uuid.uuid4())
-
-    def log_run_metadata(self, run_name: str, description: str):
+    def log_run_metadata(self, run_name: str, description: str, scenario_name: str = "default"):
         """Логирует метаданные (название и описание) симуляции для удобного поиска в БД."""
         if not self.client:
             return
@@ -40,83 +52,108 @@ class ClickHouseLogger:
         try:
             self.client.insert(
                 'simulation_runs',
-                [[self.run_id, datetime.datetime.now(), run_name, description]],
-                column_names=['run_id', 'start_time', 'run_name', 'description']
+                [[self.run_id, datetime.datetime.now(), run_name, description, scenario_name]],
+                column_names=['run_id', 'start_time', 'run_name', 'description', 'scenario_name']
             )
         except Exception as e:
-            print(f"Ошибка при сохранении метаданных симуляции: {e}")
+            print(f"Ошибка при сохранении метаданных симуляции: {e}", flush=True)
 
     def log_agent_states(self, day_id: int, slot_id: int, engine):
         """
         Извлекает эмоциональные состояния из C++ ядра and сохраняет в agent_states таблицу.
-        Emotions вектор представлен плоским списком N * 7.
+        v6.10.4: Оптимизировано через numpy.
         """
         state = engine.state
         num_agents = state.num_agents
         emotions = np.array(state.emotions, dtype=np.int8).reshape((num_agents, 7))
         
-        data = []
-        for agent_id in range(num_agents):
-            row = [
-                self.run_id,
-                day_id,
-                slot_id,
-                agent_id,
-                int(emotions[agent_id, 0]), # sadness_joy
-                int(emotions[agent_id, 1]), # fear_calm
-                int(emotions[agent_id, 2]), # anger_humility
-                int(emotions[agent_id, 3]), # disgust_acceptance
-                int(emotions[agent_id, 4]), # habit_surprise
-                int(emotions[agent_id, 5]), # shame_confidence
-                int(emotions[agent_id, 6])  # alienation_openness
-            ]
-            data.append(row)
+        # Подготовка данных без цикла
+        data = list(zip(
+            [self.run_id] * num_agents,
+            [day_id] * num_agents,
+            [slot_id] * num_agents,
+            range(num_agents),
+            emotions[:, 0].tolist(),
+            emotions[:, 1].tolist(),
+            emotions[:, 2].tolist(),
+            emotions[:, 3].tolist(),
+            emotions[:, 4].tolist(),
+            emotions[:, 5].tolist(),
+            emotions[:, 6].tolist()
+        ))
         
-        self.client.insert('agent_states', data, column_names=[
-            'run_id', 'day_id', 'slot_id', 'agent_id',
-            'sadness_joy', 'fear_calm', 'anger_humility', 'disgust_acceptance',
-            'habit_surprise', 'shame_confidence', 'alienation_openness'
-        ])
+        if self.client:
+            self.client.insert('agent_states', data, column_names=[
+                'run_id', 'day_id', 'slot_id', 'agent_id',
+                'sadness_joy', 'fear_calm', 'anger_humility', 'disgust_acceptance',
+                'habit_surprise', 'shame_confidence', 'alienation_openness'
+            ])
 
     def log_agent_relations(self, day_id: int, slot_id: int, engine):
         """
-        Extracts relations из C++ ядра and сохраняет в agent_relations таблицу.
-        Relations вектор представлен плоским списком N * N * 3.
+        Extracts relations из C++ ядра and сохраняет в БУФЕР (для последующей отправки раз в день).
         """
         state = engine.state
         n = state.num_agents
-        # карта отношений: (i * n + j) * 3 + [0:U, 1:A, 2:T]
         relations = np.array(state.relations, dtype=np.int8).reshape((n, n, 3))
         
-        data = []
-        for i in range(n):
-            for j in range(n):
-                if i == j: continue  # Пропуск self-relations if not needed, but prompt didn't specify
-                row = [
-                    self.run_id,
-                    day_id,
-                    slot_id,
-                    i, # ID субъекта
-                    j, # ID объекта
-                    int(relations[i, j, 0]), # utility
-                    int(relations[i, j, 1]), # affinity
-                    int(relations[i, j, 2])  # trust
-                ]
-                data.append(row)
-                
-                # Пакетная вставка if data gets too large to save memory
-                if len(data) >= 100000:
-                    self._flush_relations(data)
-                    data = []
+        ii, jj = np.indices((n, n))
+        mask = ii != jj
         
-        if data:
-            self._flush_relations(data)
+        sub_ids = ii[mask]
+        obj_ids = jj[mask]
+        rel_values = relations[mask]
+        
+        num_rows = len(sub_ids)
+        
+        # Подготовка данных через zip
+        data_slot = list(zip(
+            [self.run_id] * num_rows,
+            [day_id] * num_rows,
+            [slot_id] * num_rows,
+            sub_ids.tolist(),
+            obj_ids.tolist(),
+            rel_values[:, 0].tolist(),
+            rel_values[:, 1].tolist(),
+            rel_values[:, 2].tolist()
+        ))
+        
+        # Добавляем в дневной буфер
+        self.relations_buffer.extend(data_slot)
+
+    def flush_day_relations(self):
+        """Отправляет накопленные за день отношения в ClickHouse."""
+        if not self.client or not self.relations_buffer:
+            return
+            
+        print(f"ClickHouseLogger: Флеш дневного буфера ({len(self.relations_buffer)} записей)...", flush=True)
+        
+        # Отправляем пачками по 100к (для стабильности даже локально)
+        batch_size = 100000
+        total_size = len(self.relations_buffer)
+        
+        for start_idx in range(0, total_size, batch_size):
+            end_idx = min(start_idx + batch_size, total_size)
+            chunk = self.relations_buffer[start_idx:end_idx]
+            self._flush_relations(chunk)
+            
+        # Очищаем буфер после отправки
+        self.relations_buffer = []
 
     def _flush_relations(self, data):
-        self.client.insert('agent_relations', data, column_names=[
-            'run_id', 'day_id', 'slot_id', 'subject_id', 'object_id',
-            'utility', 'affinity', 'trust'
-        ])
+        if not self.client or not data: return
+        try:
+            self.client.insert('agent_relations', data, column_names=[
+                'run_id', 'day_id', 'slot_id', 'subject_id', 'object_id',
+                'utility', 'affinity', 'trust'
+            ])
+        except Exception as e:
+            print(f"Ошибка при вставке отношений (localhost): {e}", flush=True)
+            try:
+                time.sleep(0.5)
+                self.client.insert('agent_relations', data)
+            except:
+                pass
 
     def log_interactions(self, day_id: int, slot_id: int, engine, interactions_list=None, name_to_id=None):
         """
@@ -126,7 +163,7 @@ class ClickHouseLogger:
         """
         data = []
         type_map = {'refusal': 0, 'success': 1, 'fail': -1}
-        cpp_type_map = {0: 'refusal', 1: 'success', 2: 'fail'} # Not changed yet to avoid C++ breaking, but logic will use type_map
+        cpp_type_map = {0: 0, 1: 1, 2: -1} # Map C++ enum directly to ClickHouse ints
         
         if interactions_list and name_to_id:
             for from_name, to_name, status in interactions_list:
@@ -140,9 +177,12 @@ class ClickHouseLogger:
                     slot_id,
                     name_to_id[from_name],
                     name_to_id[to_name],
-                    status if status in type_map else 'refusal'
+                    type_map.get(status, 0)
                 ]
                 data.append(row)
+                if len(data) >= 20000:
+                    self._flush_interactions(data)
+                    data = []
         else:
             # Лог из C++ движка
             for inter in engine.last_day_interactions:
@@ -152,14 +192,31 @@ class ClickHouseLogger:
                     slot_id,
                     inter.from_idx,
                     inter.to_idx,
-                    cpp_type_map.get(inter.type, 'refusal')
+                    cpp_type_map.get(inter.type, 0)
                 ]
                 data.append(row)
+                if len(data) >= 20000:
+                    self._flush_interactions(data)
+                    data = []
             
         if data:
+            self._flush_interactions(data)
+
+    def _flush_interactions(self, data):
+        if not self.client: return
+        try:
             self.client.insert('interactions', data, column_names=[
                 'run_id', 'day_id', 'slot_id', 'from_id', 'to_id', 'type'
             ])
+        except Exception as e:
+            print(f"Ошибка при вставке взаимодействий в ClickHouse: {e}", flush=True)
+            try:
+                time.sleep(1)
+                self.client.insert('interactions', data, column_names=[
+                    'run_id', 'day_id', 'slot_id', 'from_id', 'to_id', 'type'
+                ])
+            except Exception as e2:
+                print(f"Критическая ошибка ClickHouse (Interactions): {e2}", flush=True)
 
     def log_agent_registry(self, collective):
         """
