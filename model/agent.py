@@ -1,25 +1,30 @@
+"""
+Модуль описывает класс Agent и его поведение в симуляции.
+"""
+
 from __future__ import annotations
 
+import random
 from typing import Optional, TYPE_CHECKING
-"""Модуль описывает класс Agent and его поведение в симуляции."""
+
+from model.emotion_automaton import EmotionAutomaton, EmotionAxis
+from model.constants import AgentStatus
 
 if TYPE_CHECKING:
     from .collective import Collective
 
-from model.emotion_automaton import EmotionAutomaton, EmotionAxis
-from model.constants import AgentStatus
-import random
-
 
 class Agent:
-    """Класс, представляющий агента с эмоциями and отношениями."""
+    """
+    Класс, представляющий агента с эмоциями и отношениями.
+    """
 
     def __init__(  # pylint: disable=too-many-arguments, too-many-positional-arguments
         self,
-        name,
-        id=None,
+        name: str,
+        id: Optional[str] = None,  # pylint: disable=redefined-builtin
         archetype=None,
-        emotions=None,
+        emotions: Optional[dict] = None,
         emotion_effects=None,
         emotion_coefficients=None,
         sensitivity: float = 1.0,
@@ -39,7 +44,7 @@ class Agent:
         self.archetype = self.automaton.get_archetype()
         self.group: Optional["Collective"] = None  # Указатель на коллектив, устанавливается позже
 
-        # Новые параметры версии 3.0
+        # Дополнительные характеристики поведения агента
         self.sportiness = sportiness if sportiness is not None else random.uniform(0, 1)
         self.skip_tendency = skip_tendency if skip_tendency is not None else random.uniform(0, 0.3)
         self.status = AgentStatus.HOME
@@ -56,9 +61,11 @@ class Agent:
         self.current_pair_index = -1
         self.seated_next_to = None
         
-        # Контекст and Предметы
-        self.context_adaptability = self.archetype.context_adaptability if self.archetype else {'STUDY': 1.0, 'BREAK': 1.0, 'GYM': 1.0}
-        # self.subject_resistance = self.archetype.subject_resistance if self.archetype else {} # Задел на будущее
+        # Контекст и Предметы
+        if self.archetype:
+            self.context_adaptability = self.archetype.context_adaptability
+        else:
+            self.context_adaptability = {'STUDY': 1.0, 'BREAK': 1.0, 'GYM': 1.0}
 
         self.emotion_effects = emotion_effects or self.archetype.emotion_effects
         self.emotion_coefficients = emotion_coefficients or self.archetype.emotion_coefficients
@@ -67,7 +74,6 @@ class Agent:
         # Инициализация вектора эмоций (7 измерений) в диапазоне [-30, 30]
         if emotions:
             # Если передан словарь эмоций, используем его значения для вектора (соответствие осям)
-            from model.emotion_automaton import EmotionAxis
             self.emotion_vector = [int(emotions.get(axis.value, random.randint(-30, 30))) for axis in EmotionAxis]
             for emotion_name, value in emotions.items():
                 self.automaton.set_emotion(emotion_name, value)
@@ -76,40 +82,54 @@ class Agent:
             self.emotion_vector = [random.randint(-30, 30) for _ in range(7)]
 
     def set_university_info(self, faculty, stream, group_id):
-        """Устанавливает иерархическую информацию об агенте."""
+        """
+        Устанавливает иерархическую информацию об агенте.
+        """
         self.faculty = faculty
         self.stream = stream
         self.group_id = group_id
 
-    def limit_predicate_value(self, value, min_value=-100, max_value=100):
-        """Ограничивает значение предиката в заданном диапазоне (x10)."""
+    def limit_predicate_value(self, value: float, min_value: int = -100, max_value: int = 100) -> int:
+        """
+        Ограничивает значение предиката в заданном диапазоне (масштаб x10).
+        """
         return max(min(int(value), max_value), min_value)
 
-    def update_relation(self, other_agent_name, utility, affinity, trust):
-        """Обновляет отношение к другому агенту с учетом ограничений."""
+    def update_relation(self, other_agent_name: str, utility: float, affinity: float, trust: float):
+        """
+        Обновляет отношение к другому агенту с учетом ограничений.
+        """
         self.relations[other_agent_name] = {
             "utility": self.limit_predicate_value(utility),
             "affinity": self.limit_predicate_value(affinity),
             "trust": self.limit_predicate_value(trust)
         }
 
-    def get_relation_vector(self, other_agent_name):
-        """Возвращает вектор отношений к другому агенту."""
+    def get_relation_vector(self, other_agent_name: str) -> dict:
+        """
+        Возвращает вектор отношений к другому агенту.
+        """
         return self.relations.get(
             other_agent_name,
             {"utility": 0, "affinity": 0, "trust": 0},
         )
 
-    def describe_emotions(self):
-        """Возвращает описания эмоциональных пар."""
+    def describe_emotions(self) -> dict:
+        """
+        Возвращает текстовые описания эмоциональных пар.
+        """
         return {name: pair.describe() for name, pair in self.automaton.pairs.items()}
 
-    def describe_relations(self):
-        """Возвращает словарь отношений."""
+    def describe_relations(self) -> dict:
+        """
+        Возвращает словарь текущих отношений.
+        """
         return dict(self.relations)
 
-    def get_primary_emotion(self):
-        """Возвращает название and интенсивность доминирующей эмоции."""
+    def get_primary_emotion(self) -> Tuple[str, str, int]:
+        """
+        Возвращает название, текстовое описание и интенсивность доминирующей эмоции.
+        """
         max_pair = None
         max_val = -1
         for axis, pair in self.automaton.pairs.items():
@@ -143,21 +163,22 @@ class Agent:
 
         coeffs = getattr(self.archetype, 'emotion_coefficients', {})
         for axis_name, coeff in coeffs.items():
-            # avg_sum in -300..300 range
             avg_sum = avg_metrics["affinity"] + avg_metrics["trust"] + avg_metrics["utility"]
             effect = (avg_sum // 3)
-            # delta = (effect * coeff * sensitivity) // 1000
-            # Согласование с прежней версией (effect/3.0 * coeff * 0.05 * 10 * 1.0)
             delta = (effect * coeff * self.sensitivity) // 1000
             self.automaton.adjust_emotion(axis_name, delta)
 
     def apply_emotion_decay(self):
-        """Метод вызывает затухание эмоций в автомате (integer x10 scale)."""
-        decay_rate = getattr(self.archetype, 'emotion_decay', 2) # Дефолт 2 (0.2 * 10)
-        # self.sensitivity (0-30), decay_rate (scaled x10)
+        """
+        Вызывает постепенное затухание эмоций в автомате (целочисленный масштаб x10).
+        """
+        decay_rate = getattr(self.archetype, 'emotion_decay', 2)
         self.automaton.apply_decay((decay_rate * self.sensitivity) // 10)
 
-    def _adjust_affinity(self, target_name, delta, target_emotion=None):
+    def _adjust_affinity(self, target_name: str, delta: float, target_emotion: Optional[list] = None):
+        """
+        Корректирует симпатию к целевому агенту с учётом его эмоционального состояния.
+        """
         weight = 1.0
         if target_emotion is not None:
             weight = sum(abs(e) for e in target_emotion) / (7 * 30)
@@ -166,7 +187,10 @@ class Agent:
             self.relations[target_name]["affinity"] + int(adjusted * weight)
         )
 
-    def _adjust_trust(self, target_name, delta, target_emotion=None):
+    def _adjust_trust(self, target_name: str, delta: float, target_emotion: Optional[list] = None):
+        """
+        Корректирует доверие к целевому агенту с учётом его эмоционального состояния.
+        """
         weight = 1.0
         if target_emotion is not None:
             weight = sum(abs(e) for e in target_emotion) / (7 * 30)
@@ -175,14 +199,10 @@ class Agent:
             self.relations[target_name]["trust"] + int(adjusted * weight)
         )
 
-    # Deprecated combined method – retained for backward compatibility but not used
-    def _adjust_utility_and_affinity(self, target_name, delta, target_emotion=None):
-        # Calls separate methods for utility and affinity
-        self._adjust_affinity(target_name, delta, target_emotion=target_emotion)
-        self._adjust_utility(target_name, delta, target_emotion=target_emotion)
-
-    # New separate method for utility
-    def _adjust_utility(self, target_name, delta, target_emotion=None):
+    def _adjust_utility(self, target_name: str, delta: float, target_emotion: Optional[list] = None):
+        """
+        Корректирует выгоду от целевого агента с учётом его эмоционального состояния.
+        """
         weight = 1.0
         if target_emotion is not None:
             weight = sum(abs(e) for e in target_emotion) / (7 * 30)
@@ -191,15 +211,22 @@ class Agent:
             self.relations[target_name]["utility"] + int(adjusted * weight)
         )
 
+    def _adjust_utility_and_affinity(self, target_name: str, delta: float, target_emotion: Optional[list] = None):
+        """
+        Устаревший комбинированный метод для обратной совместимости.
+        """
+        self._adjust_affinity(target_name, delta, target_emotion=target_emotion)
+        self._adjust_utility(target_name, delta, target_emotion=target_emotion)
+
     def react_to_emotions(self):
         """
-        Влияет на отношения в зависимости от текущих эмоций, учитывая эмоции партнёра (E_j).
+        Влияет на реляционные функции в зависимости от текущих эмоций и состояния партнёра.
         """
         for name, pair in self.automaton.pairs.items():
             val = pair.value
             if abs(val) < 1:
                 continue
-            # k = 0.3 (val уже умножено на 10)
+
             if name == EmotionAxis.SADNESS_JOY:
                 for target_name in self.relations:
                     target_agent = self.group.get_agent(target_name) if self.group else None
@@ -230,30 +257,29 @@ class Agent:
                 for target_name in self.relations:
                     target_agent = self.group.get_agent(target_name) if self.group else None
                     target_emotion = getattr(target_agent, 'emotion_vector', None)
-                    # Корректируем utility и affinity отдельно
                     self._adjust_utility(target_name, (val * 3) // 10, target_emotion=target_emotion)
                     self._adjust_affinity(target_name, (val * 3) // 10, target_emotion=target_emotion)
 
     def influence_emotions(self):
-        """Влияет на эмоции других агентов (Python-запасной вариант)."""
+        """
+        Влияет на эмоции других агентов (резервный механизм на стороне Python).
+        """
         primary_emotion_name, _, primary_emotion_value = self.get_primary_emotion()
-        if not primary_emotion_value: return
+        if not primary_emotion_value:
+            return
 
         total_intensity = sum(abs(pair.value) for pair in self.automaton.pairs.values())
-        if total_intensity == 0: return
+        if total_intensity == 0:
+            return
 
-        dynamic_weight_primary = abs(primary_emotion_value) / total_intensity
-        
         for target_name, relation in self.relations.items():
             target_agent = self.group.get_agent(target_name) if self.group else None
             if not target_agent or target_agent.classify_relationship(self.id) == "avoid":
                 continue
 
             avg_rel = (relation["affinity"] + relation["trust"] + relation["utility"]) // 3
-            # d_weight as int 0..100
             d_weight_scaled = (abs(primary_emotion_value) * 100) // total_intensity
             
-            # scaling factor to match old float logic roughly
             target_agent.automaton.adjust_emotion(
                 primary_emotion_name,
                 (primary_emotion_value * avg_rel * d_weight_scaled * self.sensitivity) // 100000
@@ -261,34 +287,35 @@ class Agent:
 
     def apply_relation_decay(self):
         """
-        Закон прощения: Отношения and Отзывчивость стремятся к 0 (integer x10 scale).
+        Закон прощения: Отношения стремятся к нулю со временем (integer x10 scale).
         """
-        decay_rate = getattr(self.archetype, 'decay_rate', 1) # Дефолт 1 (0.1 * 10)
-        # Коэффициент в архетипе x10, чувствительность x10 -> общий масштаб остается корректным
+        decay_rate = getattr(self.archetype, 'decay_rate', 1)
         step = (decay_rate * self.sensitivity) // 10
         
         for target_name in list(self.relations.keys()):
-            # Decay for A, T, U
             for key in ['trust', 'affinity', 'utility']:
                 current_val = self.relations[target_name].get(key, 0)
                 if current_val > 0:
                     self.relations[target_name][key] = max(0, current_val - int(step * 0.5))
                 elif current_val < 0:
-                    self.relations[target_name][key] = min(0, current_val + step) # Негатив прощается быстрее
-                    
-    def classify_relationship(self, other_name):
-        """Классифицирует тип отношений."""
+                    self.relations[target_name][key] = min(0, current_val + step)
+
+    def classify_relationship(self, other_name: str) -> str:
+        """
+        Классифицирует тип отношений к другому агенту.
+        """
         relation = self.get_relation_vector(other_name)
         trust = relation["trust"]
         affinity = relation["affinity"]
 
-        # Пороги x10
         if trust >= 50 and affinity >= 40:
             return "mandatory"
         if trust >= -20 and affinity >= -20:
             return "optional"
         return "avoid"
 
-    def get_emotions(self):
-        """Возвращает числовые значения эмоций."""
+    def get_emotions(self) -> dict:
+        """
+        Возвращает словарь числовых значений всех осей эмоций.
+        """
         return {axis.value: pair.value for axis, pair in self.automaton.pairs.items()}

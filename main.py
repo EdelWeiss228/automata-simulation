@@ -4,7 +4,7 @@ import os
 import json
 
 def main():
-    parser = argparse.ArgumentParser(description="Automata Simulation Engine v6.7")
+    parser = argparse.ArgumentParser(description="Движок моделирования коллективного поведения автоматов")
     parser.add_argument("--scenario", type=str, help="Path to scenario JSON file")
     parser.add_argument("--steps", type=int, help="Number of steps to run (overrides scenario)")
     parser.add_argument("--semesters", "-sem", type=int, help="Number of semesters to run (for University mode)")
@@ -13,7 +13,7 @@ def main():
     parser.add_argument("--university", "--uni", action="store_true", help="Launch directly into University map")
     parser.add_argument("--seed", type=int, help="Seed for reproducibility")
     parser.add_argument("--create-scenario", type=str, metavar="PATH", help="Generate a template scenario JSON and exit")
-    parser.add_argument("--version", action="version", version="Automata Simulation Engine v6.7")
+    parser.add_argument("--version", action="version", version="Движок моделирования коллективного поведения автоматов")
     
     args = parser.parse_args()
 

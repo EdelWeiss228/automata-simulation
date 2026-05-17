@@ -1,7 +1,7 @@
 """Быстрый тест ротации: создаем коллектив, перематываем на июнь, 
 проходим до июля и проверяем что ротация работает."""
 import sys, os, datetime, time, json
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from model.university_collective import UniversityCollective
 from model.simulation_session import SimulationSession

@@ -61,7 +61,7 @@ class ClickHouseLogger:
     def log_agent_states(self, day_id: int, slot_id: int, engine):
         """
         Извлекает эмоциональные состояния из C++ ядра and сохраняет в agent_states таблицу.
-        v6.10.4: Оптимизировано через numpy.
+        Векторизованная обработка с использованием библиотеки numpy.
         """
         state = engine.state
         num_agents = state.num_agents

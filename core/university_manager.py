@@ -6,7 +6,7 @@ from model.constants import SportType, AgentStatus
 from model.agent import Agent
 
 class UniversityManager:
-    """Управляющий структурой университета (v6.9.29: Русские имена)."""
+    """Управляющий структурой и логикой университета."""
     
     FACULTY_NAMES = ["П", "Ф", "Р", "М", "Эк"]
     MASTER_FACULTIES = ["ММ", "ПМ", "ПО", "ЭкМ", "РМ", "ГП"]
@@ -240,7 +240,7 @@ class UniversityManager:
                     group_id = f"{f_name}-{year_suffix}-{g+1}"
                     for i in range(25):
                         if not bac_pool: break
-                        # Уникальный ID: S-П-22-1-01 (v6.9.32)
+                        # Формирование уникального идентификатора по шаблону S-П-22-1-01
                         agent_id = f"S-{group_id}-{i+1:02d}"
                         agent = AgentFactory.create_agent(self._generate_human_name(), archetype_enum=bac_pool.pop(), agent_id=agent_id)
                         agent.set_university_info(f_name, f"{f_name}-{year_suffix}", group_id)

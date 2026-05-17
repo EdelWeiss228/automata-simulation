@@ -19,7 +19,7 @@ class AgentFactory:
 
     @staticmethod
     def create_agent_with_relations(index, existing_agents):
-        """Создает случайного агента с отношениями к уже существующим (v6.9.36)."""
+        """Создает случайного агента со случайными начальными отношениями к существующим агентам."""
         archetypes = list(ArchetypeEnum)
         arch = random.choice(archetypes)
         agent_id = f"G-RAND-{index:03d}"
@@ -38,7 +38,7 @@ class AgentFactory:
 
     @staticmethod
     def initialize_agent_relations(agent, other_ids):
-        """Инициализирует отношения агента со списком других ID (v6.9.36)."""
+        """Инициализирует реляционные связи агента с заданным списком идентификаторов."""
         for other_id in other_ids:
             if other_id == agent.id:
                 continue
@@ -52,7 +52,7 @@ class AgentFactory:
 
     @staticmethod
     def initialize_player_relations(player, agent_ids, agents_dict):
-        """Инициализирует отношения между игроком и агентами (v6.9.36)."""
+        """Инициализирует реляционные связи между игроком и остальными агентами."""
         for agent_id in agent_ids:
             # Игрок к агенту
             if agent_id not in player.relations:

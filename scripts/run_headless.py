@@ -67,7 +67,7 @@ def generate_research_agents(scenario):
     return agents
 
 def main():
-    parser = argparse.ArgumentParser(description="Silent Research Runner v5.0")
+    parser = argparse.ArgumentParser(description="Утилита запуска научных расчетов в фоновом режиме")
     parser.add_argument("scenario", type=str, help="Path to scenario JSON file")
     parser.add_argument("--steps", type=int, help="Number of steps (overrides scenario)")
     parser.add_argument("--silent", "--headless", action="store_true", default=True, help="Run in silent mode (default)")

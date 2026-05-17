@@ -57,7 +57,7 @@ class InteractionStrategy:
     def priority_score(cls, agent, target_name, metrics, context=None):
         """
         Расчет приоритета цели на основе реляционных метрик.
-        v6.0: Если отношений еще нет (первокурсник), возвращаем 0.5 для равномерного Softmax.
+        Если отношений еще нет (первокурсник), возвращается 0.5 для равномерного Softmax-распределения.
         """
         if not metrics:
             return 0.5
@@ -157,7 +157,7 @@ class InteractionStrategy:
     def process_interaction_result(agent, target_agent, sigma, context=None):
         """
         Обработать результат взаимодействия (Sigma) and обновить отношения.
-        v5.5: Интеграция контекста (STUDY, GYM, BREAK).
+        Интеграция пространственного контекста (учеба, спортзал, перерыв).
         """
         s_i = getattr(agent, "sensitivity", 1.0)
         s_t = getattr(target_agent, "sensitivity", 1.0)

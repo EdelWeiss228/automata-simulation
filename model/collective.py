@@ -107,8 +107,8 @@ class RelationsProxy:
 
 class Collective:
     """
-    Класс, представляющий коллектив агентов and игроков,
-    управляющий их взаимодействиями and отношениями.
+    Класс, представляющий коллектив агентов и игроков,
+    управляющий их взаимодействиями и отношениями.
     """
 
     def __init__(self, agents_data=None, relations_data=None, players_data=None, seed=None):
@@ -153,12 +153,12 @@ class Collective:
         self.agent_count += 1
 
     def add_player(self, player):
-        """Добавить игрока and инициализировать его отношения."""
+        """Добавить игрока и инициализировать его отношения."""
         self.players.append(player)
         AgentFactory.initialize_player_relations(player, list(self.agents.keys()), self.agents)
 
     def introduce_new_agent(self, new_agent):
-        """Ввести нового агента and установить связи."""
+        """Ввести нового агента и установить связи."""
         self.add_agent(new_agent)
         # Инициализируем отношения с остальными (по ID)
         AgentFactory.initialize_agent_relations(new_agent, list(self.agents.keys()))
@@ -283,7 +283,7 @@ class Collective:
             )
 
     def _sync_to_cpp(self, sync_relations=True):
-        """Прямая синхронизация всех агентов and их отношений в C++ структуру."""
+        """Прямая синхронизация всех агентов и их отношений в C++ структуру."""
         if not CPP_ENGINE_AVAILABLE:
             return
             
@@ -340,7 +340,7 @@ class Collective:
         for i in range(n):
             self.cpp_engine.set_agent_archetype(i, int(arch_indices[i]))
 
-        # Массовая синхронизация отношений (самый тяжелый блок)
+        # Высокоскоростная синхронизация реляционной матрицы
         if sync_relations:
             self.cpp_engine.state.relations = self.relations_matrix.flatten()
 
@@ -368,7 +368,7 @@ class Collective:
 
     def _run_cpp_influence(self):
         """
-        Запуск C++ движка and синхронизация результатов обратно в Python.
+        Запуск C++ движка и синхронизация результатов обратно в Python.
         """
         self._update_id_maps()
         n = len(self.agents)
@@ -488,7 +488,7 @@ class Collective:
             
             self.cpp_engine.perform_daily_cycle(interactions_per_day)
             
-            # Получаем записанные взаимодействия для логов and GUI
+            # Получаем записанные взаимодействия для логов и GUI
             interactions = []
             type_map = {0: "refusal", 1: "success", 2: "fail"}
             for interact in self.cpp_engine.last_day_interactions:
@@ -503,7 +503,7 @@ class Collective:
             
             return interactions
 
-        # ПИТОНОВСКИЙ ВАРИАНТ (медленный)
+        # Интерпретируемый вариант реализации (резервный)
 # Затухание отношений (Закон прощения)
         for agent in self.agents.values():
             agent.apply_relation_decay()
@@ -555,7 +555,7 @@ class Collective:
         return interactions
 
     def add_random_agent(self):
-        """Создает and добавляет случайного агента в коллектив."""
+        """Создает и добавляет случайного агента в коллектив."""
         existing_names = list(self.agents.keys())
         new_agent = AgentFactory.create_agent_with_relations(len(existing_names) + 1, existing_names)
         self.add_agent(new_agent)
@@ -574,7 +574,7 @@ class Collective:
         self.perform_full_day_cycle(interactions_per_day, interactive=True)
 
     def remove_agent(self, agent_name):
-        """Удалить агента из коллектива and очистить его упоминания из отношений других агентов."""
+        """Удалить агента из коллектива и очистить его упоминания из отношений других агентов."""
         if agent_name in self.agents:
             del self.agents[agent_name]
             for other_agent in self.agents.values():

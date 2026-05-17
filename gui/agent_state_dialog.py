@@ -36,7 +36,7 @@ class AgentStateDialog:
         self.sensitivity_scale.set(int(agent.sensitivity * 10))
         self.sensitivity_scale.pack(pady=5, fill='x', padx=30)
 
-        # Новые параметры v4.2: Спорт and Прогулы
+        # Дополнительные характеристики: спортивная активность и склонность к пропускам
         tk.Label(frame_arch, text="Склонность к спорту (%):", bg='#F8F9FA', fg='#212529', font=('Arial', 10, 'bold')).pack(pady=(15, 5))
         self.sport_scale = tk.Scale(frame_arch, from_=0, to=100, orient=tk.HORIZONTAL, 
                                      bg='#F8F9FA', fg='#212529', highlightthickness=0)

@@ -109,7 +109,7 @@ class SimulationGUI(tk.Tk):
 
         tk.Button(self.control_frame, text="Удалить агента", command=self.remove_selected_agent).pack(pady=3, fill=tk.X)
         tk.Button(self.control_frame, text="Подробнее", command=self.show_agent_details).pack(pady=3, fill=tk.X)
-        tk.Button(self.control_frame, text="V3: Загрузить Университет", command=self.load_university, bg='lightblue').pack(pady=10, fill=tk.X)
+        tk.Button(self.control_frame, text="Загрузить Университет", command=self.load_university, bg='lightblue').pack(pady=10, fill=tk.X)
 
     def load_university(self):
         """Переключает на масштабную симуляцию университета."""
@@ -127,7 +127,7 @@ class SimulationGUI(tk.Tk):
         if isinstance(self.session.collective, UniversityCollective):
             self.uni_map_window = UniversityGUI(self, self.session.collective)
         else:
-            messagebox.showwarning("Внимание", "Карта доступна только в режиме Университета (V3).")
+            messagebox.showwarning("Внимание", "Карта доступна только в режиме моделирования Университета.")
 
     def restart_gui_for_new_collective(self):
         """Очищает GUI и перерисовывает ноды для текущего коллектива."""
@@ -159,7 +159,7 @@ class SimulationGUI(tk.Tk):
         idx = len(self.agent_nodes)
         
         # Используем детерминированную 'сетку' для размещения, 
-        # но с небольшим рандомом для 'органического' вида.
+        # но с добавлением случайного смещения для естественного отображения.
         columns = 15 # Фиксированное количество колонок
         cell_size = SPACING + 15
         margin = NODE_RADIUS + 30

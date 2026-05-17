@@ -13,7 +13,7 @@ from model.archetypes import ArchetypeEnum
 class UniversityConstructor(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Архитектор Университета: Конструктор Сценария v6.4")
+        self.title("Архитектор Университета: Конструктор Сценария")
         self.geometry("750x700")
         
         self.params = {
@@ -117,7 +117,7 @@ class UniversityConstructor(tk.Tk):
         start_y = self.year_entry.get()
         m_prob = self.master_slider.get()
         
-        summary = f"СЦЕНАРИЙ УНИВЕРСИТЕТА v6.4\n"
+        summary = "СЦЕНАРИЙ УНИВЕРСИТЕТА\n"
         summary += f"===========================\n"
         summary += f"Период: {start_y} - {int(start_y)+4} (8 семестров)\n"
         summary += f"Бакалавриат: 5 факультетов, 4 курса, ~1500 агентов\n"

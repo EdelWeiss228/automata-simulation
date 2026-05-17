@@ -16,15 +16,15 @@ class ArchetypeEnum(Enum):
     @property
     def localized(self):
         mapping = {
-            'Erudition': 'Мудрец',
-            'Enigmata': 'Бунтарь',
-            'Harmony': 'Гармоничный',
-            'Hunt': 'Воин',
-            'Elation': 'Трикстер',
-            'Preservation': 'Страж',
-            'Nihility': 'Тайна',
-            'Trailblaze': 'Путеводитель',
-            'Remembrance': 'Память'
+            'Erudition': 'Аналитик',
+            'Enigmata': 'Нонконформист',
+            'Harmony': 'Медиатор',
+            'Hunt': 'Конкурент',
+            'Elation': 'Оппортунист',
+            'Preservation': 'Протектор',
+            'Nihility': 'Деструктор',
+            'Trailblaze': 'Инноватор',
+            'Remembrance': 'Рефлектор'
         }
         return mapping.get(self.value, self.value)
 

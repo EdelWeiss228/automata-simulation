@@ -9,8 +9,8 @@ from model.archetypes import ArchetypeEnum
 class UniversitySetupWizard(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
-        self.title("Инициализация Университета v6.7")
-        self.geometry("550x750")
+        self.title("Инициализация параметров Университета")
+        self.geometry("680x780")
         self.result_config = None
         
         self.update_idletasks()
@@ -58,7 +58,7 @@ class UniversitySetupWizard(tk.Toplevel):
         self.lbl_master.grid(row=1, column=3)
         self.master_var.trace_add("write", lambda *a: self.lbl_master.config(text=f"{int(self.master_var.get()*100)}%"))
 
-        # 2. Лимиты мест (v6.9.27)
+        # Распределение свободных мест (лимиты)
         self.total_bac = 1500
         self.total_mag = 120
         
@@ -83,12 +83,14 @@ class UniversitySetupWizard(tk.Toplevel):
         self.bac_entries = {}
         entry_bac = ttk.Frame(self.group_bac)
         entry_bac.pack(fill=tk.X)
+        for col_idx in range(6):
+            entry_bac.columnconfigure(col_idx, weight=1)
         for i, arch in enumerate(ArchetypeEnum):
             row, col = i // 3, (i % 3) * 2
-            ttk.Label(entry_bac, text=f"{arch.localized[:5]}.:").grid(row=row, column=col, sticky=tk.W, padx=2)
+            ttk.Label(entry_bac, text=f"{arch.localized}:").grid(row=row, column=col, sticky=tk.W, padx=(5, 2))
             ent = ttk.Entry(entry_bac, width=6)
             ent.insert(0, "0")
-            ent.grid(row=row, column=col+1, padx=4, pady=2)
+            ent.grid(row=row, column=col+1, padx=(2, 5), pady=4)
             ent.bind("<KeyRelease>", lambda e: self.update_remainders())
             self.bac_entries[arch.name] = ent
 
@@ -97,12 +99,14 @@ class UniversitySetupWizard(tk.Toplevel):
         self.mag_entries = {}
         entry_mag = ttk.Frame(self.group_mag)
         entry_mag.pack(fill=tk.X)
+        for col_idx in range(6):
+            entry_mag.columnconfigure(col_idx, weight=1)
         for i, arch in enumerate(ArchetypeEnum):
             row, col = i // 3, (i % 3) * 2
-            ttk.Label(entry_mag, text=f"{arch.localized[:5]}.:").grid(row=row, column=col, sticky=tk.W, padx=2)
+            ttk.Label(entry_mag, text=f"{arch.localized}:").grid(row=row, column=col, sticky=tk.W, padx=(5, 2))
             ent = ttk.Entry(entry_mag, width=6)
             ent.insert(0, "0")
-            ent.grid(row=row, column=col+1, padx=4, pady=2)
+            ent.grid(row=row, column=col+1, padx=(2, 5), pady=4)
             ent.bind("<KeyRelease>", lambda e: self.update_remainders())
             self.mag_entries[arch.name] = ent
 

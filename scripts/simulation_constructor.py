@@ -18,7 +18,7 @@ from model.archetypes import ArchetypeEnum
 class SimulationConstructor(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Исследовательский Конструктор: Университет v6.0")
+        self.title("Исследовательский Конструктор параметров Университета")
         self.geometry("600x650")
         
         self.params = {

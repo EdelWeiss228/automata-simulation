@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from model.simulation_session import SimulationSession
 
 def main():
-    parser = argparse.ArgumentParser(description="GUI Research Runner v5.0")
+    parser = argparse.ArgumentParser(description="Запуск симуляции с графическим интерфейсом")
     parser.add_argument("scenario", type=str, help="Path to scenario JSON file")
     parser.add_argument("--steps", type=int, help="Number of steps (overrides scenario)")
     parser.add_argument("--gui", action="store_true", default=True, help="Run in GUI mode (default)")

@@ -145,7 +145,7 @@ def send_welcome(message):
     markup.row(btn_status, btn_prog)
     markup.row(btn_res, btn_logs)
     markup.row(btn_restart)
-    bot.reply_to(message, "Бот мониторинга Automata Simulation v6.10\nИспользуй кнопки ниже:", reply_markup=markup)
+    bot.reply_to(message, "Бот мониторинга симуляции коллектива автоматов\nИспользуй кнопки ниже:", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):

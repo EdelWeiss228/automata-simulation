@@ -18,13 +18,21 @@ core/src/*.o
 *.csv
 agents.csv
 *.log
-pdf/
+pdf/*.aux
+pdf/*.log
+pdf/*.toc
+pdf/*.synctex.gz
+pdf/*.fdb_latexmk
+pdf/*.fls
+pdf/*.out
+pdf/*.bak
+pdf/*.pdf
 *.pdf
 scripts/*.json
 
 # IDEs & System
 .DS_Store
-.vscode/,
+.vscode/
 .idea/
 .git 2/
 
@@ -36,12 +44,10 @@ archive/data/*.csv
 
 # Research-specific scripts (as per user preference for "clean" repo)
 scripts/research/
-tests/
 
 # System-specific build info
 core/.build_info
-CONTEXT_STATE_SNAPSHOT.md
-CHANGELOG.md
+.gemini_metadata/
 
 # Temporary Scratch Files
 scratch/

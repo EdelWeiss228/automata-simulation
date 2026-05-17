@@ -13,7 +13,7 @@ class EmotionAxis(str, Enum):
     ALIENATION_OPENNESS = 'alienation_openness'
 
     def get_localized_label(self, value: float) -> str:
-        """Возвращает название эмоции из курсовой в зависимости от знака (v6.9.31)."""
+        """Возвращает название эмоции в зависимости от знака оси."""
         mapping = {
             'sadness_joy': ('Радость', 'Печаль'),
             'fear_calm': ('Спокойствие', 'Страх'),
