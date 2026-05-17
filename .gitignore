@@ -18,17 +18,10 @@ core/src/*.o
 *.csv
 agents.csv
 *.log
-pdf/*.aux
-pdf/*.log
-pdf/*.toc
-pdf/*.synctex.gz
-pdf/*.fdb_latexmk
-pdf/*.fls
-pdf/*.out
-pdf/*.bak
-pdf/*.pdf
+pdf/
 *.pdf
 scripts/*.json
+tests/
 
 # IDEs & System
 .DS_Store
