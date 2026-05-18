@@ -123,10 +123,10 @@ run.bat
 Вы также можете запустить систему в фоновом (headless) режиме исследований напрямую через Python:
 ```bash
 # macOS / Linux
-./venv/bin/python main.py --scenario scenarios_archive/Run03_Harmony_MIXED.json --silent --steps 100
+./venv/bin/python main.py --scenario scenarios_archive/SCENARIO_NAME.json --silent --steps 100
 
 # Windows
-venv\Scripts\python main.py --scenario scenarios_archive\Run03_Harmony_MIXED.json --silent --steps 100
+venv\Scripts\python main.py --scenario scenarios_archive\SCENARIO_NAME.json --silent --steps 100
 ```
 
 ---
