@@ -307,7 +307,7 @@ class MegaResearch:
             query = f"""
             SELECT
                 count() AS total,
-                sum(ar.utility >= 5 OR ar.trust >= 5 OR ar.affinity >= 5) AS soft,
+                sum(ar.utility >= 95 OR ar.trust >= 95 OR ar.affinity >= 95) AS soft,
                 sum((ar.utility >= 95 AND ar.trust >= 95) OR (ar.utility >= 95 AND ar.affinity >= 95) OR (ar.trust >= 95 AND ar.affinity >= 95)) AS hard
             FROM interactions i
             JOIN agent_relations ar
@@ -336,7 +336,7 @@ class MegaResearch:
         df = df.merge(meta[["scenario_name","init_type"]], on="scenario_name", how="left")
 
         fig, axes = plt.subplots(1, 2, figsize=(16, 5))
-        for ax, col, title in [(axes[0],"soft_pct","Мягкое (≥5 по одному)"),
+        for ax, col, title in [(axes[0],"soft_pct","Мягкое (≥95 по одному)"),
                                 (axes[1],"hard_pct","Строгое (≥95 по двум)")]:
             clrs = [C3[INIT_TYPES.index(t)] if t in INIT_TYPES else "#999" for t in df["init_type"]]
             ax.bar(df["scenario_name"], df[col], color=clrs, edgecolor="white")

@@ -19,7 +19,7 @@ core/src/*.o
 agents.csv
 *.log
 pdf/
-*.pdf
+diplom.pdf
 scripts/*.json
 tests/
 
