@@ -69,7 +69,7 @@ SEMESTER_LEN = 171   # дней в семестре ≈ 1365/8
 N_SEMESTERS  = 8
 
 # Архетипы с нелинейным log() в формуле приоритета
-LOG_ARCHETYPES = ["ANALYST", "INNOVATOR", "АНАЛИТИК", "ИННОВАТОР"]
+LOG_ARCHETYPES = ["Erudition", "Trailblaze"]
 
 # ══════════════════════════════════════════════════════════════════
 #  УТИЛИТЫ
@@ -110,13 +110,32 @@ class MegaResearch:
         self._parts: List[str] = []
         self._ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print("✅  Соединение установлено.\n", flush=True)
-        # Найдём репрезентативный run_id для детального анализа (предпочтительно MIXED или RANDOM)
-        mixed_runs = self.meta()
-        mixed = mixed_runs[mixed_runs["scenario_name"].str.contains("MIXED", na=False)]
-        if not mixed.empty:
-            self.rep_run_id = mixed["run_id"].iloc[0]
+        # Найдём репрезентативный run_id для детального анализа (предпочтительно MIXED с максимальным разнообразием архетипов)
+        best_run_df = self.q("""
+            SELECT r.run_id
+            FROM simulation_runs r
+            JOIN agent_registry a ON r.run_id = a.run_id
+            WHERE r.scenario_name LIKE '%MIXED%'
+            GROUP BY r.run_id
+            ORDER BY count(DISTINCT a.archetype) DESC
+            LIMIT 1
+        """)
+        if not best_run_df.empty:
+            self.rep_run_id = best_run_df["run_id"].iloc[0]
         else:
-            self.rep_run_id = mixed_runs["run_id"].iloc[0]
+            best_run_df = self.q("""
+                SELECT r.run_id
+                FROM simulation_runs r
+                JOIN agent_registry a ON r.run_id = a.run_id
+                GROUP BY r.run_id
+                ORDER BY count(DISTINCT a.archetype) DESC
+                LIMIT 1
+            """)
+            if not best_run_df.empty:
+                self.rep_run_id = best_run_df["run_id"].iloc[0]
+            else:
+                mixed_runs = self.meta()
+                self.rep_run_id = mixed_runs["run_id"].iloc[0]
 
     # ── Запросы ──────────────────────────────────────────────────
 
@@ -313,6 +332,7 @@ class MegaResearch:
             JOIN agent_relations ar
               ON i.run_id = ar.run_id
              AND i.day_id = ar.day_id
+             AND i.slot_id = ar.slot_id
              AND i.from_id = ar.subject_id
              AND i.to_id = ar.object_id
             WHERE i.run_id = '{run_id}'
@@ -360,7 +380,7 @@ class MegaResearch:
         print("[Progress]  [04/18] Стабильные пары…", flush=True)
         rep = h2("4. Стабильные пары")
 
-        thresholds = [0.90, 0.95, 0.995, 1.00]
+        thresholds = [0.05, 0.10, 0.15, 0.20]
         results: Dict[str, pd.DataFrame] = {}
 
         for thr in thresholds:
@@ -948,6 +968,7 @@ class MegaResearch:
             JOIN agent_registry ar ON i.run_id=ar.run_id AND i.from_id=ar.agent_id
             JOIN agent_relations rel
                 ON  i.run_id=rel.run_id AND i.day_id=rel.day_id
+                AND i.slot_id=rel.slot_id
                 AND i.from_id=rel.subject_id AND i.to_id=rel.object_id
             WHERE i.run_id = '{self.rep_run_id}' AND rel.run_id = '{self.rep_run_id}' AND rel.utility BETWEEN -100 AND 100
             LIMIT 2000000
@@ -1072,7 +1093,7 @@ class MegaResearch:
             JOIN agent_registry ar1 ON i.run_id=ar1.run_id AND i.from_id=ar1.agent_id
             JOIN agent_registry ar2 ON i.run_id=ar2.run_id AND i.to_id=ar2.agent_id
             WHERE i.run_id = '{self.rep_run_id}'
-              AND i.slot_id IN (8, 9)
+              AND i.slot_id = 8
             GROUP BY arch1, arch2, a, b
         """)
 
@@ -1239,7 +1260,7 @@ class MegaResearch:
             FROM interactions i
             JOIN agent_registry ar ON i.run_id=ar.run_id AND i.from_id=ar.agent_id
             WHERE i.run_id = '{self.rep_run_id}'
-              AND (ar.archetype ILIKE '%деструктор%' OR ar.archetype ILIKE '%DESTRUCTOR%')
+              AND ar.archetype ILIKE '%Nihility%'
             GROUP BY agent_id
         """)
 

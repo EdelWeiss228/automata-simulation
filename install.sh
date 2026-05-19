@@ -62,7 +62,7 @@ if [ -f "requirements.txt" ]; then
     ./venv/bin/python3 -m pip install -r requirements.txt
 else
     echo "requirements.txt not found! Installing base packages manually..."
-    ./venv/bin/python3 -m pip install numpy pandas pybind11 clickhouse-connect python-dotenv
+    ./venv/bin/python3 -m pip install numpy pandas pybind11 clickhouse-connect python-dotenv networkx scikit-learn matplotlib seaborn tabulate scipy pyTelegramBotAPI
 fi
 
 # 6. Компиляция ядра
