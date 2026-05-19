@@ -115,6 +115,10 @@ class ResearchAnalyzer:
         password: str = "clickhouse_pass",
     ) -> None:
         print("🔌  Подключение к ClickHouse…")
+        self.host = host
+        self.port = port
+        self.username = username
+        self.password = password
         self.client = clickhouse_connect.get_client(
             host=host, port=port, username=username, password=password
         )
@@ -227,9 +231,9 @@ class ResearchAnalyzer:
         for ax, grp in zip(axes, ["homogeneous", "heterogeneous"]):
             sub = summary[summary["Группа"] == grp]
             x = np.arange(len(sub))
-            ax.bar(x - 0.25, sub["min"] / 1e6, width=0.25, label="Мин", color="#90CAF9")
-            ax.bar(x,        sub["mean"] / 1e6, width=0.25, label="Среднее", color="#1565C0")
-            ax.bar(x + 0.25, sub["max"] / 1e6, width=0.25, label="Макс", color="#0D47A1")
+            ax.bar(x - 0.25, sub["Мин"] / 1e6, width=0.25, label="Мин", color="#90CAF9")
+            ax.bar(x,        sub["Среднее"] / 1e6, width=0.25, label="Среднее", color="#1565C0")
+            ax.bar(x + 0.25, sub["Макс"] / 1e6, width=0.25, label="Макс", color="#0D47A1")
             ax.set_xticks(x)
             ax.set_xticklabels(sub["Тип инициализации"])
             ax.set_title(f"{'Гомогенные' if grp == 'homogeneous' else 'Гетерогенные'} сценарии")
@@ -271,9 +275,9 @@ class ResearchAnalyzer:
         df_global = self._q(
             """
             SELECT
-                countIf(result = 0)  AS refusals,
-                countIf(result = 1)  AS successes,
-                countIf(result = -1) AS failures,
+                countIf(type = 0)  AS refusals,
+                countIf(type = 1)  AS successes,
+                countIf(type = -1) AS failures,
                 count()              AS total
             FROM interactions
             """
@@ -286,10 +290,14 @@ class ResearchAnalyzer:
         df_loc = self._q(
             """
             SELECT
-                location,
-                countIf(result = 0) AS refusals,
+                multiIf(
+                    slot_id IN (1, 3, 5, 7), 'CLASS',
+                    slot_id IN (2, 4, 6),    'BREAK',
+                    'GYM'
+                ) AS location,
+                countIf(type = 0) AS refusals,
                 count()             AS total,
-                round(countIf(result = 0) / count() * 100, 2) AS refusal_pct
+                round(countIf(type = 0) / count() * 100, 2) AS refusal_pct
             FROM interactions
             GROUP BY location
             ORDER BY refusal_pct DESC
@@ -314,11 +322,11 @@ class ResearchAnalyzer:
         df_agent_ref = self._q(
             """
             SELECT
-                agent_2             AS agent_id,
-                countIf(result = 0) AS refusals,
+                to_id               AS agent_id,
+                countIf(type = 0)   AS refusals,
                 count()             AS total_as_target
             FROM interactions
-            GROUP BY agent_2
+            GROUP BY to_id
             ORDER BY refusals DESC
             """
         )
@@ -327,7 +335,10 @@ class ResearchAnalyzer:
         n = len(vals)
         lorenz_y = np.cumsum(vals) / vals.sum()
         lorenz_x = np.arange(1, n + 1) / n
-        gini = 1 - 2 * np.trapz(lorenz_y, lorenz_x)
+        if hasattr(np, "trapezoid"):
+            gini = 1 - 2 * np.trapezoid(lorenz_y, lorenz_x)
+        else:
+            gini = 1 - 2 * np.trapz(lorenz_y, lorenz_x)
 
         fig, ax = plt.subplots(figsize=(7, 6))
         ax.plot(lorenz_x * 100, lorenz_y * 100, color="#1565C0", lw=2, label="Кривая Лоренца")
@@ -367,11 +378,11 @@ class ResearchAnalyzer:
             """
             SELECT
                 ar.archetype,
-                countIf(i.result = 0) AS refusals,
+                countIf(i.type = 0)   AS refusals,
                 count()               AS total,
-                round(countIf(i.result = 0) / count() * 100, 2) AS refusal_pct
+                round(countIf(i.type = 0) / count() * 100, 2) AS refusal_pct
             FROM interactions i
-            JOIN agent_registry ar ON i.run_id = ar.run_id AND i.agent_2 = ar.agent_id
+            JOIN agent_registry ar ON i.run_id = ar.run_id AND i.to_id = ar.agent_id
             GROUP BY ar.archetype
             ORDER BY refusal_pct DESC
             """
@@ -398,34 +409,53 @@ class ResearchAnalyzer:
         print("📊  [3/9] Анализ реляционных порогов…")
         report = _section("3. Анализ реляционных порогов")
 
-        df_thresh = self._q(
-            """
+        days_str = ", ".join(str(d) for d in range(30, 1365, 30))
+        rows = []
+        for idx, row in runs_meta.iterrows():
+            run_id = row["run_id"]
+            scenario_name = row["scenario_name"]
+            # Print progress since sequential execution is easy to track
+            print(f"    - Обработка сценария {idx + 1}/{len(runs_meta)}: {scenario_name}")
+            query = f"""
             SELECT
-                sr.scenario_name,
-                count()                                                                AS total_contacts,
-                countIf(
-                    ar.utility >= 5 OR ar.trust >= 5 OR ar.affinity >= 5
-                )                                                                      AS soft_contacts,
-                countIf(
-                    (ar.utility >= 95 AND ar.trust >= 95)
-                    OR (ar.utility >= 95 AND ar.affinity >= 95)
-                    OR (ar.trust >= 95 AND ar.affinity >= 95)
-                )                                                                      AS hard_contacts
+                count() AS total_contacts,
+                sum(ar.utility >= 5 OR ar.trust >= 5 OR ar.affinity >= 5) AS soft_contacts,
+                sum((ar.utility >= 95 AND ar.trust >= 95) OR (ar.utility >= 95 AND ar.affinity >= 95) OR (ar.trust >= 95 AND ar.affinity >= 95)) AS hard_contacts
             FROM interactions i
-            JOIN simulation_runs sr ON i.run_id = sr.run_id
-            JOIN agent_relations ar
-                ON  i.run_id    = ar.run_id
-                AND i.day_id    = ar.day_id
-                AND i.agent_1   = ar.subject_id
-                AND i.agent_2   = ar.object_id
-            GROUP BY sr.scenario_name
-            ORDER BY sr.scenario_name
+            LEFT JOIN (
+                SELECT run_id, day_id, subject_id, object_id, utility, trust, affinity
+                FROM agent_relations
+                WHERE run_id = '{run_id}'
+                  AND day_id IN ({days_str})
+            ) ar
+              ON i.run_id = ar.run_id
+             AND i.day_id = ar.day_id
+             AND i.from_id = ar.subject_id
+             AND i.to_id = ar.object_id
+            WHERE i.run_id = '{run_id}'
+              AND i.day_id IN ({days_str})
             """
-        )
-        df_thresh["soft_pct"] = df_thresh["soft_contacts"] / df_thresh["total_contacts"] * 100
-        df_thresh["hard_pct"] = df_thresh["hard_contacts"] / df_thresh["total_contacts"] * 100
+            df = self._q(query)
+            if df.empty:
+                rows.append({
+                    "scenario_name": scenario_name,
+                    "total_contacts": 0,
+                    "soft_contacts": 0,
+                    "hard_contacts": 0
+                })
+            else:
+                rows.append({
+                    "scenario_name": scenario_name,
+                    "total_contacts": int(df["total_contacts"].iloc[0] or 0),
+                    "soft_contacts": int(df["soft_contacts"].iloc[0] or 0),
+                    "hard_contacts": int(df["hard_contacts"].iloc[0] or 0)
+                })
+
+        df_thresh = pd.DataFrame(rows)
+        df_thresh["soft_pct"] = np.where(df_thresh["total_contacts"] > 0, df_thresh["soft_contacts"] / df_thresh["total_contacts"] * 100, 0.0)
+        df_thresh["hard_pct"] = np.where(df_thresh["total_contacts"] > 0, df_thresh["hard_contacts"] / df_thresh["total_contacts"] * 100, 0.0)
         df_thresh = df_thresh.merge(
-            runs_meta[["scenario_name", "init_type"]], on="scenario_name", how="left"
+            runs_meta[["scenario_name", "init_type"]].drop_duplicates(), on="scenario_name", how="left"
         )
 
         fig, axes = plt.subplots(1, 2, figsize=(16, 5))
@@ -461,7 +491,7 @@ class ResearchAnalyzer:
 
     # ──────────────── 4. СТАБИЛЬНЫЕ ПАРЫ ─────────────────────────────────────
 
-    def analyze_stable_pairs(self) -> str:
+    def analyze_stable_pairs(self, rep_run_id: str) -> str:
         print("📊  [4/9] Стабильные пары…")
         report = _section("4. Стабильные пары")
 
@@ -482,11 +512,12 @@ class ResearchAnalyzer:
                 df_sem = self._q(
                     f"""
                     SELECT
-                        greatest(agent_1, agent_2) AS a,
-                        least(agent_1, agent_2)    AS b,
-                        count()                    AS total_contacts
+                        greatest(from_id, to_id) AS a,
+                        least(from_id, to_id)    AS b,
+                        count()                  AS total_contacts
                     FROM interactions
-                    WHERE day_id BETWEEN {day_from} AND {day_to}
+                    WHERE run_id = '{rep_run_id}'
+                      AND day_id BETWEEN {day_from} AND {day_to}
                     GROUP BY a, b
                     HAVING count() >= 3
                     """
@@ -499,24 +530,27 @@ class ResearchAnalyzer:
                     f"""
                     WITH pairs AS (
                         SELECT
-                            greatest(agent_1, agent_2) AS a,
-                            least(agent_1, agent_2)    AS b,
-                            count()                    AS pair_contacts
+                            greatest(from_id, to_id) AS a,
+                            least(from_id, to_id)    AS b,
+                            count()                  AS pair_contacts
                         FROM interactions
-                        WHERE day_id BETWEEN {day_from} AND {day_to}
+                        WHERE run_id = '{rep_run_id}'
+                          AND day_id BETWEEN {day_from} AND {day_to}
                         GROUP BY a, b
                     ),
                     agent_contacts AS (
-                        SELECT agent_1 AS agent, count() AS total
+                        SELECT from_id AS agent, count() AS total
                         FROM interactions
-                        WHERE day_id BETWEEN {day_from} AND {day_to}
-                        GROUP BY agent_1
+                        WHERE run_id = '{rep_run_id}'
+                          AND day_id BETWEEN {day_from} AND {day_to}
+                        GROUP BY from_id
                     ),
                     agent_contacts2 AS (
-                        SELECT agent_2 AS agent, count() AS total
+                        SELECT to_id AS agent, count() AS total
                         FROM interactions
-                        WHERE day_id BETWEEN {day_from} AND {day_to}
-                        GROUP BY agent_2
+                        WHERE run_id = '{rep_run_id}'
+                          AND day_id BETWEEN {day_from} AND {day_to}
+                        GROUP BY to_id
                     ),
                     agent_total AS (
                         SELECT agent, sum(total) AS total
@@ -532,11 +566,11 @@ class ResearchAnalyzer:
                         p.pair_contacts,
                         at_a.total AS total_a,
                         at_b.total AS total_b,
-                        pair_contacts / (total_a + total_b - pair_contacts) AS jaccard
+                        p.pair_contacts / (at_a.total + at_b.total - p.pair_contacts) AS jaccard
                     FROM pairs p
                     JOIN agent_total at_a ON p.a = at_a.agent
                     JOIN agent_total at_b ON p.b = at_b.agent
-                    WHERE jaccard >= {threshold}
+                    WHERE p.pair_contacts / (at_a.total + at_b.total - p.pair_contacts) >= {threshold}
                     """
                 )
                 rows.append({"semester": sem, "stable_pairs": len(df_sem2)})
@@ -565,7 +599,7 @@ class ResearchAnalyzer:
 
     # ──────────────── 5. ЭМОЦИОНАЛЬНЫЙ ФОН ──────────────────────────────────
 
-    def analyze_emotional_background(self) -> str:
+    def analyze_emotional_background(self, rep_run_id: str) -> str:
         print("📊  [5/9] Эмоциональный фон…")
         report = _section("5. Эмоциональный фон коллектива")
 
@@ -577,6 +611,7 @@ class ResearchAnalyzer:
                 day_id,
                 {emotions_sql}
             FROM agent_states
+            WHERE run_id = '{rep_run_id}'
             GROUP BY day_id
             ORDER BY day_id
             """
@@ -657,23 +692,26 @@ class ResearchAnalyzer:
 
     # ──────────────── 6. ЭФФЕКТ «ВЫГОРАНИЯ ЛИДЕРА» ───────────────────────────
 
-    def analyze_leader_burnout(self) -> str:
+    def analyze_leader_burnout(self, rep_run_id: str) -> str:
         print("📊  [6/9] Эффект «Выгорания лидера»…")
         report = _section("6. Эффект «Выгорания лидера» (Popularity-Induced Burnout)")
 
+        days_str = ", ".join(str(d) for d in range(30, 1365, 30))
         # Входящая популярность: число агентов, у кого trust >= 80 AND affinity >= 80
         df_pop = self._q(
-            """
+            f"""
             SELECT
                 object_id AS agent_id,
                 countIf(trust >= 80 AND affinity >= 80) AS fans
             FROM agent_relations
+            WHERE run_id = '{rep_run_id}'
+              AND day_id IN ({days_str})
             GROUP BY object_id
             ORDER BY fans DESC
             """
         )
 
-        # Средние эмоции по агентам (усредним по всем дням и run_id)
+        # Средние эмоции по агентам
         emotions_sql = ", ".join([f"avg({e}) AS {e}" for e in ["anger_humility", "fear_calm", "sadness_joy"]])
         df_emo_agents = self._q(
             f"""
@@ -681,6 +719,7 @@ class ResearchAnalyzer:
                 agent_id,
                 {emotions_sql}
             FROM agent_states
+            WHERE run_id = '{rep_run_id}'
             GROUP BY agent_id
             """
         )
@@ -732,18 +771,20 @@ class ResearchAnalyzer:
                     avg(fear_calm)      AS fear_top,
                     avg(sadness_joy)    AS sadness_top
                 FROM agent_states
-                WHERE agent_id IN ({top_agents_str})
+                WHERE run_id = '{rep_run_id}'
+                  AND agent_id IN ({top_agents_str})
                 GROUP BY day_id
                 ORDER BY day_id
                 """
             )
             df_dyn_all = self._q(
-                """
+                f"""
                 SELECT
                     day_id,
                     avg(anger_humility) AS anger_all,
                     avg(sadness_joy)    AS sadness_all
                 FROM agent_states
+                WHERE run_id = '{rep_run_id}'
                 GROUP BY day_id
                 ORDER BY day_id
                 """
@@ -855,19 +896,20 @@ class ResearchAnalyzer:
 
     # ──────────────── 8. ЭМОЦИОНАЛЬНЫЕ ПУЗЫРИ ────────────────────────────────
 
-    def analyze_emotional_bubbles(self) -> str:
+    def analyze_emotional_bubbles(self, rep_run_id: str) -> str:
         print("📊  [8/9] Эмоциональные пузыри…")
         report = _section("8. Эмоциональные пузыри (Emotional Contagion & Clustering)")
 
         # Для каждого агента — топ-3 друга по affinity (по последним 100 дням)
         df_friends = self._q(
-            """
+            f"""
             SELECT
                 subject_id AS agent_id,
                 object_id  AS friend_id,
                 avg(affinity) AS avg_affinity
             FROM agent_relations
-            WHERE day_id >= 1265
+            WHERE run_id = '{rep_run_id}'
+              AND day_id >= 1265
             GROUP BY subject_id, object_id
             QUALIFY row_number() OVER (PARTITION BY subject_id ORDER BY avg_affinity DESC) <= 3
             """
@@ -879,7 +921,8 @@ class ResearchAnalyzer:
             f"""
             SELECT agent_id, {emotions_sql}
             FROM agent_states
-            WHERE day_id >= 1265
+            WHERE run_id = '{rep_run_id}'
+              AND day_id >= 1265
             GROUP BY agent_id
             """
         )
@@ -949,9 +992,9 @@ class ResearchAnalyzer:
             """
             SELECT
                 run_id,
-                greatest(agent_1, agent_2) AS a,
-                least(agent_1, agent_2)    AS b,
-                max(day_id)                AS last_day
+                greatest(from_id, to_id) AS a,
+                least(from_id, to_id)    AS b,
+                max(day_id)              AS last_day
             FROM interactions
             GROUP BY run_id, a, b
             HAVING last_day < 1165 AND last_day > 200
@@ -1030,33 +1073,39 @@ class ResearchAnalyzer:
         p9a = _savefig(fig, "9a_relational_decay_profile")
 
         # По архетипам
-        df_arch_decay = self._q(
-            """
-            WITH broken_pairs AS (
+        if run_pairs:
+            sampled_runs_str = ", ".join(f"'{r}'" for r in list(run_pairs.keys()))
+            df_arch_decay = self._q(
+                f"""
+                WITH broken_pairs AS (
+                    SELECT
+                        run_id,
+                        greatest(from_id, to_id) AS a,
+                        least(from_id, to_id)    AS b,
+                        max(day_id) AS last_day
+                    FROM interactions
+                    WHERE run_id IN ({sampled_runs_str})
+                    GROUP BY run_id, a, b
+                    HAVING last_day < 1165 AND last_day > 200
+                )
                 SELECT
-                    run_id,
-                    greatest(agent_1, agent_2) AS a,
-                    least(agent_1, agent_2)    AS b,
-                    max(day_id) AS last_day
-                FROM interactions
-                GROUP BY run_id, a, b
-                HAVING last_day < 1165 AND last_day > 200
+                    ar.archetype,
+                    avg(rel.trust) AS avg_trust_at_end,
+                    avg(rel.affinity) AS avg_affinity_at_end,
+                    count() AS pairs_count
+                FROM broken_pairs bp
+                JOIN agent_registry ar ON bp.run_id = ar.run_id AND bp.a = ar.agent_id
+                JOIN agent_relations rel ON bp.run_id = rel.run_id
+                    AND rel.subject_id = bp.a
+                    AND rel.object_id = bp.b
+                    AND rel.day_id = bp.last_day
+                WHERE rel.run_id IN ({sampled_runs_str})
+                GROUP BY ar.archetype
+                ORDER BY avg_trust_at_end
+                """
             )
-            SELECT
-                ar.archetype,
-                avg(rel.trust) AS avg_trust_at_end,
-                avg(rel.affinity) AS avg_affinity_at_end,
-                count() AS pairs_count
-            FROM broken_pairs bp
-            JOIN agent_registry ar ON bp.run_id = ar.run_id AND bp.a = ar.agent_id
-            JOIN agent_relations rel ON bp.run_id = rel.run_id
-                AND rel.subject_id = bp.a
-                AND rel.object_id = bp.b
-                AND rel.day_id = bp.last_day
-            GROUP BY ar.archetype
-            ORDER BY avg_trust_at_end
-            """
-        )
+        else:
+            df_arch_decay = pd.DataFrame()
 
         if not df_arch_decay.empty:
             fig, ax = plt.subplots(figsize=(10, 5))
@@ -1110,15 +1159,22 @@ class ResearchAnalyzer:
         runs_meta = self._load_runs_meta()
         print(f"   Загружено сценариев: {len(runs_meta)}")
 
+        # Найдём репрезентативный run_id для детального анализа (предпочтительно MIXED или RANDOM)
+        mixed_runs = runs_meta[runs_meta["scenario_name"].str.contains("MIXED", na=False)]
+        if not mixed_runs.empty:
+            rep_run_id = mixed_runs["run_id"].iloc[0]
+        else:
+            rep_run_id = runs_meta["run_id"].iloc[0]
+
         analyses = [
             lambda: self.analyze_basic_interactions(runs_meta),
             lambda: self.analyze_refusals(),
             lambda: self.analyze_relational_thresholds(runs_meta),
-            lambda: self.analyze_stable_pairs(),
-            lambda: self.analyze_emotional_background(),
-            lambda: self.analyze_leader_burnout(),
+            lambda: self.analyze_stable_pairs(rep_run_id),
+            lambda: self.analyze_emotional_background(rep_run_id),
+            lambda: self.analyze_leader_burnout(rep_run_id),
             lambda: self.analyze_attractor_convergence(runs_meta),
-            lambda: self.analyze_emotional_bubbles(),
+            lambda: self.analyze_emotional_bubbles(rep_run_id),
             lambda: self.analyze_relational_halflife(),
         ]
 

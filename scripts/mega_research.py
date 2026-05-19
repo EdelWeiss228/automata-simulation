@@ -110,6 +110,13 @@ class MegaResearch:
         self._parts: List[str] = []
         self._ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print("✅  Соединение установлено.\n", flush=True)
+        # Найдём репрезентативный run_id для детального анализа (предпочтительно MIXED или RANDOM)
+        mixed_runs = self.meta()
+        mixed = mixed_runs[mixed_runs["scenario_name"].str.contains("MIXED", na=False)]
+        if not mixed.empty:
+            self.rep_run_id = mixed["run_id"].iloc[0]
+        else:
+            self.rep_run_id = mixed_runs["run_id"].iloc[0]
 
     # ── Запросы ──────────────────────────────────────────────────
 
@@ -143,7 +150,7 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b01_basic_interactions(self, meta: pd.DataFrame) -> str:
-        print("  [01/18] Базовые метрики взаимодействий…", flush=True)
+        print("[Progress]  [01/18] Базовые метрики взаимодействий…", flush=True)
         rep = h2("1. Базовые метрики взаимодействий")
 
         df = self.q("""
@@ -194,14 +201,14 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b02_refusals(self) -> str:
-        print("  [02/18] Анализ отказов…", flush=True)
+        print("[Progress]  [02/18] Анализ отказов…", flush=True)
         rep = h2("2. Глубокий анализ отказов")
 
         # Глобальная статистика
         gl = self.q("""
-            SELECT countIf(result=0)  AS refusals,
-                   countIf(result=1)  AS successes,
-                   countIf(result=-1) AS failures,
+            SELECT countIf(type=0)  AS refusals,
+                   countIf(type=1)  AS successes,
+                   countIf(type=-1) AS failures,
                    count()            AS total
             FROM interactions
         """)
@@ -210,10 +217,15 @@ class MegaResearch:
 
         # По локациям
         loc = self.q("""
-            SELECT location,
-                   countIf(result=0) AS refusals,
+            SELECT
+                multiIf(
+                    slot_id IN (1, 3, 5, 7), 'CLASS',
+                    slot_id IN (2, 4, 6),    'BREAK',
+                    'GYM'
+                ) AS location,
+                   countIf(type=0) AS refusals,
                    count()           AS total,
-                   round(countIf(result=0)/count()*100,2) AS pct
+                   round(countIf(type=0)/count()*100,2) AS pct
             FROM interactions GROUP BY location ORDER BY pct DESC
         """)
         loc_ru = {"CLASS":"Занятия","BREAK":"Перемены","GYM":"Спортзал"}
@@ -227,15 +239,15 @@ class MegaResearch:
 
         # Кривая Лоренца
         ag = self.q("""
-            SELECT agent_2 AS agent_id,
-                   countIf(result=0) AS refusals
-            FROM interactions GROUP BY agent_2 ORDER BY refusals
+            SELECT to_id AS agent_id,
+                   countIf(type=0) AS refusals
+            FROM interactions GROUP BY to_id ORDER BY refusals
         """)
         vals = ag["refusals"].values.astype(float)
         n = len(vals)
         ly = np.cumsum(vals) / vals.sum()
         lx = np.arange(1, n+1) / n
-        gini = 1 - 2*np.trapz(ly, lx)
+        gini = 1 - 2*float(np.sum((ly[1:] + ly[:-1]) * 0.5 * (lx[1:] - lx[:-1])))
 
         fig, ax = plt.subplots(figsize=(7, 6))
         ax.plot(lx*100, ly*100, color="#1565C0", lw=2, label="Кривая Лоренца")
@@ -252,11 +264,11 @@ class MegaResearch:
         # По архетипам
         arch = self.q("""
             SELECT ar.archetype,
-                   countIf(i.result=0) AS refusals,
+                   countIf(i.type=0) AS refusals,
                    count()             AS total,
-                   round(countIf(i.result=0)/count()*100,2) AS pct
+                   round(countIf(i.type=0)/count()*100,2) AS pct
             FROM interactions i
-            JOIN agent_registry ar ON i.run_id=ar.run_id AND i.agent_2=ar.agent_id
+            JOIN agent_registry ar ON i.run_id=ar.run_id AND i.to_id=ar.agent_id
             GROUP BY ar.archetype ORDER BY pct DESC
         """)
         fig, ax = plt.subplots(figsize=(10, 5))
@@ -283,25 +295,44 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b03_relational_thresholds(self, meta: pd.DataFrame) -> str:
-        print("  [03/18] Реляционные пороги…", flush=True)
+        print("[Progress]  [03/18] Реляционные пороги…", flush=True)
         rep = h2("3. Анализ реляционных порогов")
 
-        df = self.q("""
-            SELECT sr.scenario_name,
-                   count() AS total,
-                   countIf(ar.utility>=5 OR ar.trust>=5 OR ar.affinity>=5)     AS soft,
-                   countIf((ar.utility>=95 AND ar.trust>=95)
-                            OR (ar.utility>=95 AND ar.affinity>=95)
-                            OR (ar.trust>=95 AND ar.affinity>=95))              AS hard
+        days_str = "100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300"
+        rows = []
+        for idx, row in meta.iterrows():
+            run_id = row["run_id"]
+            scenario_name = row["scenario_name"]
+            print(f"[Progress]     - Обработка сценария {idx + 1}/{len(meta)}: {scenario_name}", flush=True)
+            query = f"""
+            SELECT
+                count() AS total,
+                sum(ar.utility >= 5 OR ar.trust >= 5 OR ar.affinity >= 5) AS soft,
+                sum((ar.utility >= 95 AND ar.trust >= 95) OR (ar.utility >= 95 AND ar.affinity >= 95) OR (ar.trust >= 95 AND ar.affinity >= 95)) AS hard
             FROM interactions i
-            JOIN simulation_runs sr ON i.run_id=sr.run_id
             JOIN agent_relations ar
-                ON  i.run_id=ar.run_id AND i.day_id=ar.day_id
-                AND i.agent_1=ar.subject_id AND i.agent_2=ar.object_id
-            GROUP BY sr.scenario_name ORDER BY sr.scenario_name
-        """)
-        df["soft_pct"] = df["soft"]/df["total"]*100
-        df["hard_pct"] = df["hard"]/df["total"]*100
+              ON i.run_id = ar.run_id
+             AND i.day_id = ar.day_id
+             AND i.from_id = ar.subject_id
+             AND i.to_id = ar.object_id
+            WHERE i.run_id = '{run_id}'
+              AND i.day_id IN ({days_str})
+              AND ar.run_id = '{run_id}'
+              AND ar.day_id IN ({days_str})
+            """
+            df_r = self.q(query)
+            if df_r.empty:
+                rows.append({"scenario_name": scenario_name, "total": 0, "soft": 0, "hard": 0})
+            else:
+                rows.append({
+                    "scenario_name": scenario_name,
+                    "total": int(df_r["total"].iloc[0] or 0),
+                    "soft": int(df_r["soft"].iloc[0] or 0),
+                    "hard": int(df_r["hard"].iloc[0] or 0)
+                })
+        df = pd.DataFrame(rows)
+        df["soft_pct"] = np.where(df["total"] > 0, df["soft"] / df["total"] * 100, 0.0)
+        df["hard_pct"] = np.where(df["total"] > 0, df["hard"] / df["total"] * 100, 0.0)
         df = df.merge(meta[["scenario_name","init_type"]], on="scenario_name", how="left")
 
         fig, axes = plt.subplots(1, 2, figsize=(16, 5))
@@ -326,7 +357,7 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b04_stable_pairs(self) -> str:
-        print("  [04/18] Стабильные пары…", flush=True)
+        print("[Progress]  [04/18] Стабильные пары…", flush=True)
         rep = h2("4. Стабильные пары")
 
         thresholds = [0.90, 0.95, 0.995, 1.00]
@@ -340,20 +371,20 @@ class MegaResearch:
                 df_s = self.q(f"""
                     WITH
                     pair_cnt AS (
-                        SELECT greatest(agent_1,agent_2) AS a,
-                               least(agent_1,agent_2)    AS b,
+                        SELECT greatest(from_id,to_id) AS a,
+                               least(from_id,to_id)    AS b,
                                count() AS pc
                         FROM interactions
-                        WHERE day_id BETWEEN {d1} AND {d2}
+                        WHERE run_id = '{self.rep_run_id}' AND day_id BETWEEN {d1} AND {d2}
                         GROUP BY a,b
                     ),
                     agent_total AS (
                         SELECT agent_id, sum(cnt) AS tc FROM (
-                            SELECT agent_1 AS agent_id, count() AS cnt FROM interactions
-                            WHERE day_id BETWEEN {d1} AND {d2} GROUP BY agent_1
+                            SELECT from_id AS agent_id, count() AS cnt FROM interactions
+                            WHERE run_id = '{self.rep_run_id}' AND day_id BETWEEN {d1} AND {d2} GROUP BY from_id
                             UNION ALL
-                            SELECT agent_2 AS agent_id, count() AS cnt FROM interactions
-                            WHERE day_id BETWEEN {d1} AND {d2} GROUP BY agent_2
+                            SELECT to_id AS agent_id, count() AS cnt FROM interactions
+                            WHERE run_id = '{self.rep_run_id}' AND day_id BETWEEN {d1} AND {d2} GROUP BY to_id
                         ) GROUP BY agent_id
                     )
                     SELECT count() AS stable_pairs
@@ -387,13 +418,15 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b05_emotions(self) -> str:
-        print("  [05/18] Эмоциональный фон…", flush=True)
+        print("[Progress]  [05/18] Эмоциональный фон…", flush=True)
         rep = h2("5. Эмоциональный фон коллектива")
 
         emo_sql = ", ".join([f"avg({e}) AS {e}" for e in EMOTION_AXES])
         df = self.q(f"""
             SELECT day_id, {emo_sql}
-            FROM agent_states GROUP BY day_id ORDER BY day_id
+            FROM agent_states
+            WHERE run_id = '{self.rep_run_id}'
+            GROUP BY day_id ORDER BY day_id
         """)
 
         # 5a — временные ряды
@@ -437,16 +470,19 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b06_leader_burnout(self) -> str:
-        print("  [06/18] Выгорание лидера…", flush=True)
+        print("[Progress]  [06/18] Выгорание лидера…", flush=True)
         rep = h2("6. Эффект «Выгорания лидера»")
 
-        pop = self.q("""
+        pop = self.q(f"""
             SELECT object_id AS agent_id,
                    countIf(trust>=80 AND affinity>=80) AS fans
-            FROM agent_relations GROUP BY object_id ORDER BY fans DESC
+            FROM agent_relations
+            WHERE run_id = '{self.rep_run_id}'
+              AND day_id IN (30,60,90,120,150,180,210,240,270,300,330,360,390,420,450,480,510,540,570,600,630,660,690,720,750,780,810,840,870,900,930,960,990,1020,1050,1080,1110,1140,1170,1200,1230,1260,1290,1320,1350)
+            GROUP BY object_id ORDER BY fans DESC
         """)
         emo_sql = ", ".join([f"avg({e}) AS {e}" for e in ["anger_humility","fear_calm","sadness_joy"]])
-        emo = self.q(f"SELECT agent_id, {emo_sql} FROM agent_states GROUP BY agent_id")
+        emo = self.q(f"SELECT agent_id, {emo_sql} FROM agent_states WHERE run_id = '{self.rep_run_id}' GROUP BY agent_id")
         df  = pop.merge(emo, on="agent_id", how="inner")
 
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
@@ -478,7 +514,7 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b07_attractor(self, meta: pd.DataFrame) -> str:
-        print("  [07/18] Аттракторная сходимость…", flush=True)
+        print("[Progress]  [07/18] Аттракторная сходимость…", flush=True)
         rep = h2("7. «Аттракторная сходимость» сетей")
 
         matrices = {}
@@ -535,18 +571,20 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b08_emotional_bubbles(self) -> str:
-        print("  [08/18] Эмоциональные пузыри…", flush=True)
+        print("[Progress]  [08/18] Эмоциональные пузыри…", flush=True)
         rep = h2("8. Эмоциональные пузыри (Emotional Contagion)")
 
-        friends = self.q("""
+        friends = self.q(f"""
             SELECT subject_id AS agent_id, object_id AS friend_id,
                    avg(affinity) AS aff
-            FROM agent_relations WHERE day_id>=1265
+            FROM agent_relations
+            WHERE run_id = '{self.rep_run_id}'
+              AND day_id>=1265
             GROUP BY subject_id, object_id
             QUALIFY row_number() OVER (PARTITION BY subject_id ORDER BY avg(affinity) DESC) <= 3
         """)
         emo_sql = ", ".join([f"avg({e}) AS {e}" for e in EMOTION_AXES])
-        ego  = self.q(f"SELECT agent_id, {emo_sql} FROM agent_states WHERE day_id>=1265 GROUP BY agent_id")
+        ego  = self.q(f"SELECT agent_id, {emo_sql} FROM agent_states WHERE run_id = '{self.rep_run_id}' AND day_id>=1265 GROUP BY agent_id")
 
         femo = friends.merge(
             ego.rename(columns={"agent_id":"friend_id"} |
@@ -587,16 +625,17 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b09_halflife(self) -> str:
-        print("  [09/18] Период полураспада…", flush=True)
+        print("[Progress]  [09/18] Период полураспада…", flush=True)
         rep = h2("9. Скорость полураспада отношений")
 
         # Пары, прекратившие контакты до дня 1165
-        broken = self.q("""
+        broken = self.q(f"""
             SELECT run_id,
-                   greatest(agent_1,agent_2) AS a,
-                   least(agent_1,agent_2)    AS b,
+                   greatest(from_id,to_id) AS a,
+                   least(from_id,to_id)    AS b,
                    max(day_id)               AS last_day
             FROM interactions
+            WHERE run_id = '{self.rep_run_id}'
             GROUP BY run_id,a,b
             HAVING last_day<1165 AND last_day>200
             LIMIT 10000
@@ -605,11 +644,13 @@ class MegaResearch:
             return rep + "\n*Нет данных.*\n"
 
         # По архетипам: уровень trust/affinity в момент последнего контакта
-        arch_decay = self.q("""
+        arch_decay = self.q(f"""
             WITH bp AS (
-                SELECT run_id, greatest(agent_1,agent_2) AS a, least(agent_1,agent_2) AS b,
+                SELECT run_id, greatest(from_id,to_id) AS a, least(from_id,to_id) AS b,
                        max(day_id) AS last_day
-                FROM interactions GROUP BY run_id,a,b
+                FROM interactions
+                WHERE run_id = '{self.rep_run_id}'
+                GROUP BY run_id,a,b
                 HAVING last_day<1165 AND last_day>200
             )
             SELECT ar.archetype,
@@ -620,6 +661,7 @@ class MegaResearch:
             JOIN agent_registry ar ON bp.run_id=ar.run_id AND bp.a=ar.agent_id
             JOIN agent_relations rel ON bp.run_id=rel.run_id
                 AND rel.subject_id=bp.a AND rel.object_id=bp.b AND rel.day_id=bp.last_day
+            WHERE rel.run_id = '{self.rep_run_id}'
             GROUP BY ar.archetype ORDER BY trust_at_end
         """)
 
@@ -643,15 +685,17 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b10_sunday_reset(self) -> str:
-        print("  [10/18] Эффект воскресного сброса…", flush=True)
+        print("[Progress]  [10/18] Эффект воскресного сброса…", flush=True)
         rep = h2("10. «Эффект воскресного сброса»")
         rep += "\n**Гипотеза:** Хронически депрессивные агенты восстанавливаются после воскресного δ-сдвига медленнее нейтральных.\n"
 
         # Воскресенья ≈ каждые 6 дней (6-дневная учебная неделя)
         # Классифицируем агентов по среднему уровню sadness_joy
-        agent_baseline = self.q("""
+        agent_baseline = self.q(f"""
             SELECT agent_id, avg(sadness_joy) AS baseline_joy
-            FROM agent_states WHERE day_id<=200
+            FROM agent_states
+            WHERE run_id = '{self.rep_run_id}'
+              AND day_id<=200
             GROUP BY agent_id
         """)
         # Динамика по воскресеньям (day_id % 6 == 0)
@@ -659,14 +703,18 @@ class MegaResearch:
         sundays = self.q(f"""
             SELECT day_id, {emo_sql}
             FROM agent_states
-            WHERE day_id % 6 = 0
+            WHERE run_id = '{self.rep_run_id}'
+              AND day_id % 6 = 0
             GROUP BY day_id ORDER BY day_id
         """)
 
         # Восстановление: после воскресенья (day N) смотрим day N+1, N+2, N+3
         # Упрощённо: сравниваем среднее эмоций в воскресенье vs следующие 5 дней
         all_days = self.q(f"""
-            SELECT day_id, {emo_sql} FROM agent_states GROUP BY day_id ORDER BY day_id
+            SELECT day_id, {emo_sql}
+            FROM agent_states
+            WHERE run_id = '{self.rep_run_id}'
+            GROUP BY day_id ORDER BY day_id
         """)
         all_days["is_sunday"] = all_days["day_id"] % 6 == 0
         all_days["week"]      = all_days["day_id"] // 6
@@ -709,12 +757,12 @@ class MegaResearch:
         if dep_str and hap_str:
             df_dep = self.q(f"""
                 SELECT day_id, avg(sadness_joy) AS joy
-                FROM agent_states WHERE agent_id IN ({dep_str}) AND day_id%6 IN (0,1,2,3,4,5)
+                FROM agent_states WHERE run_id = '{self.rep_run_id}' AND agent_id IN ({dep_str}) AND day_id%6 IN (0,1,2,3,4,5)
                 GROUP BY day_id ORDER BY day_id LIMIT 400
             """)
             df_hap = self.q(f"""
                 SELECT day_id, avg(sadness_joy) AS joy
-                FROM agent_states WHERE agent_id IN ({hap_str}) AND day_id%6 IN (0,1,2,3,4,5)
+                FROM agent_states WHERE run_id = '{self.rep_run_id}' AND agent_id IN ({hap_str}) AND day_id%6 IN (0,1,2,3,4,5)
                 GROUP BY day_id ORDER BY day_id LIMIT 400
             """)
 
@@ -738,12 +786,12 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b11_forgiveness_law(self) -> str:
-        print("  [11/18] Закон прощения…", flush=True)
+        print("[Progress]  [11/18] Закон прощения…", flush=True)
         rep = h2("11. «Закон прощения» — асимметрия скорости затухания")
         rep += "\n**Гипотеза:** Положительные связи затухают с 0.5·d, отрицательные с d. Деструктор (d=1.0) забывает обиды быстрее, чем Протектор (d=0.2) забывает дружбу.\n"
 
         # Для каждого архетипа: средняя динамика позитивных и негативных trust по семестрам
-        df = self.q("""
+        df = self.q(f"""
             SELECT ar.archetype,
                    rel.day_id,
                    avgIf(rel.trust, rel.trust>0)  AS avg_pos_trust,
@@ -753,6 +801,7 @@ class MegaResearch:
                    count()                         AS n
             FROM agent_relations rel
             JOIN agent_registry ar ON rel.run_id=ar.run_id AND rel.subject_id=ar.agent_id
+            WHERE rel.run_id = '{self.rep_run_id}'
             GROUP BY ar.archetype, rel.day_id
             ORDER BY ar.archetype, rel.day_id
         """)
@@ -805,7 +854,7 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b12_semester_amnesia(self) -> str:
-        print("  [12/18] Семестровая амнезия…", flush=True)
+        print("[Progress]  [12/18] Семестровая амнезия…", flush=True)
         rep = h2("12. «Семестровая амнезия» — что переживает переинициализацию эмоций?")
         rep += "\n**Гипотеза:** Реляционные функции восстанавливают эмоциональный паттерн предыдущего семестра в первые 20–30 дней нового. Т.е. отношения являются «памятью» системы.\n"
 
@@ -819,7 +868,8 @@ class MegaResearch:
             df_before = self.q(f"""
                 SELECT agent_id, {emo_before_sql}
                 FROM agent_states
-                WHERE day_id BETWEEN {sem_prev_end-4} AND {sem_prev_end}
+                WHERE run_id = '{self.rep_run_id}'
+                  AND day_id BETWEEN {sem_prev_end-4} AND {sem_prev_end}
                 GROUP BY agent_id
             """)
 
@@ -828,7 +878,8 @@ class MegaResearch:
             df_rel = self.q(f"""
                 SELECT subject_id AS agent_id, {rel_sql}
                 FROM agent_relations
-                WHERE day_id={sem_prev_end}
+                WHERE run_id = '{self.rep_run_id}'
+                  AND day_id={sem_prev_end}
                 GROUP BY subject_id
             """)
 
@@ -838,9 +889,11 @@ class MegaResearch:
                 emo_after_sql = ", ".join([f"avg({e}) AS {e}_after" for e in EMOTION_AXES])
                 df_after = self.q(f"""
                     SELECT agent_id, {emo_after_sql}
-                    FROM agent_states WHERE day_id={target_day} GROUP BY agent_id
+                    FROM agent_states WHERE run_id = '{self.rep_run_id}' AND day_id={target_day} GROUP BY agent_id
                 """)
 
+                if df_before.empty or df_rel.empty or df_after.empty:
+                    continue
                 merged = df_before.merge(df_rel, on="agent_id", how="inner").merge(df_after, on="agent_id", how="inner")
                 if merged.empty: continue
 
@@ -884,19 +937,19 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b13_log_trap(self) -> str:
-        print("  [13/18] Ловушка логарифма…", flush=True)
+        print("[Progress]  [13/18] Ловушка логарифма…", flush=True)
         rep = h2("13. «Ловушка логарифма» — бимодальность у Аналитика и Инноватора")
         rep += "\n**Гипотеза:** Архетипы с log(U) в формуле приоритета (Аналитик, Инноватор) избегают агентов с U≈0, создавая бимодальную структуру связей.\n"
 
-        df = self.q("""
+        df = self.q(f"""
             SELECT ar.archetype,
                    rel.utility
             FROM interactions i
-            JOIN agent_registry ar ON i.run_id=ar.run_id AND i.agent_1=ar.agent_id
+            JOIN agent_registry ar ON i.run_id=ar.run_id AND i.from_id=ar.agent_id
             JOIN agent_relations rel
                 ON  i.run_id=rel.run_id AND i.day_id=rel.day_id
-                AND i.agent_1=rel.subject_id AND i.agent_2=rel.object_id
-            WHERE rel.utility BETWEEN -100 AND 100
+                AND i.from_id=rel.subject_id AND i.to_id=rel.object_id
+            WHERE i.run_id = '{self.rep_run_id}' AND rel.run_id = '{self.rep_run_id}' AND rel.utility BETWEEN -100 AND 100
             LIMIT 2000000
         """)
 
@@ -940,21 +993,22 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b14_nonconf_mediator(self) -> str:
-        print("  [14/18] Нонконформист × Медиатор…", flush=True)
+        print("[Progress]  [14/18] Нонконформист × Медиатор…", flush=True)
         rep = h2("14. «Нонконформист × Медиатор» — взрывная асимметрия")
         rep += "\n**Гипотеза:** Нонконформист часто отказывает Медиатору, но Медиатор накапливает высокий trust через редкие успешные контакты.\n"
 
-        df = self.q("""
+        df = self.q(f"""
             SELECT ar1.archetype AS arch_initiator,
                    ar2.archetype AS arch_target,
-                   countIf(i.result=0)   AS refusals,
-                   countIf(i.result=1)   AS successes,
-                   countIf(i.result=-1)  AS failures,
+                   countIf(i.type=0)   AS refusals,
+                   countIf(i.type=1)   AS successes,
+                   countIf(i.type=-1)  AS failures,
                    count()               AS total,
-                   round(countIf(i.result=0)/count()*100,2) AS refusal_pct
+                   round(countIf(i.type=0)/count()*100,2) AS refusal_pct
             FROM interactions i
-            JOIN agent_registry ar1 ON i.run_id=ar1.run_id AND i.agent_1=ar1.agent_id
-            JOIN agent_registry ar2 ON i.run_id=ar2.run_id AND i.agent_2=ar2.agent_id
+            JOIN agent_registry ar1 ON i.run_id=ar1.run_id AND i.from_id=ar1.agent_id
+            JOIN agent_registry ar2 ON i.run_id=ar2.run_id AND i.to_id=ar2.agent_id
+            WHERE i.run_id = '{self.rep_run_id}'
             GROUP BY arch_initiator, arch_target
             ORDER BY refusal_pct DESC
         """)
@@ -971,13 +1025,13 @@ class MegaResearch:
         fig.tight_layout(); p14a = savefig(fig, "14a_archetype_refusal_matrix")
 
         # Trust между парами архетипов (финальный)
-        df_trust = self.q("""
+        df_trust = self.q(f"""
             SELECT ar1.archetype AS subj, ar2.archetype AS obj,
                    avg(rel.trust) AS avg_trust, avg(rel.affinity) AS avg_affinity
             FROM agent_relations rel
             JOIN agent_registry ar1 ON rel.run_id=ar1.run_id AND rel.subject_id=ar1.agent_id
             JOIN agent_registry ar2 ON rel.run_id=ar2.run_id AND rel.object_id=ar2.agent_id
-            WHERE rel.day_id >= 1315
+            WHERE rel.run_id = '{self.rep_run_id}' AND rel.day_id >= 1315
             GROUP BY subj, obj
         """)
         pivot_trust = df_trust.pivot_table(index="subj", columns="obj",
@@ -999,7 +1053,7 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b15_gym_clustering(self) -> str:
-        print("  [15/18] Кластеризация в спортзале…", flush=True)
+        print("[Progress]  [15/18] Кластеризация в спортзале…", flush=True)
         rep = h2("15. «Оппортунист в спортзале» — кластеризация сети GYM")
         rep += "\n**Гипотеза:** Оппортунист (τ=3.0) создаёт случайную сеть в GYM, а Конкурент (ε=3.0 в GYM) — плотные кластеры.\n"
 
@@ -1009,15 +1063,16 @@ class MegaResearch:
             return rep + "\n*networkx не установлен. Запустите: pip install networkx*\n"
 
         # Граф взаимодействий в GYM по архетипам
-        df_gym = self.q("""
+        df_gym = self.q(f"""
             SELECT ar1.archetype AS arch1, ar2.archetype AS arch2,
-                   greatest(i.agent_1, i.agent_2) AS a,
-                   least(i.agent_1, i.agent_2)    AS b,
+                   greatest(i.from_id, i.to_id) AS a,
+                   least(i.from_id, i.to_id)    AS b,
                    count() AS weight
             FROM interactions i
-            JOIN agent_registry ar1 ON i.run_id=ar1.run_id AND i.agent_1=ar1.agent_id
-            JOIN agent_registry ar2 ON i.run_id=ar2.run_id AND i.agent_2=ar2.agent_id
-            WHERE i.location='GYM'
+            JOIN agent_registry ar1 ON i.run_id=ar1.run_id AND i.from_id=ar1.agent_id
+            JOIN agent_registry ar2 ON i.run_id=ar2.run_id AND i.to_id=ar2.agent_id
+            WHERE i.run_id = '{self.rep_run_id}'
+              AND i.slot_id IN (8, 9)
             GROUP BY arch1, arch2, a, b
         """)
 
@@ -1062,7 +1117,7 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b16_warm_islands(self) -> str:
-        print("  [16/18] Тёплые острова…", flush=True)
+        print("[Progress]  [16/18] Тёплые острова…", flush=True)
         rep = h2("16. «Тёплые острова» — закрытые кластеры Рефлектора и Протектора")
         rep += "\n**Гипотеза:** Рефлектор (d=0.1) и Протектор (d=0.2) создают устойчивые закрытые кластеры с trust≥70, исключающие другие архетипы.\n"
 
@@ -1072,13 +1127,13 @@ class MegaResearch:
             return rep + "\n*networkx не установлен.*\n"
 
         # Финальный граф trust≥70 с архетипами
-        df_edges = self.q("""
+        df_edges = self.q(f"""
             SELECT rel.subject_id, rel.object_id,
                    avg(rel.trust) AS avg_trust,
                    ar.archetype
             FROM agent_relations rel
             JOIN agent_registry ar ON rel.run_id=ar.run_id AND rel.subject_id=ar.agent_id
-            WHERE rel.day_id>=1315 AND rel.trust>=70
+            WHERE rel.run_id = '{self.rep_run_id}' AND rel.day_id>=1315 AND rel.trust>=70
             GROUP BY rel.subject_id, rel.object_id, ar.archetype
         """)
         if df_edges.empty:
@@ -1137,7 +1192,7 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b17_destructor_catalyst(self) -> str:
-        print("  [17/18] Деструктор как катализатор…", flush=True)
+        print("[Progress]  [17/18] Деструктор как катализатор…", flush=True)
         rep = h2("17. Деструктор как «катализатор» распада пар")
         rep += "\n**Гипотеза:** Пары (A, B) распадаются значимо чаще, если агент A получил много отказов от Деструкторов.\n"
 
@@ -1148,26 +1203,28 @@ class MegaResearch:
             return rep + "\n*scikit-learn не установлен. Запустите: pip install scikit-learn*\n"
 
         # Распавшиеся пары
-        df_broken = self.q("""
+        df_broken = self.q(f"""
             SELECT run_id,
-                   greatest(agent_1,agent_2) AS a,
-                   least(agent_1,agent_2)    AS b,
+                   greatest(from_id,to_id) AS a,
+                   least(from_id,to_id)    AS b,
                    max(day_id)               AS last_day,
                    1                         AS broken
             FROM interactions
+            WHERE run_id = '{self.rep_run_id}'
             GROUP BY run_id,a,b
             HAVING last_day<1165 AND last_day>200
             LIMIT 50000
         """)
 
         # Устойчивые пары (дожили до конца)
-        df_stable = self.q("""
+        df_stable = self.q(f"""
             SELECT run_id,
-                   greatest(agent_1,agent_2) AS a,
-                   least(agent_1,agent_2)    AS b,
+                   greatest(from_id,to_id) AS a,
+                   least(from_id,to_id)    AS b,
                    max(day_id)               AS last_day,
                    0                         AS broken
             FROM interactions
+            WHERE run_id = '{self.rep_run_id}'
             GROUP BY run_id,a,b
             HAVING last_day>=1165
             LIMIT 50000
@@ -1176,12 +1233,13 @@ class MegaResearch:
         df_all = pd.concat([df_broken, df_stable], ignore_index=True)
 
         # Число отказов от Деструкторов, которые получил агент A
-        df_destr = self.q("""
-            SELECT i.agent_2 AS agent_id,
-                   countIf(i.result=0) AS destructor_refusals
+        df_destr = self.q(f"""
+            SELECT i.to_id AS agent_id,
+                   countIf(i.type=0) AS destructor_refusals
             FROM interactions i
-            JOIN agent_registry ar ON i.run_id=ar.run_id AND i.agent_1=ar.agent_id
-            WHERE ar.archetype ILIKE '%деструктор%' OR ar.archetype ILIKE '%DESTRUCTOR%'
+            JOIN agent_registry ar ON i.run_id=ar.run_id AND i.from_id=ar.agent_id
+            WHERE i.run_id = '{self.rep_run_id}'
+              AND (ar.archetype ILIKE '%деструктор%' OR ar.archetype ILIKE '%DESTRUCTOR%')
             GROUP BY agent_id
         """)
 
@@ -1219,7 +1277,7 @@ class MegaResearch:
     # ══════════════════════════════════════════════════════════════
 
     def b18_first_semester(self, meta: pd.DataFrame) -> str:
-        print("  [18/18] Эффект первого семестра…", flush=True)
+        print("[Progress]  [18/18] Эффект первого семестра…", flush=True)
         rep = h2("18. «Эффект первого семестра» — path dependency")
         rep += "\n**Гипотеза:** Ранговая позиция агента по числу контактов в 1-м семестре является сильным предиктором его позиции в 8-м семестре (особенно в EMPTY-сценариях).\n"
 
@@ -1234,24 +1292,24 @@ class MegaResearch:
 
         df_sem1 = self.q(f"""
             SELECT agent_id, sum(cnt) AS contacts_s1 FROM (
-                SELECT agent_1 AS agent_id, count() AS cnt FROM interactions
+                SELECT from_id AS agent_id, count() AS cnt FROM interactions
                 WHERE run_id IN ({ids_str}) AND day_id BETWEEN {d1_s} AND {d1_e}
-                GROUP BY agent_1
+                GROUP BY from_id
                 UNION ALL
-                SELECT agent_2 AS agent_id, count() AS cnt FROM interactions
+                SELECT to_id AS agent_id, count() AS cnt FROM interactions
                 WHERE run_id IN ({ids_str}) AND day_id BETWEEN {d1_s} AND {d1_e}
-                GROUP BY agent_2
+                GROUP BY to_id
             ) GROUP BY agent_id
         """)
         df_sem8 = self.q(f"""
             SELECT agent_id, sum(cnt) AS contacts_s8 FROM (
-                SELECT agent_1 AS agent_id, count() AS cnt FROM interactions
+                SELECT from_id AS agent_id, count() AS cnt FROM interactions
                 WHERE run_id IN ({ids_str}) AND day_id BETWEEN {d8_s} AND {d8_e}
-                GROUP BY agent_1
+                GROUP BY from_id
                 UNION ALL
-                SELECT agent_2 AS agent_id, count() AS cnt FROM interactions
+                SELECT to_id AS agent_id, count() AS cnt FROM interactions
                 WHERE run_id IN ({ids_str}) AND day_id BETWEEN {d8_s} AND {d8_e}
-                GROUP BY agent_2
+                GROUP BY to_id
             ) GROUP BY agent_id
         """)
         df = df_sem1.merge(df_sem8, on="agent_id", how="inner").dropna()
@@ -1344,10 +1402,10 @@ class MegaResearch:
             try:
                 section = fn()
                 self._parts.append(section)
-                print(f"     ✅ Блок {num} готов")
+                print(f"[Progress]     ✅ Блок {num} готов", flush=True)
             except Exception:
                 err = traceback.format_exc()
-                print(f"     ⚠️  Блок {num} — ошибка:\n{err}")
+                print(f"[Progress]     ⚠️  Блок {num} — ошибка:\n{err}", flush=True)
                 self._parts.append(f"\n\n## Блок {num} — ошибка выполнения\n\n```\n{err}\n```\n")
 
         self._save_report()
