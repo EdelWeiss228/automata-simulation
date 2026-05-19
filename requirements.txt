@@ -3,3 +3,10 @@ pandas
 pybind11
 clickhouse-connect
 python-dotenv
+matplotlib
+seaborn
+scipy
+networkx
+scikit-learn
+pyTelegramBotAPI
+tabulate
