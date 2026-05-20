@@ -1,6 +1,6 @@
 # Мега-отчёт: Многоагентная симуляция социально-эмоциональных отношений
 
-**Дата генерации:** 2026-05-20 12:01:15
+**Дата генерации:** 2026-05-20 14:37:16
 **База данных:** ClickHouse (localhost:8123)
 **Объём данных:** 42 серии × 1365 дней — ~56 млрд строк отношений,
 90 млн состояний агентов, 147 млн взаимодействий.
@@ -20,11 +20,13 @@
 | group        | init_type   |        mean |     min |     max |
 |:-------------|:------------|------------:|--------:|--------:|
 | Гетерогенные | EMPTY       | 4.18783e+06 | 3635678 | 4738324 |
-| Гетерогенные | MIXED       | 3.21126e+06 | 3008302 | 3392602 |
-| Гетерогенные | RANDOM      | 3.083e+06   | 2848343 | 3284906 |
+| Гетерогенные | MIXED       | 3.2221e+06  | 3008302 | 3392602 |
+| Гетерогенные | RANDOM      | 3.0909e+06  | 2848343 | 3284906 |
 | Гомогенные   | EMPTY       | 4.26896e+06 | 3514578 | 4988631 |
 | Гомогенные   | MIXED       | 3.25319e+06 | 2830748 | 3663899 |
 | Гомогенные   | RANDOM      | 3.12717e+06 | 2719554 | 3475253 |
+
+*Нелинейных сценариев не обнаружено (в именах нет NL/NONLINEAR).*
 
 
 
@@ -99,7 +101,7 @@
 | Run07_Nihility_MIXED           | MIXED       |    6.14439 |   0.258676 |
 | Run07_Nihility_RANDOM          | RANDOM      |    7.80815 |   0.288923 |
 | Run08_Uniform_Random_EMPTY     | EMPTY       |    0       |   0        |
-| Run08_Uniform_Random_MIXED     | MIXED       |    8.45633 |   0.408636 |
+| Run08_Uniform_Random_MIXED     | RANDOM      |    8.45633 |   0.408636 |
 | Run08_Uniform_Random_RANDOM    | RANDOM      |   11.4765  |   0.533575 |
 | Run09_Normal_Social_EMPTY      | EMPTY       |    0       |   0        |
 | Run09_Normal_Social_MIXED      | MIXED       |    9.3565  |   0.550052 |
@@ -122,1359 +124,334 @@
 
 
 
-## Блок 04 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 534, in _make_request
-    response = conn.getresponse()
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 571, in getresponse
-    httplib_response = super().getresponse()
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/client.py", line 1450, in getresponse
-    response.begin()
-    ~~~~~~~~~~~~~~^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/client.py", line 336, in begin
-    version, status, reason = self._read_status()
-                              ~~~~~~~~~~~~~~~~~^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/http/client.py", line 297, in _read_status
-    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
-               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 725, in readinto
-    return self._sock.recv_into(b)
-           ~~~~~~~~~~~~~~~~~~~~^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ssl.py", line 1304, in recv_into
-    return self.read(nbytes, buffer)
-           ~~~~~~~~~^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ssl.py", line 1138, in read
-    return self._sslobj.read(len, buffer)
-           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-TimeoutError: [Errno 60] Operation timed out
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 490, in increment
-    raise reraise(type(error), error, _stacktrace)
-          ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/util.py", line 39, in reraise
-    raise value
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 536, in _make_request
-    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 367, in _raise_timeout
-    raise ReadTimeoutError(
-        self, url, f"Read timed out. (read timeout={timeout_value})"
-    ) from err
-urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Read timed out. (read timeout=600)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 432, in b04_stable_pairs
-    df_s = self.q(f"""
-        WITH
-    ...<26 lines>...
-        JOIN agent_total at_b ON p.run_id = at_b.run_id AND p.b = at_b.agent_id
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Read timed out. (read timeout=600) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
-
+## 4. Стабильные пары
 
+**Логика:** Для упорядоченной пары (A→B) вычисляется доля контактов агента A с агентом B от всех контактов A за семестр: `n_AB / N_A`. Пара считается стабильной, если эта доля ≥ порогу.
 
-## Блок 05 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-        (self._dns_host, self.port),
-    ...<2 lines>...
-        socket_options=self.socket_options,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/connection.py", line 60, in create_connection
-    for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 983, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 488, in _make_request
-    raise new_e
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 464, in _make_request
-    self._validate_conn(conn)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
-    conn.connect()
-    ~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 759, in connect
-    self.sock = sock = self._new_conn()
-                       ~~~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 211, in _new_conn
-    raise NameResolutionError(self.host, self, e) from e
-urllib3.exceptions.NameResolutionError: HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 871, in urlopen
-    return self.urlopen(
-           ~~~~~~~~~~~~^
-        method,
-        ^^^^^^^
-    ...<13 lines>...
-        **response_kw,
-        ^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=32eea13b-013b-4603-9214-bc052c7013af (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)"))
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 511, in b05_emotions
-    df = self.q(f"""
-        SELECT day_id, {emo_sql}
-    ...<2 lines>...
-        GROUP BY day_id ORDER BY day_id
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=32eea13b-013b-4603-9214-bc052c7013af (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)")) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
-
-
-
-## Блок 06 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-        (self._dns_host, self.port),
-    ...<2 lines>...
-        socket_options=self.socket_options,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/connection.py", line 60, in create_connection
-    for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 983, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 488, in _make_request
-    raise new_e
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 464, in _make_request
-    self._validate_conn(conn)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
-    conn.connect()
-    ~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 759, in connect
-    self.sock = sock = self._new_conn()
-                       ~~~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 211, in _new_conn
-    raise NameResolutionError(self.host, self, e) from e
-urllib3.exceptions.NameResolutionError: HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 871, in urlopen
-    return self.urlopen(
-           ~~~~~~~~~~~~^
-        method,
-        ^^^^^^^
-    ...<13 lines>...
-        **response_kw,
-        ^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=f2f02d7c-eebc-45a4-8f6b-ce621bd1f35b (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)"))
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 562, in b06_leader_burnout
-    pop = self.q(f"""
-        SELECT run_id, object_id AS agent_id,
-    ...<3 lines>...
-        GROUP BY run_id, object_id ORDER BY fans DESC
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=f2f02d7c-eebc-45a4-8f6b-ce621bd1f35b (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)")) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
-
-
-
-## Блок 07 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-        (self._dns_host, self.port),
-    ...<2 lines>...
-        socket_options=self.socket_options,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/connection.py", line 60, in create_connection
-    for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 983, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 488, in _make_request
-    raise new_e
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 464, in _make_request
-    self._validate_conn(conn)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
-    conn.connect()
-    ~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 759, in connect
-    self.sock = sock = self._new_conn()
-                       ~~~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 211, in _new_conn
-    raise NameResolutionError(self.host, self, e) from e
-urllib3.exceptions.NameResolutionError: HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 871, in urlopen
-    return self.urlopen(
-           ~~~~~~~~~~~~^
-        method,
-        ^^^^^^^
-    ...<13 lines>...
-        **response_kw,
-        ^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=a8ae488b-d207-4245-973e-09af6fbc662c (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)"))
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1540, in <lambda>
-    ("07", lambda: self.b07_attractor(meta)),
-                   ~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 608, in b07_attractor
-    df_m = self.q(f"""
-        SELECT ar1.archetype AS a_from, ar2.archetype AS a_to,
-    ...<18 lines>...
-        GROUP BY a_from, a_to
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=a8ae488b-d207-4245-973e-09af6fbc662c (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)")) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
-
-
-
-## Блок 08 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-        (self._dns_host, self.port),
-    ...<2 lines>...
-        socket_options=self.socket_options,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/connection.py", line 60, in create_connection
-    for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 983, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 488, in _make_request
-    raise new_e
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 464, in _make_request
-    self._validate_conn(conn)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
-    conn.connect()
-    ~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 759, in connect
-    self.sock = sock = self._new_conn()
-                       ~~~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 211, in _new_conn
-    raise NameResolutionError(self.host, self, e) from e
-urllib3.exceptions.NameResolutionError: HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 871, in urlopen
-    return self.urlopen(
-           ~~~~~~~~~~~~^
-        method,
-        ^^^^^^^
-    ...<13 lines>...
-        **response_kw,
-        ^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=03273f5d-fedb-499e-a677-73c05598ff27 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)"))
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 675, in b08_emotional_bubbles
-    friends = self.q(f"""
-        SELECT run_id, subject_id AS agent_id, object_id AS friend_id,
-    ...<4 lines>...
-        QUALIFY row_number() OVER (PARTITION BY run_id, subject_id ORDER BY avg(affinity) DESC) <= 3
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=03273f5d-fedb-499e-a677-73c05598ff27 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)")) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
-
-
-
-## Блок 09 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-        (self._dns_host, self.port),
-    ...<2 lines>...
-        socket_options=self.socket_options,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/connection.py", line 60, in create_connection
-    for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 983, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 488, in _make_request
-    raise new_e
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 464, in _make_request
-    self._validate_conn(conn)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
-    conn.connect()
-    ~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 759, in connect
-    self.sock = sock = self._new_conn()
-                       ~~~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 211, in _new_conn
-    raise NameResolutionError(self.host, self, e) from e
-urllib3.exceptions.NameResolutionError: HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 871, in urlopen
-    return self.urlopen(
-           ~~~~~~~~~~~~^
-        method,
-        ^^^^^^^
-    ...<13 lines>...
-        **response_kw,
-        ^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=5140e34a-2100-4c4d-bc94-d2a5510c1223 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)"))
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 729, in b09_halflife
-    runs = self.meta()["run_id"].tolist()
-           ~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 191, in meta
-    df = self.q("""
-        SELECT run_id, scenario_name, run_name, start_time
-        FROM simulation_runs ORDER BY scenario_name
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=5140e34a-2100-4c4d-bc94-d2a5510c1223 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)")) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
-
-
-
-## Блок 10 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 793, in b10_sunday_reset
-    curr_date = datetime.date(2024, 9, 1)
-TypeError: descriptor 'date' for 'datetime.datetime' objects doesn't apply to a 'int' object
-
-```
-
-
-
-## Блок 11 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-        (self._dns_host, self.port),
-    ...<2 lines>...
-        socket_options=self.socket_options,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/connection.py", line 60, in create_connection
-    for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 983, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 488, in _make_request
-    raise new_e
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 464, in _make_request
-    self._validate_conn(conn)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
-    conn.connect()
-    ~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 759, in connect
-    self.sock = sock = self._new_conn()
-                       ~~~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 211, in _new_conn
-    raise NameResolutionError(self.host, self, e) from e
-urllib3.exceptions.NameResolutionError: HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 871, in urlopen
-    return self.urlopen(
-           ~~~~~~~~~~~~^
-        method,
-        ^^^^^^^
-    ...<13 lines>...
-        **response_kw,
-        ^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=26908365-1134-4c09-8591-a7ecb9c8c4b0 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)"))
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 913, in b11_forgiveness_law
-    df = self.q(f"""
-        SELECT ar.archetype,
-    ...<10 lines>...
-        ORDER BY ar.archetype, rel.day_id
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=26908365-1134-4c09-8591-a7ecb9c8c4b0 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)")) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
-
-
-
-## Блок 12 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-        (self._dns_host, self.port),
-    ...<2 lines>...
-        socket_options=self.socket_options,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/connection.py", line 60, in create_connection
-    for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 983, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 488, in _make_request
-    raise new_e
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 464, in _make_request
-    self._validate_conn(conn)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
-    conn.connect()
-    ~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 759, in connect
-    self.sock = sock = self._new_conn()
-                       ~~~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 211, in _new_conn
-    raise NameResolutionError(self.host, self, e) from e
-urllib3.exceptions.NameResolutionError: HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 871, in urlopen
-    return self.urlopen(
-           ~~~~~~~~~~~~^
-        method,
-        ^^^^^^^
-    ...<13 lines>...
-        **response_kw,
-        ^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=bdf55de1-078e-4dea-a682-d00eb8c890d2 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)"))
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 987, in b12_semester_amnesia
-    df_before = self.q(f"""
-        SELECT run_id, agent_id, {emo_before_sql}
-    ...<2 lines>...
-        GROUP BY run_id, agent_id
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=bdf55de1-078e-4dea-a682-d00eb8c890d2 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)")) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
-
-
-
-## Блок 13 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-        (self._dns_host, self.port),
-    ...<2 lines>...
-        socket_options=self.socket_options,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/connection.py", line 60, in create_connection
-    for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 983, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 488, in _make_request
-    raise new_e
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 464, in _make_request
-    self._validate_conn(conn)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
-    conn.connect()
-    ~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 759, in connect
-    self.sock = sock = self._new_conn()
-                       ~~~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 211, in _new_conn
-    raise NameResolutionError(self.host, self, e) from e
-urllib3.exceptions.NameResolutionError: HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 871, in urlopen
-    return self.urlopen(
-           ~~~~~~~~~~~~^
-        method,
-        ^^^^^^^
-    ...<13 lines>...
-        **response_kw,
-        ^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=df34e155-76dd-4f9e-a799-385159f78bc5 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)"))
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1061, in b13_log_trap
-    runs = self.meta()["run_id"].tolist()
-           ~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 191, in meta
-    df = self.q("""
-        SELECT run_id, scenario_name, run_name, start_time
-        FROM simulation_runs ORDER BY scenario_name
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=df34e155-76dd-4f9e-a799-385159f78bc5 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)")) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
-
-
-
-## Блок 14 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-        (self._dns_host, self.port),
-    ...<2 lines>...
-        socket_options=self.socket_options,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/connection.py", line 60, in create_connection
-    for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 983, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 488, in _make_request
-    raise new_e
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 464, in _make_request
-    self._validate_conn(conn)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
-    conn.connect()
-    ~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 759, in connect
-    self.sock = sock = self._new_conn()
-                       ~~~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 211, in _new_conn
-    raise NameResolutionError(self.host, self, e) from e
-urllib3.exceptions.NameResolutionError: HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 871, in urlopen
-    return self.urlopen(
-           ~~~~~~~~~~~~^
-        method,
-        ^^^^^^^
-    ...<13 lines>...
-        **response_kw,
-        ^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=7ad3bf45-b5d2-4aa2-af3c-a18563a45e46 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)"))
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1130, in b14_nonconf_mediator
-    df = self.q(f"""
-        SELECT ar1.archetype AS arch_initiator,
-    ...<10 lines>...
-        ORDER BY refusal_pct DESC
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=7ad3bf45-b5d2-4aa2-af3c-a18563a45e46 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)")) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
-
-
-
-## Блок 15 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-        (self._dns_host, self.port),
-    ...<2 lines>...
-        socket_options=self.socket_options,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/connection.py", line 60, in create_connection
-    for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 983, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 488, in _make_request
-    raise new_e
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 464, in _make_request
-    self._validate_conn(conn)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
-    conn.connect()
-    ~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 759, in connect
-    self.sock = sock = self._new_conn()
-                       ~~~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 211, in _new_conn
-    raise NameResolutionError(self.host, self, e) from e
-urllib3.exceptions.NameResolutionError: HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 871, in urlopen
-    return self.urlopen(
-           ~~~~~~~~~~~~^
-        method,
-        ^^^^^^^
-    ...<13 lines>...
-        **response_kw,
-        ^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=05f77618-b4b6-4775-959c-f9785b506978 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)"))
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1195, in b15_gym_clustering
-    df_gym = self.q(f"""
-        SELECT ar1.archetype AS arch1, ar2.archetype AS arch2,
-    ...<8 lines>...
-        GROUP BY arch1, arch2, i.run_id, a, b
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=05f77618-b4b6-4775-959c-f9785b506978 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)")) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
-
-
-
-## Блок 16 — ошибка выполнения
-
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-        (self._dns_host, self.port),
-    ...<2 lines>...
-        socket_options=self.socket_options,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/connection.py", line 60, in create_connection
-    for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 983, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 488, in _make_request
-    raise new_e
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 464, in _make_request
-    self._validate_conn(conn)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
-    conn.connect()
-    ~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 759, in connect
-    self.sock = sock = self._new_conn()
-                       ~~~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 211, in _new_conn
-    raise NameResolutionError(self.host, self, e) from e
-urllib3.exceptions.NameResolutionError: HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 871, in urlopen
-    return self.urlopen(
-           ~~~~~~~~~~~~^
-        method,
-        ^^^^^^^
-    ...<13 lines>...
-        **response_kw,
-        ^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=243344c2-24a2-4684-ba25-8cbf26bbdf35 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)"))
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1266, in b16_warm_islands
-    df_edges = self.q(f"""
-        SELECT rel.run_id, rel.subject_id, rel.object_id,
-    ...<5 lines>...
-        GROUP BY rel.run_id, rel.subject_id, rel.object_id, ar.archetype
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=243344c2-24a2-4684-ba25-8cbf26bbdf35 (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)")) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
+![Динамика стабильных пар по семестрам (n_AB/N_A)](../plots/04_stable_pairs.png)
+*Динамика стабильных пар по семестрам (n_AB/N_A)*
+
+**Порог 90.0%:**
+|   Семестр |   Стаб.пар |
+|----------:|-----------:|
+|         1 |          0 |
+|         2 |          1 |
+|         3 |          0 |
+|         4 |          6 |
+|         5 |          0 |
+|         6 |         28 |
+|         7 |          0 |
+|         8 |          0 |
+
+**Порог 95.0%:**
+|   Семестр |   Стаб.пар |
+|----------:|-----------:|
+|         1 |          0 |
+|         2 |          1 |
+|         3 |          0 |
+|         4 |          6 |
+|         5 |          0 |
+|         6 |         28 |
+|         7 |          0 |
+|         8 |          0 |
+
+**Порог 99.5%:**
+|   Семестр |   Стаб.пар |
+|----------:|-----------:|
+|         1 |          0 |
+|         2 |          1 |
+|         3 |          0 |
+|         4 |          6 |
+|         5 |          0 |
+|         6 |         28 |
+|         7 |          0 |
+|         8 |          0 |
+
+**Порог 100.0%:**
+|   Семестр |   Стаб.пар |
+|----------:|-----------:|
+|         1 |          0 |
+|         2 |          1 |
+|         3 |          0 |
+|         4 |          6 |
+|         5 |          0 |
+|         6 |         28 |
+|         7 |          0 |
+|         8 |          0 |
+
+
+
+## 5. Эмоциональный фон коллектива
+
+![Эмоциональный фон: среднее ± std по всем 42 прогонам](../plots/05a_emotion_dynamics.png)
+*Эмоциональный фон: среднее ± std по всем 42 прогонам*
+
+![Тепловая карта эмоций во времени](../plots/05b_emotion_heatmap.png)
+*Тепловая карта эмоций во времени*
+
+### Дрейф начало→конец
+
+*Примечание: из-за семестровых сбросов эмоций средние значения осциллируют. Дрейф = |avg(конец) − avg(начало)| без учёта сбросов.*
+
+|                       |   Δ дрейф |
+|:----------------------|----------:|
+| Печаль–Радость        |  0.468384 |
+| Страх–Спокойствие     |  0.462887 |
+| Гнев–Смирение         |  0.48669  |
+| Отвращение–Принятие   |  0.540602 |
+| Привычка–Удивление    |  0.501729 |
+| Стыд–Уверенность      |  0.543963 |
+| Отчуждение–Открытость |  0.519664 |
+
+
+
+## 6. Эффект «Выгорания лидера»
+
+![Корреляция популярности с эмоциями лидеров](../plots/06_leader_burnout.png)
+*Корреляция популярности с эмоциями лидеров*
+
+- **Гнев–Смирение**: r=0.037, p=0.0000 (✅ значимо)
+
+- **Страх–Спокойствие**: r=0.037, p=0.0000 (✅ значимо)
+
+- **Печаль–Радость**: r=0.037, p=0.0000 (✅ значимо)
+
+
+
+## 7. «Аттракторная сходимость» сетей
+
+![Аттракторная сходимость: корреляция финальных матриц](../plots/07_attractor.png)
+*Аттракторная сходимость: корреляция финальных матриц*
+
+|       |    pearson |     cosine |
+|:------|-----------:|-----------:|
+| count |  7         |  7         |
+| mean  |  0.181864  |  0.177955  |
+| std   |  0.508255  |  0.386249  |
+| min   | -0.542392  | -0.231115  |
+| 25%   | -0.152485  | -0.0998233 |
+| 50%   |  0.0943245 |  0.0983881 |
+| 75%   |  0.585459  |  0.370166  |
+| max   |  0.855167  |  0.837728  |
+
+
+
+## 8. Эмоциональные пузыри (Emotional Contagion)
+
+![Эмоциональная ассортативность пар](../plots/08_emotional_bubbles.png)
+*Эмоциональная ассортативность пар*
+
+|                       |      r |   p |   sig |
+|:----------------------|-------:|----:|------:|
+| Печаль–Радость        | 0.7875 |   0 |     1 |
+| Страх–Спокойствие     | 0.7875 |   0 |     1 |
+| Гнев–Смирение         | 0.7875 |   0 |     1 |
+| Отвращение–Принятие   | 0.7875 |   0 |     1 |
+| Привычка–Удивление    | 0.7875 |   0 |     1 |
+| Стыд–Уверенность      | 0.7875 |   0 |     1 |
+| Отчуждение–Открытость | 0.7875 |   0 |     1 |
+
+
+
+## 9. Скорость полураспада отношений
+
+![Уровень отношений при «распаде» пары](../plots/09_halflife_archetype.png)
+*Уровень отношений при «распаде» пары*
+
+| archetype    |   sum_trust |   sum_affinity |   n_pairs |   trust_at_end |   affinity_at_end |
+|:-------------|------------:|---------------:|----------:|---------------:|------------------:|
+| Nihility     |     2090193 |        1846813 |   1090318 |        1.91705 |           1.69383 |
+| Enigmata     |     3359825 |        6754569 |   1339289 |        2.50866 |           5.0434  |
+| Harmony      |     6076740 |        7369714 |   1353551 |        4.48948 |           5.44473 |
+| Hunt         |     8254369 |        8222452 |   1456880 |        5.66579 |           5.64388 |
+| Preservation |     8774728 |        7518419 |   1471938 |        5.96134 |           5.10784 |
+| Elation      |     9578673 |        2089988 |   1555191 |        6.15916 |           1.34388 |
+| Trailblaze   |     1581485 |        1254540 |    232004 |        6.81663 |           5.40741 |
+| Remembrance  |     1839219 |         918218 |    231258 |        7.9531  |           3.97054 |
+| Erudition    |    15442116 |        9442424 |   1756732 |        8.79025 |           5.37499 |
+
+
+
+## 10. «Эффект воскресного сброса»
+
+**Гипотеза:** Хронически депрессивные агенты восстанавливаются после воскресного δ-сдвига медленнее нейтральных.
+
+**Важно:** Базовый уровень эмоций считается ТОЛЬКО из первого семестра (до первого семестрового сброса), чтобы исключить влияние переинициализации на классификацию агентов.
+
+![Динамика с воскресными и семестровыми сбросами](../plots/10_sunday_reset.png)
+*Динамика с воскресными и семестровыми сбросами*
+
+![Профиль sadness_joy по дням недели: депрессивные vs счастливые](../plots/10b_sunday_recovery.png)
+*Профиль sadness_joy по дням недели: депрессивные vs счастливые*
+
+- Q25 (депрессивные): baseline_joy ≤ -30.0
+- Q75 (счастливые): baseline_joy ≥ 29.5
+
+
+
+## 11. «Закон прощения» — асимметрия скорости затухания
+
+**Гипотеза:** Положительные связи затухают с 0.5·d, отрицательные с d. Деструктор (d=1.0) забывает обиды быстрее, чем Протектор (d=0.2) забывает дружбу.
+
+![Асимметрия затухания: позитивные vs негативные связи](../plots/11_forgiveness_law.png)
+*Асимметрия затухания: позитивные vs негативные связи*
+
+| Архетип      |   Скорость угасания позитива |   Скорость угасания негатива |
+|:-------------|-----------------------------:|-----------------------------:|
+| Elation      |                       0.0033 |                      -0.0011 |
+| Enigmata     |                      -0.0011 |                       0.0002 |
+| Erudition    |                      -0.0042 |                      -0.0034 |
+| Harmony      |                       0.0024 |                       0.0022 |
+| Hunt         |                       0.0088 |                      -0.0046 |
+| Nihility     |                       0.0001 |                      -0.0049 |
+| Preservation |                       0.0016 |                       0.0064 |
+| Remembrance  |                       0.0062 |                      -0.0153 |
+| Trailblaze   |                      -0.0041 |                       0.0052 |
+
+
+
+## 12. «Семестровая амнезия» — что переживает переинициализацию эмоций?
+
+**Гипотеза:** После семестрового сброса эмоций агенты с высоким накопленным Trust быстрее восстанавливают свой эмоциональный ранг внутри коллектива. То есть отношения выступают «памятью», которая подтягивает эмоции назад.
+
+**Метрика:** Ранговая корреляция эмоционального ранга агента в последние дни старого семестра и его ранга в день 1, 7, 14, 30 нового семестра, для двух групп: высокий trust (топ-25%) vs низкий trust (нижние 25%).
+
+![Ранговая корреляция эмоций до/после сброса: высокий vs низкий trust](../plots/12_semester_amnesia.png)
+*Ранговая корреляция эмоций до/после сброса: высокий vs низкий trust*
+
+|   Семестр |   Дней после сброса | Группа               |   ρ Спирмена |   p |
+|----------:|--------------------:|:---------------------|-------------:|----:|
+|         2 |                   7 | Высокий trust (Q75+) |        1     |   0 |
+|         2 |                   7 | Низкий trust (Q25-)  |        0.999 |   0 |
+|         2 |                  14 | Высокий trust (Q75+) |        0.993 |   0 |
+|         2 |                  14 | Низкий trust (Q25-)  |        0.993 |   0 |
+|         2 |                  30 | Высокий trust (Q75+) |        0.993 |   0 |
+|         2 |                  30 | Низкий trust (Q25-)  |        0.993 |   0 |
+|         3 |                   1 | Высокий trust (Q75+) |        0.674 |   0 |
+|         3 |                   1 | Низкий trust (Q25-)  |        0.638 |   0 |
+|         3 |                   7 | Высокий trust (Q75+) |        0.61  |   0 |
+|         3 |                   7 | Низкий trust (Q25-)  |        0.575 |   0 |
+|         3 |                  14 | Высокий trust (Q75+) |        0.643 |   0 |
+|         3 |                  14 | Низкий trust (Q25-)  |        0.612 |   0 |
+|         3 |                  30 | Высокий trust (Q75+) |        0.61  |   0 |
+|         3 |                  30 | Низкий trust (Q25-)  |        0.575 |   0 |
+|         4 |                   1 | Высокий trust (Q75+) |        0.931 |   0 |
+|         4 |                   1 | Низкий trust (Q25-)  |        0.932 |   0 |
+|         4 |                  30 | Высокий trust (Q75+) |        0.931 |   0 |
+|         4 |                  30 | Низкий trust (Q25-)  |        0.932 |   0 |
+|         5 |                   1 | Высокий trust (Q75+) |        0.72  |   0 |
+|         5 |                   1 | Низкий trust (Q25-)  |        0.724 |   0 |
+|         5 |                   7 | Высокий trust (Q75+) |        0.697 |   0 |
+|         5 |                   7 | Низкий trust (Q25-)  |        0.702 |   0 |
+|         5 |                  14 | Высокий trust (Q75+) |        0.661 |   0 |
+|         5 |                  14 | Низкий trust (Q25-)  |        0.666 |   0 |
+|         5 |                  30 | Высокий trust (Q75+) |        0.661 |   0 |
+|         5 |                  30 | Низкий trust (Q25-)  |        0.666 |   0 |
+|         6 |                   1 | Высокий trust (Q75+) |        1     |   0 |
+|         6 |                   1 | Низкий trust (Q25-)  |        1     |   0 |
+|         6 |                   7 | Высокий trust (Q75+) |        0.938 |   0 |
+|         6 |                   7 | Низкий trust (Q25-)  |        0.939 |   0 |
+|         6 |                  14 | Высокий trust (Q75+) |        1     |   0 |
+|         6 |                  14 | Низкий trust (Q25-)  |        1     |   0 |
+|         6 |                  30 | Высокий trust (Q75+) |        0.938 |   0 |
+|         6 |                  30 | Низкий trust (Q25-)  |        0.939 |   0 |
+|         7 |                   1 | Высокий trust (Q75+) |        0.739 |   0 |
+|         7 |                   1 | Низкий trust (Q25-)  |        0.71  |   0 |
+|         7 |                   7 | Высокий trust (Q75+) |        0.711 |   0 |
+|         7 |                   7 | Низкий trust (Q25-)  |        0.684 |   0 |
+|         7 |                  14 | Высокий trust (Q75+) |        0.645 |   0 |
+|         7 |                  14 | Низкий trust (Q25-)  |        0.622 |   0 |
+|         7 |                  30 | Высокий trust (Q75+) |        0.645 |   0 |
+|         7 |                  30 | Низкий trust (Q25-)  |        0.622 |   0 |
+|         8 |                   1 | Высокий trust (Q75+) |        1     |   0 |
+|         8 |                   1 | Низкий trust (Q25-)  |        1     |   0 |
+|         8 |                   7 | Высокий trust (Q75+) |        1     |   0 |
+|         8 |                   7 | Низкий trust (Q25-)  |        1     |   0 |
+|         8 |                  14 | Высокий trust (Q75+) |        0.944 |   0 |
+|         8 |                  14 | Низкий trust (Q25-)  |        0.944 |   0 |
+|         8 |                  30 | Высокий trust (Q75+) |        0.944 |   0 |
+|         8 |                  30 | Низкий trust (Q25-)  |        0.944 |   0 |
+
+**Интерпретация:** Если ρ у «Высокий trust» > ρ у «Низкий trust» — накопленные отношения действительно служат эмоциональной памятью.
+
+
+
+## 13. «Ловушка логарифма» — бимодальность у Аналитика и Инноватора
+
+**Гипотеза:** Архетипы с log(U) в формуле приоритета (Аналитик, Инноватор) избегают агентов с U≈0, создавая бимодальную структуру utility при контактах.
+
+*Обнаруженные log-архетипы: ['Erudition', 'Trailblaze']*
+
+*Всего строк для анализа: 2,000,000*
+
+![Бимодальность utility у log-архетипов](../plots/13_log_trap.png)
+*Бимодальность utility у log-архетипов*
+
+- Коэф. бимодальности (log-архетипы): **0.248**
+- Коэф. бимодальности (остальные):     **0.299**
+- *Порог бимодальности: >0.555 (Sarle)*
+
+
+
+## 14. «Нонконформист × Медиатор» — взрывная асимметрия
+
+**Гипотеза:** Нонконформист часто отказывает Медиатору, но Медиатор накапливает высокий trust через редкие успешные контакты.
+
+![Матрица отказов между архетипами](../plots/14a_archetype_refusal_matrix.png)
+*Матрица отказов между архетипами*
+
+![Матрица финального Trust между архетипами](../plots/14b_archetype_trust_matrix.png)
+*Матрица финального Trust между архетипами*
+
+
+
+## 15. «Оппортунист в спортзале» — кластеризация сети GYM
+
+**Гипотеза:** Оппортунист (τ=3.0) создаёт случайную сеть в GYM, а Конкурент (ε=3.0 в GYM) — плотные кластеры.
+
+![Кластеризация сети в спортзале по архетипам](../plots/15_gym_clustering.png)
+*Кластеризация сети в спортзале по архетипам*
+
+| Архетип      |   Кластеризация |   Средняя степень |   Вершин |
+|:-------------|----------------:|------------------:|---------:|
+| Harmony      |          0.1722 |            112.27 |     1619 |
+| Hunt         |          0.1704 |            110.04 |     1618 |
+| Preservation |          0.1631 |             96.91 |     1619 |
+| Erudition    |          0.1585 |            102.9  |     1619 |
+| Trailblaze   |          0.1522 |             51.35 |     1618 |
+| Remembrance  |          0.1506 |             48.87 |     1617 |
+| Enigmata     |          0.142  |             78.56 |     1610 |
+| Elation      |          0.1341 |            102.04 |     1619 |
+| Nihility     |          0.1331 |             65.86 |     1605 |
+
+
+
+## 16. «Тёплые острова» — закрытые кластеры Рефлектора и Протектора
+
+**Гипотеза:** Рефлектор (d=0.1) и Протектор (d=0.2) создают устойчивые закрытые кластеры с trust≥70, исключающие другие архетипы.
+
+![Тёплые острова: распределение и доминирующие архетипы](../plots/16_warm_islands.png)
+*Тёплые острова: распределение и доминирующие архетипы*
+
+**Всего кластеров (≥3 агентов): 28**
+
+| run_id                               |   Размер кластера | Доминирующий архетип   |   Доля доминанта (%) | Все архетипы                                                                                                                                         |
+|:-------------------------------------|------------------:|:-----------------------|---------------------:|:-----------------------------------------------------------------------------------------------------------------------------------------------------|
+| 46a8c629-384a-4ea5-a5ca-9e6832f9e24d |               476 | Enigmata               |                100   | {'Enigmata': 476}                                                                                                                                    |
+| 98359cab-fc1f-4c7a-8d39-151987fe62b4 |               465 | Erudition              |                100   | {'Erudition': 465}                                                                                                                                   |
+| 13ba0fa9-36b9-499b-beef-b9d87b2f0cf2 |               458 | Hunt                   |                 66.2 | {'Enigmata': 155, 'Hunt': 303}                                                                                                                       |
+| 2c4e64db-89ed-4afe-b69e-e7047dd42ad1 |               456 | Elation                |                100   | {'Elation': 456}                                                                                                                                     |
+| 7763597b-0f8c-4329-9c28-5261578dad12 |               453 | Erudition              |                 77.9 | {'Erudition': 353, 'Remembrance': 100}                                                                                                               |
+| db273b6f-a0d0-41c8-8a3b-502f86c6d3ac |               453 | Erudition              |                 35.1 | {'Erudition': 159, 'Harmony': 110, 'Preservation': 83, 'Enigmata': 18, 'Hunt': 71, 'Nihility': 12}                                                   |
+| 4c8c3f82-ac1a-44df-b113-84d8978919ac |               452 | Preservation           |                100   | {'Preservation': 452}                                                                                                                                |
+| 0456647a-65ba-42b9-a275-1739ca33927b |               444 | Harmony                |                100   | {'Harmony': 444}                                                                                                                                     |
+| e611eaab-7112-4c47-8d39-9bb653cf5b31 |               441 | Nihility               |                 34.2 | {'Elation': 140, 'Preservation': 150, 'Nihility': 151}                                                                                               |
+| 2c36dbf0-050f-4ce9-b8c7-ea15023b6133 |               431 | Harmony                |                 40.8 | {'Harmony': 176, 'Preservation': 122, 'Trailblaze': 76, 'Erudition': 57}                                                                             |
+| a764184e-96d5-4540-a21b-9ea5c68936e0 |               427 | Trailblaze             |                 12.6 | {'Erudition': 44, 'Remembrance': 47, 'Hunt': 48, 'Elation': 43, 'Trailblaze': 54, 'Enigmata': 45, 'Harmony': 43, 'Nihility': 50, 'Preservation': 53} |
+| 14bb405b-53e0-4201-a6e4-068226500bc3 |               422 | Elation                |                 65.6 | {'Elation': 277, 'Enigmata': 145}                                                                                                                    |
+| 6a5bc084-bf09-49ff-82d4-46039731854e |               415 | Nihility               |                100   | {'Nihility': 415}                                                                                                                                    |
+| b582b691-afc3-4bcd-9bdf-31ab78acbb16 |               410 | Hunt                   |                100   | {'Hunt': 410}                                                                                                                                        |
+| 363b5037-ea96-43c0-98e2-623470228612 |               357 | Enigmata               |                 13.4 | {'Preservation': 43, 'Nihility': 38, 'Remembrance': 42, 'Elation': 43, 'Hunt': 34, 'Enigmata': 48, 'Harmony': 25, 'Trailblaze': 40, 'Erudition': 44} |
 
 
 
@@ -1482,119 +459,22 @@ clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool
 
 **Гипотеза:** Пары (A, B) распадаются значимо чаще, если агент A получил много отказов от Деструкторов.
 
-*scikit-learn не установлен. Запустите: pip install scikit-learn*
+![Деструктор как катализатор распада пар](../plots/17_destructor_catalyst.png)
+*Деструктор как катализатор распада пар*
+
+- Коэф. логит-регрессии (стандартизованный): **0.061**
+- Odds Ratio: **1.063**
+- ✅ Деструкторы действительно ускоряют распад
 
 
 
-## Блок 18 — ошибка выполнения
+## 18. «Эффект первого семестра» — path dependency
 
-```
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 204, in _new_conn
-    sock = connection.create_connection(
-        (self._dns_host, self.port),
-    ...<2 lines>...
-        socket_options=self.socket_options,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/connection.py", line 60, in create_connection
-    for res in socket.getaddrinfo(host, port, family, socket.SOCK_STREAM):
-               ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/socket.py", line 983, in getaddrinfo
-    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
-               ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-socket.gaierror: [Errno 8] nodename nor servname provided, or not known
+**Гипотеза:** Ранговая позиция агента по числу контактов в 1-м семестре является сильным предиктором его позиции в 8-м семестре (особенно в EMPTY-сценариях).
 
-The above exception was the direct cause of the following exception:
+![Эффект первого семестра: ранговая корреляция С1 → С8](../plots/18_first_semester_path_dependency.png)
+*Эффект первого семестра: ранговая корреляция С1 → С8*
 
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
-    response = self._make_request(
-        conn,
-    ...<10 lines>...
-        **response_kw,
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 488, in _make_request
-    raise new_e
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 464, in _make_request
-    self._validate_conn(conn)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
-    conn.connect()
-    ~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 759, in connect
-    self.sock = sock = self._new_conn()
-                       ~~~~~~~~~~~~~~^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connection.py", line 211, in _new_conn
-    raise NameResolutionError(self.host, self, e) from e
-urllib3.exceptions.NameResolutionError: HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 546, in _raw_request
-    response = self.http.request(method, url, **kwargs)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 143, in request
-    return self.request_encode_body(
-           ~~~~~~~~~~~~~~~~~~~~~~~~^
-        method, url, fields=fields, headers=headers, **urlopen_kw
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/_request_methods.py", line 278, in request_encode_body
-    return self.urlopen(method, url, **extra_kw)
-           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/poolmanager.py", line 457, in urlopen
-    response = conn.urlopen(method, u.request_uri, **kw)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 871, in urlopen
-    return self.urlopen(
-           ~~~~~~~~~~~~^
-        method,
-        ^^^^^^^
-    ...<13 lines>...
-        **response_kw,
-        ^^^^^^^^^^^^^^
-    )
-    ^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
-    retries = retries.increment(
-        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
-    )
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 535, in increment
-    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=5e9cc670-1e98-4551-8140-a83689dc36fb (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)"))
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1556, in run_all
-    section = fn()
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1551, in <lambda>
-    ("18", lambda: self.b18_first_semester(meta)),
-                   ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 1436, in b18_first_semester
-    df_sem1 = self.q(f"""
-        SELECT run_id, agent_id, sum(cnt) AS contacts_s1 FROM (
-    ...<7 lines>...
-        ) GROUP BY run_id, agent_id
-    """)
-  File "/Users/georgijtadziev/Documents/proga/diplom/scripts/mega_research.py", line 182, in q
-    return self.db.query_df(sql)
-           ~~~~~~~~~~~~~~~~^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/Users/georgijtadziev/Documents/proga/diplom/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 558, in _raw_request
-    raise OperationalError(f'Error {ex} executing HTTP request attempt {attempts}{err_url}') from ex
-clickhouse_connect.driver.exceptions.OperationalError: Error HTTPSConnectionPool(host='db.georgytadjiev.ink', port=443): Max retries exceeded with url: /?date_time_input_format=best_effort&cast_string_to_dynamic_use_inference=1&cancel_http_readonly_queries_on_client_close=1&wait_end_of_query=1&send_progress_in_http_headers=1&http_headers_progress_interval_ms=120000&client_protocol_version=54405&query_id=5e9cc670-1e98-4551-8140-a83689dc36fb (Caused by NameResolutionError("HTTPSConnection(host='db.georgytadjiev.ink', port=443): Failed to resolve 'db.georgytadjiev.ink' ([Errno 8] nodename nor servname provided, or not known)")) executing HTTP request attempt 1 (https://db.georgytadjiev.ink:443)
-
-```
+- **ρ Спирмена:** 0.005
+- **p-значение:** 0.538629
+- ❌ Первый семестр не предсказывает финал

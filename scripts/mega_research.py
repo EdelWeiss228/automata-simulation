@@ -245,7 +245,7 @@ class MegaResearch:
             GROUP BY sr.scenario_name, sr.run_name
             ORDER BY sr.scenario_name
         """)
-        df = df.merge(meta[["scenario_name","init_type","group"]], on="scenario_name", how="left")
+        df = df.merge(meta[["scenario_name","init_type","group","nonlinear"]], on="scenario_name", how="left")
 
         # 1a — бар-чарт по сценариям
         fig, ax = plt.subplots(figsize=(16, 5))
