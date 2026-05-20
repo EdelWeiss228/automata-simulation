@@ -1,6 +1,6 @@
 # Аналитический отчёт: Многоагентная симуляция социально-эмоциональных отношений
 
-**Дата генерации:** 2026-05-19 01:34:40
+**Дата генерации:** 2026-05-20 07:56:45
 **База данных:** ClickHouse (локальный)
 **Объём данных:** 42 серии × 1365 дней, ~56 млрд строк отношений,
 90 млн состояний агентов, 147 млн взаимодействий.
@@ -91,56 +91,56 @@
 
 | scenario_name                  | init_type   |   soft_pct |   hard_pct |
 |:-------------------------------|:------------|-----------:|-----------:|
-| Run01_Erudition_EMPTY          | EMPTY       |     0      |   0        |
-| Run01_Erudition_MIXED          | MIXED       |    56.6961 |   0.389659 |
-| Run01_Erudition_RANDOM         | RANDOM      |    73.3404 |   0.55635  |
-| Run02_Enigmata_EMPTY           | EMPTY       |     0      |   0        |
-| Run02_Enigmata_MIXED           | MIXED       |    55.4482 |   0.282982 |
-| Run02_Enigmata_RANDOM          | RANDOM      |    71.8735 |   0.386405 |
-| Run03_Harmony_EMPTY            | EMPTY       |     0      |   0        |
-| Run03_Harmony_MIXED            | MIXED       |    55.4778 |   0.490352 |
-| Run03_Harmony_RANDOM           | RANDOM      |    71.0892 |   0.730768 |
-| Run04_Hunt_EMPTY               | EMPTY       |     0      |   0        |
-| Run04_Hunt_MIXED               | MIXED       |    55.3787 |   0.403292 |
-| Run04_Hunt_RANDOM              | RANDOM      |    71.0238 |   0.588004 |
-| Run05_Elation_EMPTY            | EMPTY       |     0      |   0        |
-| Run05_Elation_MIXED            | MIXED       |    55.0183 |   0.311408 |
-| Run05_Elation_RANDOM           | RANDOM      |    72.2308 |   0.464602 |
-| Run06_Preservation_EMPTY       | EMPTY       |     0      |   0        |
-| Run06_Preservation_MIXED       | MIXED       |    55.3792 |   0.469276 |
-| Run06_Preservation_RANDOM      | RANDOM      |    70.8139 |   0.629049 |
-| Run07_Nihility_EMPTY           | EMPTY       |     0      |   0        |
-| Run07_Nihility_MIXED           | MIXED       |    52.5354 |   0.25119  |
-| Run07_Nihility_RANDOM          | RANDOM      |    69.2633 |   0.302678 |
-| Run08_Uniform_Random_EMPTY     | EMPTY       |     0      |   0        |
-| Run08_Uniform_Random_MIXED     | MIXED       |    55.2329 |   0.357808 |
-| Run08_Uniform_Random_RANDOM    | RANDOM      |    71.6919 |   0.48627  |
-| Run09_Normal_Social_EMPTY      | EMPTY       |     0      |   0        |
-| Run09_Normal_Social_MIXED      | MIXED       |    55.563  |   0.485404 |
-| Run09_Normal_Social_RANDOM     | RANDOM      |    71.5024 |   0.627609 |
-| Run10_Extremes_EMPTY           | EMPTY       |     0      |   0        |
-| Run10_Extremes_MIXED           | MIXED       |    53.8862 |   0.279477 |
-| Run10_Extremes_RANDOM          | RANDOM      |    71.5106 |   0.407852 |
-| Run11_Competitive_EMPTY        | EMPTY       |     0      |   0        |
-| Run11_Competitive_MIXED        | MIXED       |    55.4051 |   0.377968 |
-| Run11_Competitive_RANDOM       | RANDOM      |    71.8713 |   0.512289 |
-| Run12_Academic_EMPTY           | EMPTY       |     0      |   0        |
-| Run12_Academic_MIXED           | MIXED       |    56.9374 |   0.489062 |
-| Run12_Academic_RANDOM          | RANDOM      |    73.0401 |   0.595138 |
-| Run13_Chaotic_EMPTY            | EMPTY       |     0      |   0        |
-| Run13_Chaotic_MIXED            | MIXED       |    55.1679 |   0.285971 |
-| Run13_Chaotic_RANDOM           | RANDOM      |    70.9855 |   0.393354 |
-| Run14_Real_World_Approx_EMPTY  | EMPTY       |     0      |   0        |
-| Run14_Real_World_Approx_MIXED  | MIXED       |    56.1264 |   0.45083  |
-| Run14_Real_World_Approx_RANDOM | RANDOM      |    71.8497 |   0.612992 |
+| Run01_Erudition_EMPTY          | EMPTY       |    0       |   0        |
+| Run01_Erudition_MIXED          | MIXED       |    9.11525 |   0.346842 |
+| Run01_Erudition_RANDOM         | RANDOM      |   12.5167  |   0.569934 |
+| Run02_Enigmata_EMPTY           | EMPTY       |    0       |   0        |
+| Run02_Enigmata_MIXED           | MIXED       |    7.25222 |   0.255182 |
+| Run02_Enigmata_RANDOM          | RANDOM      |    9.84885 |   0.383553 |
+| Run03_Harmony_EMPTY            | EMPTY       |    0       |   0        |
+| Run03_Harmony_MIXED            | MIXED       |    9.6422  |   0.557684 |
+| Run03_Harmony_RANDOM           | RANDOM      |   13.3632  |   0.755828 |
+| Run04_Hunt_EMPTY               | EMPTY       |    0       |   0        |
+| Run04_Hunt_MIXED               | MIXED       |    8.665   |   0.391082 |
+| Run04_Hunt_RANDOM              | RANDOM      |   11.6502  |   0.629666 |
+| Run05_Elation_EMPTY            | EMPTY       |    0       |   0        |
+| Run05_Elation_MIXED            | MIXED       |    8.11875 |   0.295227 |
+| Run05_Elation_RANDOM           | RANDOM      |   10.4499  |   0.476508 |
+| Run06_Preservation_EMPTY       | EMPTY       |    0       |   0        |
+| Run06_Preservation_MIXED       | MIXED       |    8.94085 |   0.472387 |
+| Run06_Preservation_RANDOM      | RANDOM      |   12.0177  |   0.58239  |
+| Run07_Nihility_EMPTY           | EMPTY       |    0       |   0        |
+| Run07_Nihility_MIXED           | MIXED       |    6.14439 |   0.258676 |
+| Run07_Nihility_RANDOM          | RANDOM      |    7.80815 |   0.288923 |
+| Run08_Uniform_Random_EMPTY     | EMPTY       |    0       |   0        |
+| Run08_Uniform_Random_MIXED     | MIXED       |    8.45633 |   0.408636 |
+| Run08_Uniform_Random_RANDOM    | RANDOM      |   11.4765  |   0.533575 |
+| Run09_Normal_Social_EMPTY      | EMPTY       |    0       |   0        |
+| Run09_Normal_Social_MIXED      | MIXED       |    9.3565  |   0.550052 |
+| Run09_Normal_Social_RANDOM     | RANDOM      |   12.4398  |   0.617996 |
+| Run10_Extremes_EMPTY           | EMPTY       |    0       |   0        |
+| Run10_Extremes_MIXED           | MIXED       |    7.10685 |   0.274068 |
+| Run10_Extremes_RANDOM          | RANDOM      |    9.63318 |   0.41242  |
+| Run11_Competitive_EMPTY        | EMPTY       |    0       |   0        |
+| Run11_Competitive_MIXED        | MIXED       |    7.93129 |   0.345833 |
+| Run11_Competitive_RANDOM       | RANDOM      |   10.7577  |   0.57554  |
+| Run12_Academic_EMPTY           | EMPTY       |    0       |   0        |
+| Run12_Academic_MIXED           | MIXED       |    9.45481 |   0.485015 |
+| Run12_Academic_RANDOM          | RANDOM      |   11.932   |   0.594596 |
+| Run13_Chaotic_EMPTY            | EMPTY       |    0       |   0        |
+| Run13_Chaotic_MIXED            | MIXED       |    7.37778 |   0.307937 |
+| Run13_Chaotic_RANDOM           | RANDOM      |   10.2345  |   0.356779 |
+| Run14_Real_World_Approx_EMPTY  | EMPTY       |    0       |   0        |
+| Run14_Real_World_Approx_MIXED  | MIXED       |    8.85734 |   0.507099 |
+| Run14_Real_World_Approx_RANDOM | RANDOM      |   11.7323  |   0.581155 |
 
 ### Среднее по типам инициализации
 
 |    | ('init_type', '')   |   ('soft_pct', 'mean') |   ('soft_pct', 'std') |   ('hard_pct', 'mean') |   ('hard_pct', 'std') |
 |---:|:--------------------|-----------------------:|----------------------:|-----------------------:|----------------------:|
-|  0 | EMPTY               |                 0      |              0        |               0        |             0         |
-|  1 | MIXED               |                55.3038 |              1.08139  |               0.380334 |             0.0872467 |
-|  2 | RANDOM              |                71.5776 |              0.991482 |               0.520954 |             0.11964   |
+|  0 | EMPTY               |                0       |               0       |               0        |              0        |
+|  1 | MIXED               |                8.31568 |               1.03696 |               0.389694 |              0.108131 |
+|  2 | RANDOM              |               11.1329  |               1.44461 |               0.525633 |              0.126455 |
 
 
 
@@ -153,11 +153,11 @@
 |   semester |   stable_pairs |
 |-----------:|---------------:|
 |          1 |              0 |
-|          2 |              0 |
+|          2 |              1 |
 |          3 |              0 |
-|          4 |              0 |
+|          4 |             14 |
 |          5 |              0 |
-|          6 |              0 |
+|          6 |             77 |
 |          7 |              0 |
 |          8 |              0 |
 
@@ -165,11 +165,11 @@
 |   semester |   stable_pairs |
 |-----------:|---------------:|
 |          1 |              0 |
-|          2 |              0 |
+|          2 |              1 |
 |          3 |              0 |
-|          4 |              0 |
+|          4 |             14 |
 |          5 |              0 |
-|          6 |              0 |
+|          6 |             77 |
 |          7 |              0 |
 |          8 |              0 |
 
@@ -177,11 +177,11 @@
 |   semester |   stable_pairs |
 |-----------:|---------------:|
 |          1 |              0 |
-|          2 |              0 |
+|          2 |              1 |
 |          3 |              0 |
-|          4 |              0 |
+|          4 |             14 |
 |          5 |              0 |
-|          6 |              0 |
+|          6 |             77 |
 |          7 |              0 |
 |          8 |              0 |
 
@@ -189,11 +189,11 @@
 |   semester |   stable_pairs |
 |-----------:|---------------:|
 |          1 |              0 |
-|          2 |              0 |
+|          2 |              1 |
 |          3 |              0 |
-|          4 |              0 |
+|          4 |             14 |
 |          5 |              0 |
-|          6 |              0 |
+|          6 |             77 |
 |          7 |              0 |
 |          8 |              0 |
 
@@ -213,13 +213,13 @@
 **Дрейф осей (|среднее последних 200 дней − первых 200 дней|):**
 |                       |   Δ дрейф |
 |:----------------------|----------:|
-| Печаль–Радость        |  0.340827 |
-| Страх–Спокойствие     |  0.338056 |
-| Гнев–Смирение         |  0.349991 |
-| Отвращение–Принятие   |  0.377161 |
-| Привычка–Удивление    |  0.357553 |
-| Стыд–Уверенность      |  0.378833 |
-| Отчуждение–Открытость |  0.366805 |
+| Печаль–Радость        |  1.04973  |
+| Страх–Спокойствие     |  0.825353 |
+| Гнев–Смирение         |  0.872971 |
+| Отвращение–Принятие   |  0.823142 |
+| Привычка–Удивление    |  0.873227 |
+| Стыд–Уверенность      |  0.877278 |
+| Отчуждение–Открытость |  0.825016 |
 
 
 
@@ -228,11 +228,11 @@
 ![Корреляция входящей популярности с эмоциональным состоянием лидеров](../plots/6_leader_burnout_correlation.png)
 *Корреляция входящей популярности с эмоциональным состоянием лидеров*
 
-- **Гнев–Смирение**: r = 0.142, p = 0.0000 (✅ значимо)
+- **Гнев–Смирение**: r = 0.025, p = 0.2306 (❌ незначимо)
 
-- **Страх–Спокойствие**: r = 0.141, p = 0.0000 (✅ значимо)
+- **Страх–Спокойствие**: r = 0.025, p = 0.2263 (❌ незначимо)
 
-- **Печаль–Радость**: r = 0.141, p = 0.0000 (✅ значимо)
+- **Печаль–Радость**: r = 0.024, p = 0.2457 (❌ незначимо)
 
 ![Эмоциональная динамика: лидеры vs сообщество](../plots/6b_leader_burnout_dynamics.png)
 *Эмоциональная динамика: лидеры vs сообщество*
@@ -262,53 +262,37 @@
 ![Эмоциональная ассортативность: эго vs друзья](../plots/8_emotional_bubbles_assortivity.png)
 *Эмоциональная ассортативность: эго vs друзья*
 
-|                       |         r |        p | significant   |
-|:----------------------|----------:|---------:|:--------------|
-| Печаль–Радость        | 0.0318539 | 0.199349 | False         |
-| Страх–Спокойствие     | 0.0318539 | 0.199349 | False         |
-| Гнев–Смирение         | 0.0318539 | 0.199349 | False         |
-| Отвращение–Принятие   | 0.0318539 | 0.199349 | False         |
-| Привычка–Удивление    | 0.0318539 | 0.199349 | False         |
-| Стыд–Уверенность      | 0.0318539 | 0.199349 | False         |
-| Отчуждение–Открытость | 0.0318539 | 0.199349 | False         |
+|                       |          r |         p | significant   |
+|:----------------------|-----------:|----------:|:--------------|
+| Печаль–Радость        | -0.0485644 | 0.0539101 | False         |
+| Страх–Спокойствие     | -0.0485644 | 0.0539101 | False         |
+| Гнев–Смирение         | -0.0485644 | 0.0539101 | False         |
+| Отвращение–Принятие   | -0.0485644 | 0.0539101 | False         |
+| Привычка–Удивление    | -0.0485644 | 0.0539101 | False         |
+| Стыд–Уверенность      | -0.0485644 | 0.0539101 | False         |
+| Отчуждение–Открытость | -0.0485644 | 0.0539101 | False         |
 
 **Интерпретация:** Положительный r означает, что агенты с определённым эмоциональным профилем
 дружат с похожими агентами — подтверждая гипотезу об «эмоциональных пузырях».
 
 
 
-> ⚠️ **Ошибка выполнения:** `Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: (total) memory limit exceeded: would use 13.50 GiB (attempt to allocate chunk of 56.00 MiB), current RSS: 11.85 GiB, maximum: 13.50 GiB. OvercommitTracker decision: Query was selected to stop by OvercommitTracker: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)`
+## 9. Скорость полураспада отношений (Relational Half-Life by Archetype)
 
-```
-Traceback (most recent call last):
-  File "/home/georgiy/Documents/automata-simulation/scripts/research_analyzer.py", line 1167, in run_all
-  File "/home/georgiy/Documents/automata-simulation/scripts/research_analyzer.py", line 1162, in <lambda>
-  File "/home/georgiy/Documents/automata-simulation/scripts/research_analyzer.py", line 1073, in analyze_relational_halflife
-            ax.set_ylabel("Среднее значение параметра при последнем контакте")
-                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    ...<25 lines>...
-        """).strip()
-        ^
-  File "/home/georgiy/Documents/automata-simulation/scripts/research_analyzer.py", line 129, in _q
-    return self.client.query_df(sql)
-           ~~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/georgiy/Documents/automata-simulation/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 582, in query_df
-    return self._context_query(locals(), use_numpy=True, as_pandas=True).df_result
-           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/georgiy/Documents/automata-simulation/venv/lib/python3.14/site-packages/clickhouse_connect/driver/client.py", line 1238, in _context_query
-    return self._query_with_context((self.create_query_context(**kwargs)))
-           ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/georgiy/Documents/automata-simulation/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 304, in _query_with_context
-    response = self._raw_request(body,
-                                 params,
-    ...<3 lines>...
-                                 fields=fields,
-                                 server_wait=not context.streaming)
-  File "/home/georgiy/Documents/automata-simulation/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 571, in _raw_request
-    self._error_handler(response)
-    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
-  File "/home/georgiy/Documents/automata-simulation/venv/lib/python3.14/site-packages/clickhouse_connect/driver/httpclient.py", line 488, in _error_handler
-    raise OperationalError(err_str) if retried else DatabaseError(err_str) from None
-clickhouse_connect.driver.exceptions.DatabaseError: Received ClickHouse exception, code: 241, server response: Code: 241. DB::Exception: (total) memory limit exceeded: would use 13.50 GiB (attempt to allocate chunk of 56.00 MiB), current RSS: 11.85 GiB, maximum: 13.50 GiB. OvercommitTracker decision: Query was selected to stop by OvercommitTracker: While executing FillingRightJoinSide. (MEMORY_LIMIT_EXCEEDED) (for url http://localhost:8123)
+![Профиль угасания отношений перед прекращением контактов](../plots/9a_relational_decay_profile.png)
+*Профиль угасания отношений перед прекращением контактов*
 
-```
+![Уровень отношений при распаде пары по архетипам](../plots/9b_relational_decay_by_archetype.png)
+*Уровень отношений при распаде пары по архетипам*
+
+| archetype    |   avg_trust_at_end |   avg_affinity_at_end |   pairs_count |
+|:-------------|-------------------:|----------------------:|--------------:|
+| Hunt         |            6.64774 |               5.70645 |          1550 |
+| Remembrance  |            6.72561 |               5.60052 |          1527 |
+| Enigmata     |            7.06151 |               4.30886 |          1512 |
+| Preservation |            7.71744 |               4.91041 |          1451 |
+| Erudition    |            7.71809 |               5.04388 |          1504 |
+| Harmony      |            8.04052 |               2.58362 |          1160 |
+| Nihility     |            8.23487 |               4.3202  |          1371 |
+| Trailblaze   |            9.5167  |               4.41507 |          1407 |
+| Elation      |            9.55193 |               3.52077 |          1348 |

@@ -19,6 +19,31 @@ try:
 except ImportError:
     CPP_ENGINE_AVAILABLE = False
 
+class RelationDict(dict):
+    def __init__(self, agent_idx, target_idx, collective, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.agent_idx = agent_idx
+        self.target_idx = target_idx
+        self.collective = collective
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        matrix = self.collective.relations_matrix
+        if key == 'utility':
+            matrix[self.agent_idx, self.target_idx, 0] = value
+        elif key == 'affinity':
+            matrix[self.agent_idx, self.target_idx, 1] = value
+        elif key == 'trust':
+            matrix[self.agent_idx, self.target_idx, 2] = value
+            
+        if self.collective.cpp_engine:
+            self.collective.cpp_engine.set_relation(
+                self.agent_idx, self.target_idx,
+                int(matrix[self.agent_idx, self.target_idx, 0]),
+                int(matrix[self.agent_idx, self.target_idx, 1]),
+                int(matrix[self.agent_idx, self.target_idx, 2])
+            )
+
 class RelationsProxy:
     def __init__(self, agent_name, collective):
         self.agent_name = agent_name
@@ -33,11 +58,14 @@ class RelationsProxy:
             raise KeyError(target_name)
         target_idx = self.collective._id_map[target_name]
         matrix = self.collective.relations_matrix
-        return {
-            'utility': int(matrix[self.agent_idx, target_idx, 0]),
-            'affinity': int(matrix[self.agent_idx, target_idx, 1]),
-            'trust': int(matrix[self.agent_idx, target_idx, 2])
-        }
+        return RelationDict(
+            self.agent_idx, target_idx, self.collective,
+            {
+                'utility': int(matrix[self.agent_idx, target_idx, 0]),
+                'affinity': int(matrix[self.agent_idx, target_idx, 1]),
+                'trust': int(matrix[self.agent_idx, target_idx, 2])
+            }
+        )
 
     def __setitem__(self, target_name, value):
         if target_name not in self.collective._id_map:

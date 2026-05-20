@@ -109,22 +109,31 @@ class ResearchAnalyzer:
 
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 8123,
-        username: str = "default",
-        password: str = "clickhouse_pass",
+        host: str | None = None,
+        port: int | None = None,
+        username: str | None = None,
+        password: str | None = None,
     ) -> None:
+        from dotenv import load_dotenv
+        load_dotenv()
+        self.host = host or os.getenv("CLICKHOUSE_HOST", "localhost")
+        self.port = int(port or os.getenv("CLICKHOUSE_PORT", "8123"))
+        self.username = username or os.getenv("CLICKHOUSE_USER", "default")
+        self.password = password or os.getenv("CLICKHOUSE_PASSWORD", "clickhouse_pass")
+        self.secure = os.getenv("CLICKHOUSE_SECURE", "False").lower() in ("true", "1", "yes")
+
         print("🔌  Подключение к ClickHouse…")
-        self.host = host
-        self.port = port
-        self.username = username
-        self.password = password
-        self.client = clickhouse_connect.get_client(
-            host=host, port=port, username=username, password=password
-        )
+        self.client = self._create_client()
         self._report_parts: list[str] = []
         self._generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print("✅  Подключение установлено.")
+
+    def _create_client(self):
+        import clickhouse_connect
+        return clickhouse_connect.get_client(
+            host=self.host, port=self.port, username=self.username, password=self.password, secure=self.secure,
+            autogenerate_session_id=False, connect_timeout=600, send_receive_timeout=600
+        )
 
     # ──────────────────────────── УТИЛИТЫ ЗАПРОСОВ ───────────────────────────
 
@@ -166,7 +175,7 @@ class ResearchAnalyzer:
             return "homogeneous" if num <= 7 else "heterogeneous"
 
         def _nonlinear(name: str) -> bool:
-            return "NONLINEAR" in name.upper() or "NL" in name.upper()
+            return "Run08" not in name
 
         df["init_type"] = df["scenario_name"].apply(_init_type)
         df["group"] = df["run_name"].apply(_group)
@@ -409,47 +418,51 @@ class ResearchAnalyzer:
         print("📊  [3/9] Анализ реляционных порогов…")
         report = _section("3. Анализ реляционных порогов")
 
-        days_str = ", ".join(str(d) for d in range(30, 1365, 30))
-        rows = []
-        for idx, row in runs_meta.iterrows():
+        days = [90, 180, 270, 360, 450, 540, 630, 720, 810, 900, 990, 1080, 1170]
+        from concurrent.futures import ThreadPoolExecutor
+
+        def process_row(idx_row):
+            idx, row = idx_row
             run_id = row["run_id"]
             scenario_name = row["scenario_name"]
-            # Print progress since sequential execution is easy to track
             print(f"    - Обработка сценария {idx + 1}/{len(runs_meta)}: {scenario_name}")
-            query = f"""
-            SELECT
-                count() AS total_contacts,
-                sum(ar.utility >= 5 OR ar.trust >= 5 OR ar.affinity >= 5) AS soft_contacts,
-                sum((ar.utility >= 95 AND ar.trust >= 95) OR (ar.utility >= 95 AND ar.affinity >= 95) OR (ar.trust >= 95 AND ar.affinity >= 95)) AS hard_contacts
-            FROM interactions i
-            LEFT JOIN (
-                SELECT run_id, day_id, subject_id, object_id, utility, trust, affinity
-                FROM agent_relations
-                WHERE run_id = '{run_id}'
-                  AND day_id IN ({days_str})
-            ) ar
-              ON i.run_id = ar.run_id
-             AND i.day_id = ar.day_id
-             AND i.from_id = ar.subject_id
-             AND i.to_id = ar.object_id
-            WHERE i.run_id = '{run_id}'
-              AND i.day_id IN ({days_str})
-            """
-            df = self._q(query)
-            if df.empty:
-                rows.append({
-                    "scenario_name": scenario_name,
-                    "total_contacts": 0,
-                    "soft_contacts": 0,
-                    "hard_contacts": 0
-                })
-            else:
-                rows.append({
-                    "scenario_name": scenario_name,
-                    "total_contacts": int(df["total_contacts"].iloc[0] or 0),
-                    "soft_contacts": int(df["soft_contacts"].iloc[0] or 0),
-                    "hard_contacts": int(df["hard_contacts"].iloc[0] or 0)
-                })
+            t_client = self._create_client()
+            total_contacts = 0
+            soft_contacts = 0
+            hard_contacts = 0
+            for d in days:
+                query = f"""
+                SELECT
+                    count() AS total_contacts,
+                    sum(ar.utility >= 95 OR ar.trust >= 95 OR ar.affinity >= 95) AS soft_contacts,
+                    sum((ar.utility >= 95 AND ar.trust >= 95) OR (ar.utility >= 95 AND ar.affinity >= 95) OR (ar.trust >= 95 AND ar.affinity >= 95)) AS hard_contacts
+                FROM (
+                    SELECT subject_id, object_id, utility, trust, affinity
+                    FROM agent_relations
+                    WHERE run_id = '{run_id}' AND day_id = {d} AND slot_id = 9
+                ) ar
+                JOIN (
+                    SELECT from_id, to_id
+                    FROM interactions
+                    WHERE run_id = '{run_id}' AND day_id = {d}
+                ) i
+                  ON i.from_id = ar.subject_id
+                 AND i.to_id = ar.object_id
+                """
+                df = t_client.query_df(query)
+                if not df.empty:
+                    total_contacts += int(df["total_contacts"].iloc[0] or 0)
+                    soft_contacts += int(df["soft_contacts"].iloc[0] or 0)
+                    hard_contacts += int(df["hard_contacts"].iloc[0] or 0)
+            return {
+                "scenario_name": scenario_name,
+                "total_contacts": total_contacts,
+                "soft_contacts": soft_contacts,
+                "hard_contacts": hard_contacts
+            }
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            rows = list(executor.map(process_row, list(runs_meta.iterrows())))
 
         df_thresh = pd.DataFrame(rows)
         df_thresh["soft_pct"] = np.where(df_thresh["total_contacts"] > 0, df_thresh["soft_contacts"] / df_thresh["total_contacts"] * 100, 0.0)
@@ -460,7 +473,7 @@ class ResearchAnalyzer:
 
         fig, axes = plt.subplots(1, 2, figsize=(16, 5))
         for ax, col, title in [
-            (axes[0], "soft_pct", "Мягкое условие (≥5 по одному параметру)"),
+            (axes[0], "soft_pct", "Мягкое условие (≥95 по одному параметру)"),
             (axes[1], "hard_pct", "Строгое условие (≥95 по двум параметрам)"),
         ]:
             colors = [PALETTE_3[INIT_TYPES.index(t)] if t in INIT_TYPES else "grey"
@@ -499,6 +512,25 @@ class ResearchAnalyzer:
         semester_size = 171
         n_semesters = 8
 
+        # Динамические семестровые границы
+        max_day = 1213
+        try:
+            max_day = int(self._scalar("SELECT max(day_id) FROM agent_states"))
+        except Exception:
+            pass
+
+        sem_ranges = {
+            1: (1, 153),
+            2: (154, 303),
+            3: (304, 456),
+            4: (457, 606),
+            5: (607, 759),
+            6: (760, 909),
+            7: (910, 1062),
+            8: (1063, min(1213, max_day))
+        }
+        n_semesters = 8
+
         results = {}
         for threshold in STABILITY_THRESHOLDS:
             thr_label = f"{threshold*100:.1f}%"
@@ -506,8 +538,7 @@ class ResearchAnalyzer:
             # За каждый семестр находим пары, где взаимная доля >= threshold
             rows = []
             for sem in range(1, n_semesters + 1):
-                day_from = (sem - 1) * semester_size + 1
-                day_to = sem * semester_size
+                day_from, day_to = sem_ranges[sem]
 
                 df_sem = self._q(
                     f"""
@@ -566,11 +597,11 @@ class ResearchAnalyzer:
                         p.pair_contacts,
                         at_a.total AS total_a,
                         at_b.total AS total_b,
-                        p.pair_contacts / (at_a.total + at_b.total - p.pair_contacts) AS jaccard
+                        greatest(p.pair_contacts / at_a.total, p.pair_contacts / at_b.total) AS max_fraction
                     FROM pairs p
                     JOIN agent_total at_a ON p.a = at_a.agent
                     JOIN agent_total at_b ON p.b = at_b.agent
-                    WHERE p.pair_contacts / (at_a.total + at_b.total - p.pair_contacts) >= {threshold}
+                    WHERE greatest(p.pair_contacts / at_a.total, p.pair_contacts / at_b.total) >= {threshold}
                     """
                 )
                 rows.append({"semester": sem, "stable_pairs": len(df_sem2)})
@@ -817,28 +848,56 @@ class ResearchAnalyzer:
         print("📊  [7/9] Аттракторная сходимость…")
         report = _section("7. «Аттракторная сходимость» сетей (Topological Memory)")
 
-        # Финальные матрицы: среднее Trust между архетипами на последних 50 днях
         matrices = {}
-        for _, row in runs_meta.iterrows():
+        from concurrent.futures import ThreadPoolExecutor
+
+        def process_row(idx_row):
+            idx, row = idx_row
             rid = row["run_id"]
-            df_mat = self._q(
+            t_client = self._create_client()
+            max_day_run = 1213
+            try:
+                max_day_run = int(t_client.query(f"SELECT max(day_id) FROM agent_states WHERE run_id = '{rid}'").result_rows[0][0])
+            except Exception:
+                pass
+            limit_day = max_day_run - 2
+
+            df_mat = t_client.query_df(
                 f"""
                 SELECT
                     ar1.archetype AS arch_from,
                     ar2.archetype AS arch_to,
                     avg(rel.trust) AS avg_trust
-                FROM agent_relations rel
-                JOIN agent_registry ar1 ON rel.run_id = ar1.run_id AND rel.subject_id = ar1.agent_id
-                JOIN agent_registry ar2 ON rel.run_id = ar2.run_id AND rel.object_id  = ar2.agent_id
-                WHERE rel.run_id = '{rid}'
-                  AND rel.day_id >= 1315
+                FROM (
+                    SELECT subject_id, object_id, trust
+                    FROM agent_relations
+                    WHERE run_id = '{rid}'
+                      AND day_id >= {limit_day}
+                      AND slot_id = 9
+                ) rel
+                JOIN (
+                    SELECT agent_id, archetype
+                    FROM agent_registry
+                    WHERE run_id = '{rid}'
+                ) ar1 ON rel.subject_id = ar1.agent_id
+                JOIN (
+                    SELECT agent_id, archetype
+                    FROM agent_registry
+                    WHERE run_id = '{rid}'
+                ) ar2 ON rel.object_id = ar2.agent_id
                 GROUP BY arch_from, arch_to
                 """
             )
+            return row["scenario_name"], df_mat
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(executor.map(process_row, list(runs_meta.iterrows())))
+
+        for scenario_name, df_mat in results:
             if not df_mat.empty:
                 pivot = df_mat.pivot_table(index="arch_from", columns="arch_to",
                                            values="avg_trust", aggfunc="mean").fillna(0)
-                matrices[row["scenario_name"]] = pivot
+                matrices[scenario_name] = pivot
 
         # Попарное косинусное сходство между сценариями с одинаковой группой архетипов
         # Группируем по run_name (одинаковый состав архетипов) — разный стартовый тип
@@ -982,20 +1041,21 @@ class ResearchAnalyzer:
 
     # ──────────────── 9. СКОРОСТЬ ПОЛУРАСПАДА ОТНОШЕНИЙ ──────────────────────
 
-    def analyze_relational_halflife(self) -> str:
+    def analyze_relational_halflife(self, rep_run_id: str) -> str:
         print("📊  [9/9] Скорость полураспада отношений…")
         report = _section("9. Скорость полураспада отношений (Relational Half-Life by Archetype)")
 
         # Находим пары, которые в последние 200 дней больше не встречались
         # (последний совместный день < 1165), и смотрим угасание trust/affinity
         df_last_contact = self._q(
-            """
+            f"""
             SELECT
                 run_id,
                 greatest(from_id, to_id) AS a,
                 least(from_id, to_id)    AS b,
                 max(day_id)              AS last_day
             FROM interactions
+            WHERE run_id = '{rep_run_id}'
             GROUP BY run_id, a, b
             HAVING last_day < 1165 AND last_day > 200
             LIMIT 20000
@@ -1074,36 +1134,76 @@ class ResearchAnalyzer:
 
         # По архетипам
         if run_pairs:
-            sampled_runs_str = ", ".join(f"'{r}'" for r in list(run_pairs.keys()))
-            df_arch_decay = self._q(
-                f"""
-                WITH broken_pairs AS (
-                    SELECT
-                        run_id,
-                        greatest(from_id, to_id) AS a,
-                        least(from_id, to_id)    AS b,
-                        max(day_id) AS last_day
-                    FROM interactions
-                    WHERE run_id IN ({sampled_runs_str})
-                    GROUP BY run_id, a, b
-                    HAVING last_day < 1165 AND last_day > 200
-                )
+            sampled_runs_list = list(run_pairs.keys())
+            sampled_runs_str = ", ".join(f"'{r}'" for r in sampled_runs_list)
+            
+            print("       - Загрузка распавшихся пар…")
+            df_bp = self._q(f"""
                 SELECT
-                    ar.archetype,
-                    avg(rel.trust) AS avg_trust_at_end,
-                    avg(rel.affinity) AS avg_affinity_at_end,
-                    count() AS pairs_count
-                FROM broken_pairs bp
-                JOIN agent_registry ar ON bp.run_id = ar.run_id AND bp.a = ar.agent_id
-                JOIN agent_relations rel ON bp.run_id = rel.run_id
-                    AND rel.subject_id = bp.a
-                    AND rel.object_id = bp.b
-                    AND rel.day_id = bp.last_day
-                WHERE rel.run_id IN ({sampled_runs_str})
-                GROUP BY ar.archetype
-                ORDER BY avg_trust_at_end
-                """
-            )
+                    run_id,
+                    greatest(from_id, to_id) AS a,
+                    least(from_id, to_id)    AS b,
+                    max(day_id) AS last_day
+                FROM interactions
+                WHERE run_id IN ({sampled_runs_str})
+                GROUP BY run_id, a, b
+                HAVING last_day < 1165 AND last_day > 200
+                LIMIT 50000
+            """)
+            
+            if df_bp.empty:
+                df_arch_decay = pd.DataFrame()
+            else:
+                print("       - Загрузка архетипов агентов…")
+                df_registry = self._q(f"""
+                    SELECT run_id, agent_id, archetype
+                    FROM agent_registry
+                    WHERE run_id IN ({sampled_runs_str})
+                """)
+                
+                print(f"       - Извлечение конечных отношений для {len(df_bp)} пар…")
+                rel_rows = []
+                bp_records = df_bp.to_dict('records')
+                chunk_size = 5000
+                for i in range(0, len(bp_records), chunk_size):
+                    chunk = bp_records[i:i+chunk_size]
+                    tuple_str = ", ".join([
+                        f"({r['a']}, {r['b']}, {r['last_day']})"
+                        for r in chunk
+                    ])
+                    q_chunk = f"""
+                        SELECT run_id, subject_id, object_id, day_id, trust, affinity
+                        FROM agent_relations
+                        WHERE run_id IN ({sampled_runs_str})
+                          AND slot_id = 9
+                          AND (subject_id, object_id, day_id) IN ({tuple_str})
+                    """
+                    df_chunk_rel = self._q(q_chunk)
+                    rel_rows.append(df_chunk_rel)
+                
+                df_all_rel = pd.concat(rel_rows, ignore_index=True) if rel_rows else pd.DataFrame()
+                
+                if not df_all_rel.empty:
+                    df_m = df_all_rel.merge(
+                        df_bp,
+                        left_on=['run_id', 'subject_id', 'object_id', 'day_id'],
+                        right_on=['run_id', 'a', 'b', 'last_day']
+                    )
+                    df_m = df_m.merge(
+                        df_registry,
+                        left_on=['run_id', 'subject_id'],
+                        right_on=['run_id', 'agent_id']
+                    )
+                    df_arch_decay = df_m.groupby('archetype')[['trust', 'affinity']].mean().reset_index()
+                    df_arch_decay = df_arch_decay.rename(columns={
+                        'trust': 'avg_trust_at_end',
+                        'affinity': 'avg_affinity_at_end'
+                    })
+                    counts = df_m.groupby('archetype').size().reset_index(name='pairs_count')
+                    df_arch_decay = df_arch_decay.merge(counts, on='archetype')
+                    df_arch_decay = df_arch_decay.sort_values('avg_trust_at_end')
+                else:
+                    df_arch_decay = pd.DataFrame()
         else:
             df_arch_decay = pd.DataFrame()
 
@@ -1159,12 +1259,23 @@ class ResearchAnalyzer:
         runs_meta = self._load_runs_meta()
         print(f"   Загружено сценариев: {len(runs_meta)}")
 
-        # Найдём репрезентативный run_id для детального анализа (предпочтительно MIXED или RANDOM)
-        mixed_runs = runs_meta[runs_meta["scenario_name"].str.contains("MIXED", na=False)]
-        if not mixed_runs.empty:
-            rep_run_id = mixed_runs["run_id"].iloc[0]
+        # Найдём репрезентативный run_id для детального анализа (предпочтительно гетерогенный MIXED)
+        runs_meta["group"] = runs_meta["scenario_name"].apply(
+            lambda name: "homogeneous" if int(name.split("_")[0].replace("Run", "")) <= 7 else "heterogeneous"
+        )
+        rep_run = runs_meta[
+            (runs_meta["group"] == "heterogeneous") &
+            (runs_meta["scenario_name"].str.contains("MIXED", na=False))
+        ]
+        if not rep_run.empty:
+            rep_run_id = rep_run["run_id"].iloc[0]
+            print(f"🎯  Выбран репрезентативный гетерогенный сценарий: {rep_run['scenario_name'].iloc[0]}")
         else:
-            rep_run_id = runs_meta["run_id"].iloc[0]
+            mixed_runs = runs_meta[runs_meta["scenario_name"].str.contains("MIXED", na=False)]
+            if not mixed_runs.empty:
+                rep_run_id = mixed_runs["run_id"].iloc[0]
+            else:
+                rep_run_id = runs_meta["run_id"].iloc[0]
 
         analyses = [
             lambda: self.analyze_basic_interactions(runs_meta),
@@ -1175,7 +1286,7 @@ class ResearchAnalyzer:
             lambda: self.analyze_leader_burnout(rep_run_id),
             lambda: self.analyze_attractor_convergence(runs_meta),
             lambda: self.analyze_emotional_bubbles(rep_run_id),
-            lambda: self.analyze_relational_halflife(),
+            lambda: self.analyze_relational_halflife(rep_run_id),
         ]
 
         for fn in analyses:
@@ -1196,10 +1307,5 @@ class ResearchAnalyzer:
 # ─────────────────────────────── ТОЧКА ВХОДА ─────────────────────────────────
 
 if __name__ == "__main__":
-    analyzer = ResearchAnalyzer(
-        host="localhost",
-        port=8123,
-        username="default",
-        password="clickhouse_pass",
-    )
+    analyzer = ResearchAnalyzer()
     analyzer.run_all()
