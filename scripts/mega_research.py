@@ -317,7 +317,7 @@ class MegaResearch:
         print("[Progress]  [03/18] Реляционные пороги…", flush=True)
         rep = h2("3. Анализ реляционных порогов")
 
-        days_str = "100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300"
+        days_str = "90, 180, 270, 360, 450, 540, 630, 720, 810, 900, 990, 1080, 1170, 1260, 1350"
         rows = []
         for idx, row in meta.iterrows():
             run_id = row["run_id"]
@@ -326,13 +326,13 @@ class MegaResearch:
             query = f"""
             SELECT
                 count() AS total,
-                sum(ar.utility >= 95 OR ar.trust >= 95 OR ar.affinity >= 95) AS soft,
-                sum((ar.utility >= 95 AND ar.trust >= 95) OR (ar.utility >= 95 AND ar.affinity >= 95) OR (ar.trust >= 95 AND ar.affinity >= 95)) AS hard
+                sum(ar.utility >= 75 OR ar.trust >= 75 OR ar.affinity >= 75) AS soft,
+                sum((ar.utility >= 75 AND ar.trust >= 75) OR (ar.utility >= 75 AND ar.affinity >= 75) OR (ar.trust >= 75 AND ar.affinity >= 75)) AS hard
             FROM interactions i
             JOIN agent_relations ar
               ON i.run_id = ar.run_id
              AND i.day_id = ar.day_id
-             AND i.slot_id = ar.slot_id
+             AND ar.slot_id = 9
              AND i.from_id = ar.subject_id
              AND i.to_id = ar.object_id
             WHERE i.run_id = '{run_id}'
@@ -356,8 +356,8 @@ class MegaResearch:
         df = df.merge(meta[["scenario_name","init_type"]], on="scenario_name", how="left")
 
         fig, axes = plt.subplots(1, 2, figsize=(16, 5))
-        for ax, col, title in [(axes[0],"soft_pct","Мягкое (≥95 по одному)"),
-                                (axes[1],"hard_pct","Строгое (≥95 по двум)")]:
+        for ax, col, title in [(axes[0],"soft_pct","Мягкое (≥75 по одному)"),
+                                (axes[1],"hard_pct","Строгое (≥75 по двум)")]:
             clrs = [C3[INIT_TYPES.index(t)] if t in INIT_TYPES else "#999" for t in df["init_type"]]
             ax.bar(df["scenario_name"], df[col], color=clrs, edgecolor="white")
             ax.set_title(title, fontweight="bold"); ax.set_ylabel("% контактов")
@@ -365,7 +365,7 @@ class MegaResearch:
         from matplotlib.patches import Patch
         axes[1].legend(handles=[Patch(facecolor=C3[i],label=t) for i,t in enumerate(INIT_TYPES)],
                        title="Инициализация")
-        fig.suptitle("Доля контактов при устойчивых связях", fontsize=12, fontweight="bold")
+        fig.suptitle("Доля контактов при устойчивых связях (порог ≥75)", fontsize=12, fontweight="bold")
         fig.tight_layout(); p = savefig(fig, "03_relational_thresholds")
 
         rep += img_md(p, "Реляционные пороги по сценариям")
@@ -379,58 +379,83 @@ class MegaResearch:
     def b04_stable_pairs(self) -> str:
         print("[Progress]  [04/18] Стабильные пары…", flush=True)
         rep = h2("4. Стабильные пары")
+        rep += "\n**Описание:** Оценка распределения стабильности связей (по индексу Жаккара) по всем 42 университетам в динамике по семестрам.\n"
 
-        thresholds = [0.05, 0.10, 0.15, 0.20]
-        results: Dict[str, pd.DataFrame] = {}
+        bins = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        labels = ["0-10%", "10-20%", "20-30%", "30-40%", "40-50%", "50-60%", "60-70%", "70-80%", "80-90%", "90-100%"]
+        
+        semester_rows = []
+        for sem in range(1, N_SEMESTERS+1):
+            d1, d2 = sem_range(sem)
+            print(f"[Progress]     - Обработка семестра {sem}/{N_SEMESTERS}", flush=True)
+            df_s = self.q(f"""
+                WITH
+                pair_cnt AS (
+                    SELECT run_id,
+                           greatest(from_id,to_id) AS a,
+                           least(from_id,to_id)    AS b,
+                           count() AS pc
+                    FROM interactions
+                    WHERE day_id BETWEEN {d1} AND {d2}
+                    GROUP BY run_id, a, b
+                ),
+                agent_total AS (
+                    SELECT run_id, agent_id, sum(cnt) AS tc FROM (
+                        SELECT run_id, from_id AS agent_id, count() AS cnt FROM interactions
+                        WHERE day_id BETWEEN {d1} AND {d2} GROUP BY run_id, from_id
+                        UNION ALL
+                        SELECT run_id, to_id AS agent_id, count() AS cnt FROM interactions
+                        WHERE day_id BETWEEN {d1} AND {d2} GROUP BY run_id, to_id
+                    ) GROUP BY run_id, agent_id
+                )
+                SELECT
+                    p.pc / at_a.tc AS jaccard
+                FROM pair_cnt p
+                JOIN agent_total at_a ON p.run_id = at_a.run_id AND p.a = at_a.agent_id
+                UNION ALL
+                SELECT
+                    p.pc / at_b.tc AS jaccard
+                FROM pair_cnt p
+                JOIN agent_total at_b ON p.run_id = at_b.run_id AND p.b = at_b.agent_id
+            """)
+            
+            row = {"Семестр": f"С{sem}"}
+            # Инициализация нулями
+            for lbl in labels:
+                row[lbl] = 0.0
+                
+            if not df_s.empty:
+                # Группируем по корзинам Жаккара
+                binned = pd.cut(df_s["jaccard"], bins=bins, labels=labels, include_lowest=True)
+                counts = binned.value_counts()
+                for lbl in labels:
+                    # Среднее число пар на один университет
+                    row[lbl] = round(float(counts.get(lbl, 0)) / 42.0, 2)
+            semester_rows.append(row)
 
-        for thr in thresholds:
-            rows = []
-            for sem in range(1, N_SEMESTERS+1):
-                d1, d2 = sem_range(sem)
-                # Контакты пары / сумма контактов агента A = метрика стабильности
-                df_s = self.q(f"""
-                    WITH
-                    pair_cnt AS (
-                        SELECT greatest(from_id,to_id) AS a,
-                               least(from_id,to_id)    AS b,
-                               count() AS pc
-                        FROM interactions
-                        WHERE run_id = '{self.rep_run_id}' AND day_id BETWEEN {d1} AND {d2}
-                        GROUP BY a,b
-                    ),
-                    agent_total AS (
-                        SELECT agent_id, sum(cnt) AS tc FROM (
-                            SELECT from_id AS agent_id, count() AS cnt FROM interactions
-                            WHERE run_id = '{self.rep_run_id}' AND day_id BETWEEN {d1} AND {d2} GROUP BY from_id
-                            UNION ALL
-                            SELECT to_id AS agent_id, count() AS cnt FROM interactions
-                            WHERE run_id = '{self.rep_run_id}' AND day_id BETWEEN {d1} AND {d2} GROUP BY to_id
-                        ) GROUP BY agent_id
-                    )
-                    SELECT count() AS stable_pairs
-                    FROM pair_cnt p
-                    JOIN agent_total at_a ON p.a=at_a.agent_id
-                    JOIN agent_total at_b ON p.b=at_b.agent_id
-                    WHERE p.pc/(at_a.tc+at_b.tc-p.pc) >= {thr}
-                """)
-                rows.append({"Семестр": sem,
-                             "Стаб.пар": int(df_s["stable_pairs"].iloc[0]) if not df_s.empty else 0})
-            results[f"{thr*100:.1f}%"] = pd.DataFrame(rows)
+        df_res = pd.DataFrame(semester_rows)
 
-        fig, ax = plt.subplots(figsize=(10, 6))
-        colors_t = ["#1565C0","#2E7D32","#E65100","#6A1B9A"]
-        for (label, df_r), c in zip(results.items(), colors_t):
-            ax.plot(df_r["Семестр"], df_r["Стаб.пар"], marker="o", lw=2, color=c, label=f"Порог {label}")
-        ax.set_title("Динамика стабильных пар по семестрам", fontsize=12, fontweight="bold")
-        ax.set_xlabel("Семестр"); ax.set_ylabel("Количество стабильных пар")
-        ax.set_xticks(range(1, N_SEMESTERS+1))
-        ax.set_xticklabels([f"С{i}" for i in range(1, N_SEMESTERS+1)])
-        ax.legend(title="Порог стабильности"); ax.grid(True, alpha=.3)
-        fig.tight_layout(); p = savefig(fig, "04_stable_pairs")
+        # Построим красивый stacked bar chart
+        fig, ax = plt.subplots(figsize=(12, 7))
+        # Используем палитру для 10 категорий
+        colors = sns.color_palette("Spectral_r", len(labels))
+        
+        bottom = np.zeros(len(df_res))
+        for i, lbl in enumerate(labels):
+            ax.bar(df_res["Семестр"], df_res[lbl], bottom=bottom, label=lbl, color=colors[i], edgecolor="white", width=0.6)
+            bottom += df_res[lbl].values
 
-        rep += img_md(p, "Динамика стабильных пар по семестрам")
-        for lbl, df_r in results.items():
-            rep += f"\n**Порог {lbl}:**\n" + df_r.to_markdown(index=False) + "\n"
+        ax.set_title("Распределение стабильности пар по семестрам (в среднем на 1 университет)", fontsize=12, fontweight="bold")
+        ax.set_xlabel("Семестр")
+        ax.set_ylabel("Среднее количество пар")
+        ax.legend(title="Интервал Жаккара (стабильность)", bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.grid(True, axis='y', alpha=.3)
+        fig.tight_layout()
+        p = savefig(fig, "04_stable_pairs")
+
+        rep += img_md(p, "Динамика распределения стабильных пар по семестрам")
+        rep += "\n### Распределение стабильных пар (среднее на один университет):\n"
+        rep += df_res.to_markdown(index=False) + "\n"
         return rep
 
     # ══════════════════════════════════════════════════════════════
@@ -445,7 +470,6 @@ class MegaResearch:
         df = self.q(f"""
             SELECT day_id, {emo_sql}
             FROM agent_states
-            WHERE run_id = '{self.rep_run_id}'
             GROUP BY day_id ORDER BY day_id
         """)
 
@@ -468,8 +492,8 @@ class MegaResearch:
         hm = df.groupby("bin")[EMOTION_AXES].mean().T
         hm.index = [EMOTION_RU[e] for e in EMOTION_AXES]
         fig, ax = plt.subplots(figsize=(16, 5))
-        sns.heatmap(hm, ax=ax, cmap="RdYlGn", center=0, vmin=-15, vmax=15,
-                    linewidths=.2, cbar_kws={"label":"Среднее [-30,30]"})
+        sns.heatmap(hm, ax=ax, cmap="RdYlGn", center=0,
+                    linewidths=.2, cbar_kws={"label":"Среднее"})
         ax.set_title("Тепловая карта эмоций во времени", fontsize=12, fontweight="bold")
         ax.set_xlabel("Временной бин (1–50)"); ax.set_ylabel("Эмоциональная ось")
         fig.tight_layout(); p5b = savefig(fig, "05b_emotion_heatmap")
@@ -494,16 +518,15 @@ class MegaResearch:
         rep = h2("6. Эффект «Выгорания лидера»")
 
         pop = self.q(f"""
-            SELECT object_id AS agent_id,
+            SELECT run_id, object_id AS agent_id,
                    countIf(trust>=80 AND affinity>=80) AS fans
             FROM agent_relations
-            WHERE run_id = '{self.rep_run_id}'
-              AND day_id IN (30,60,90,120,150,180,210,240,270,300,330,360,390,420,450,480,510,540,570,600,630,660,690,720,750,780,810,840,870,900,930,960,990,1020,1050,1080,1110,1140,1170,1200,1230,1260,1290,1320,1350)
-            GROUP BY object_id ORDER BY fans DESC
+            WHERE day_id IN (145,290,435,580,725,870,1015,1160,1305)
+            GROUP BY run_id, object_id ORDER BY fans DESC
         """)
         emo_sql = ", ".join([f"avg({e}) AS {e}" for e in ["anger_humility","fear_calm","sadness_joy"]])
-        emo = self.q(f"SELECT agent_id, {emo_sql} FROM agent_states WHERE run_id = '{self.rep_run_id}' GROUP BY agent_id")
-        df  = pop.merge(emo, on="agent_id", how="inner")
+        emo = self.q(f"SELECT run_id, agent_id, {emo_sql} FROM agent_states GROUP BY run_id, agent_id")
+        df  = pop.merge(emo, on=["run_id", "agent_id"], how="inner")
 
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
         cols_burn = [("anger_humility","Гнев–Смирение"),
@@ -595,23 +618,22 @@ class MegaResearch:
         rep = h2("8. Эмоциональные пузыри (Emotional Contagion)")
 
         friends = self.q(f"""
-            SELECT subject_id AS agent_id, object_id AS friend_id,
+            SELECT run_id, subject_id AS agent_id, object_id AS friend_id,
                    avg(affinity) AS aff
             FROM agent_relations
-            WHERE run_id = '{self.rep_run_id}'
-              AND day_id>=1265
-            GROUP BY subject_id, object_id
-            QUALIFY row_number() OVER (PARTITION BY subject_id ORDER BY avg(affinity) DESC) <= 3
+            WHERE day_id=1365
+            GROUP BY run_id, subject_id, object_id
+            QUALIFY row_number() OVER (PARTITION BY run_id, subject_id ORDER BY avg(affinity) DESC) <= 3
         """)
         emo_sql = ", ".join([f"avg({e}) AS {e}" for e in EMOTION_AXES])
-        ego  = self.q(f"SELECT agent_id, {emo_sql} FROM agent_states WHERE run_id = '{self.rep_run_id}' AND day_id>=1265 GROUP BY agent_id")
+        ego  = self.q(f"SELECT run_id, agent_id, {emo_sql} FROM agent_states WHERE day_id=1365 GROUP BY run_id, agent_id")
 
         femo = friends.merge(
             ego.rename(columns={"agent_id":"friend_id"} |
                        {e:f"f_{e}" for e in EMOTION_AXES}),
-            on="friend_id", how="inner"
-        ).groupby("agent_id")[[f"f_{e}" for e in EMOTION_AXES]].mean().reset_index()
-        df = ego.merge(femo, on="agent_id", how="inner")
+            on=["run_id", "friend_id"], how="inner"
+        ).groupby(["run_id", "agent_id"])[[f"f_{e}" for e in EMOTION_AXES]].mean().reset_index()
+        df = ego.merge(femo, on=["run_id", "agent_id"], how="inner")
 
         assort = {}
         for e in EMOTION_AXES:
@@ -648,42 +670,44 @@ class MegaResearch:
         print("[Progress]  [09/18] Период полураспада…", flush=True)
         rep = h2("9. Скорость полураспада отношений")
 
-        # Пары, прекратившие контакты до дня 1165
-        broken = self.q(f"""
-            SELECT run_id,
-                   greatest(from_id,to_id) AS a,
-                   least(from_id,to_id)    AS b,
-                   max(day_id)               AS last_day
-            FROM interactions
-            WHERE run_id = '{self.rep_run_id}'
-            GROUP BY run_id,a,b
-            HAVING last_day<1165 AND last_day>200
-            LIMIT 10000
-        """)
-        if broken.empty:
+        # Получаем все run_id
+        runs = self.meta()["run_id"].tolist()
+        df_list = []
+        for rid in runs:
+            sub_df = self.q(f"""
+                WITH bp AS (
+                    SELECT greatest(from_id,to_id) AS a, least(from_id,to_id) AS b,
+                           max(day_id) AS last_day
+                    FROM interactions
+                    WHERE run_id = '{rid}'
+                    GROUP BY a, b
+                    HAVING last_day<1165 AND last_day>200
+                )
+                SELECT ar.archetype,
+                       sum(rel.trust)    AS sum_trust,
+                       sum(rel.affinity) AS sum_affinity,
+                       count()           AS n_pairs
+                FROM bp
+                JOIN agent_registry ar ON ar.run_id = '{rid}' AND bp.a = ar.agent_id
+                JOIN agent_relations rel ON rel.run_id = '{rid}'
+                    AND rel.subject_id = bp.a AND rel.object_id = bp.b AND rel.day_id = bp.last_day
+                GROUP BY ar.archetype
+            """)
+            if not sub_df.empty:
+                df_list.append(sub_df)
+
+        if len(df_list) == 0:
             return rep + "\n*Нет данных.*\n"
 
-        # По архетипам: уровень trust/affinity в момент последнего контакта
-        arch_decay = self.q(f"""
-            WITH bp AS (
-                SELECT run_id, greatest(from_id,to_id) AS a, least(from_id,to_id) AS b,
-                       max(day_id) AS last_day
-                FROM interactions
-                WHERE run_id = '{self.rep_run_id}'
-                GROUP BY run_id,a,b
-                HAVING last_day<1165 AND last_day>200
-            )
-            SELECT ar.archetype,
-                   avg(rel.trust)    AS trust_at_end,
-                   avg(rel.affinity) AS affinity_at_end,
-                   count()           AS n_pairs
-            FROM bp
-            JOIN agent_registry ar ON bp.run_id=ar.run_id AND bp.a=ar.agent_id
-            JOIN agent_relations rel ON bp.run_id=rel.run_id
-                AND rel.subject_id=bp.a AND rel.object_id=bp.b AND rel.day_id=bp.last_day
-            WHERE rel.run_id = '{self.rep_run_id}'
-            GROUP BY ar.archetype ORDER BY trust_at_end
-        """)
+        merged_df = pd.concat(df_list, ignore_index=True)
+        arch_decay = merged_df.groupby("archetype").agg(
+            sum_trust=("sum_trust", "sum"),
+            sum_affinity=("sum_affinity", "sum"),
+            n_pairs=("n_pairs", "sum")
+        ).reset_index()
+        arch_decay["trust_at_end"] = arch_decay["sum_trust"] / arch_decay["n_pairs"]
+        arch_decay["affinity_at_end"] = arch_decay["sum_affinity"] / arch_decay["n_pairs"]
+        arch_decay = arch_decay.sort_values(by="trust_at_end")
 
         if not arch_decay.empty:
             fig, ax = plt.subplots(figsize=(10, 5))
@@ -711,20 +735,20 @@ class MegaResearch:
 
         # Воскресенья ≈ каждые 6 дней (6-дневная учебная неделя)
         # Классифицируем агентов по среднему уровню sadness_joy
+        # Воскресенья ≈ каждые 6 дней (6-дневная учебная неделя)
+        # Классифицируем агентов по среднему уровню sadness_joy
         agent_baseline = self.q(f"""
-            SELECT agent_id, avg(sadness_joy) AS baseline_joy
+            SELECT run_id, agent_id, avg(sadness_joy) AS baseline_joy
             FROM agent_states
-            WHERE run_id = '{self.rep_run_id}'
-              AND day_id<=200
-            GROUP BY agent_id
+            WHERE day_id<=200
+            GROUP BY run_id, agent_id
         """)
         # Динамика по воскресеньям (day_id % 6 == 0)
         emo_sql = ", ".join([f"avg({e}) AS {e}" for e in EMOTION_AXES])
         sundays = self.q(f"""
             SELECT day_id, {emo_sql}
             FROM agent_states
-            WHERE run_id = '{self.rep_run_id}'
-              AND day_id % 6 = 0
+            WHERE day_id % 6 = 0
             GROUP BY day_id ORDER BY day_id
         """)
 
@@ -733,7 +757,6 @@ class MegaResearch:
         all_days = self.q(f"""
             SELECT day_id, {emo_sql}
             FROM agent_states
-            WHERE run_id = '{self.rep_run_id}'
             GROUP BY day_id ORDER BY day_id
         """)
         all_days["is_sunday"] = all_days["day_id"] % 6 == 0
@@ -766,32 +789,32 @@ class MegaResearch:
         ax.set_xlabel("Базовый sadness_joy"); ax.set_ylabel("Число агентов"); ax.legend()
         fig.tight_layout(); p10 = savefig(fig, "10_sunday_reset")
 
-        # Скорость восстановления: агенты Q25 vs Q75
-        depressed_ids = agent_baseline[agent_baseline["baseline_joy"]<=q25]["agent_id"].tolist()
-        happy_ids     = agent_baseline[agent_baseline["baseline_joy"]>=q75]["agent_id"].tolist()
+        # Скорость восстановления: раздельно для депрессивных (<=q25) и счастливых (>=q75) по всем 42 университетам
+        df_recovery = self.q(f"""
+            WITH
+            agent_baseline AS (
+                SELECT run_id, agent_id, avg(sadness_joy) AS baseline_joy
+                FROM agent_states
+                WHERE day_id<=200
+                GROUP BY run_id, agent_id
+            )
+            SELECT day_id,
+                   avgIf(sadness_joy, baseline_joy <= {q25}) AS depressed_joy,
+                   avgIf(sadness_joy, baseline_joy >= {q75}) AS happy_joy
+            FROM agent_states s
+            JOIN agent_baseline b ON s.run_id=b.run_id AND s.agent_id=b.agent_id
+            WHERE s.day_id%6 IN (0,1,2,3,4,5)
+            GROUP BY day_id ORDER BY day_id
+            LIMIT 400
+        """)
 
-        # Ограничиваем выборку для IN-запроса
-        dep_str = ", ".join(map(str, depressed_ids[:300]))
-        hap_str = ", ".join(map(str, happy_ids[:300]))
-
-        if dep_str and hap_str:
-            df_dep = self.q(f"""
-                SELECT day_id, avg(sadness_joy) AS joy
-                FROM agent_states WHERE run_id = '{self.rep_run_id}' AND agent_id IN ({dep_str}) AND day_id%6 IN (0,1,2,3,4,5)
-                GROUP BY day_id ORDER BY day_id LIMIT 400
-            """)
-            df_hap = self.q(f"""
-                SELECT day_id, avg(sadness_joy) AS joy
-                FROM agent_states WHERE run_id = '{self.rep_run_id}' AND agent_id IN ({hap_str}) AND day_id%6 IN (0,1,2,3,4,5)
-                GROUP BY day_id ORDER BY day_id LIMIT 400
-            """)
-
+        if not df_recovery.empty:
             fig, ax = plt.subplots(figsize=(12, 5))
-            ax.plot(df_dep["day_id"], df_dep["joy"], color="#EF5350", lw=1.5, label="Депрессивные (Q25)")
-            ax.plot(df_hap["day_id"], df_hap["joy"], color="#4CAF50", lw=1.5, label="Счастливые (Q75)")
+            ax.plot(df_recovery["day_id"], df_recovery["depressed_joy"], color="#EF5350", lw=1.5, label="Депрессивные (Q25)")
+            ax.plot(df_recovery["day_id"], df_recovery["happy_joy"], color="#4CAF50", lw=1.5, label="Счастливые (Q75)")
             for sd in sun_days["day_id"].values[:70]:
                 ax.axvline(sd, color="orange", lw=.4, alpha=.5)
-            ax.set_title("Восстановление после воскресного сброса: депрессивные vs счастливые",
+            ax.set_title("Восстановление после воскресного сброса: депрессивные vs счастливые (все университеты)",
                          fontsize=11, fontweight="bold")
             ax.set_xlabel("День симуляции"); ax.set_ylabel("Среднее sadness_joy")
             ax.legend(); fig.tight_layout(); p10b = savefig(fig, "10b_sunday_recovery")
@@ -821,7 +844,7 @@ class MegaResearch:
                    count()                         AS n
             FROM agent_relations rel
             JOIN agent_registry ar ON rel.run_id=ar.run_id AND rel.subject_id=ar.agent_id
-            WHERE rel.run_id = '{self.rep_run_id}'
+            WHERE rel.day_id % 30 = 0
             GROUP BY ar.archetype, rel.day_id
             ORDER BY ar.archetype, rel.day_id
         """)
@@ -886,21 +909,19 @@ class MegaResearch:
             # Эмоции в последние 5 дней предыдущего семестра (до сброса)
             emo_before_sql = ", ".join([f"avg({e}) AS {e}_before" for e in EMOTION_AXES])
             df_before = self.q(f"""
-                SELECT agent_id, {emo_before_sql}
+                SELECT run_id, agent_id, {emo_before_sql}
                 FROM agent_states
-                WHERE run_id = '{self.rep_run_id}'
-                  AND day_id BETWEEN {sem_prev_end-4} AND {sem_prev_end}
-                GROUP BY agent_id
+                WHERE day_id BETWEEN {sem_prev_end-4} AND {sem_prev_end}
+                GROUP BY run_id, agent_id
             """)
 
             # Отношения в последний день предыдущего семестра
             rel_sql = "avg(trust) AS trust_prev, avg(affinity) AS affinity_prev, avg(utility) AS utility_prev"
             df_rel = self.q(f"""
-                SELECT subject_id AS agent_id, {rel_sql}
+                SELECT run_id, subject_id AS agent_id, {rel_sql}
                 FROM agent_relations
-                WHERE run_id = '{self.rep_run_id}'
-                  AND day_id={sem_prev_end}
-                GROUP BY subject_id
+                WHERE day_id={sem_prev_end}
+                GROUP BY run_id, subject_id
             """)
 
             # Эмоции на 1-й, 7-й, 14-й, 30-й день нового семестра
@@ -908,13 +929,13 @@ class MegaResearch:
                 target_day = sem_start + offset - 1
                 emo_after_sql = ", ".join([f"avg({e}) AS {e}_after" for e in EMOTION_AXES])
                 df_after = self.q(f"""
-                    SELECT agent_id, {emo_after_sql}
-                    FROM agent_states WHERE run_id = '{self.rep_run_id}' AND day_id={target_day} GROUP BY agent_id
+                    SELECT run_id, agent_id, {emo_after_sql}
+                    FROM agent_states WHERE day_id={target_day} GROUP BY run_id, agent_id
                 """)
 
                 if df_before.empty or df_rel.empty or df_after.empty:
                     continue
-                merged = df_before.merge(df_rel, on="agent_id", how="inner").merge(df_after, on="agent_id", how="inner")
+                merged = df_before.merge(df_rel, on=["run_id", "agent_id"], how="inner").merge(df_after, on=["run_id", "agent_id"], how="inner")
                 if merged.empty: continue
 
                 # Корреляция: trust_prev → sadness_joy_after (и др. эмоции)
@@ -961,18 +982,30 @@ class MegaResearch:
         rep = h2("13. «Ловушка логарифма» — бимодальность у Аналитика и Инноватора")
         rep += "\n**Гипотеза:** Архетипы с log(U) в формуле приоритета (Аналитик, Инноватор) избегают агентов с U≈0, создавая бимодальную структуру связей.\n"
 
-        df = self.q(f"""
-            SELECT ar.archetype,
-                   rel.utility
-            FROM interactions i
-            JOIN agent_registry ar ON i.run_id=ar.run_id AND i.from_id=ar.agent_id
-            JOIN agent_relations rel
-                ON  i.run_id=rel.run_id AND i.day_id=rel.day_id
-                AND i.slot_id=rel.slot_id
-                AND i.from_id=rel.subject_id AND i.to_id=rel.object_id
-            WHERE i.run_id = '{self.rep_run_id}' AND rel.run_id = '{self.rep_run_id}' AND rel.utility BETWEEN -100 AND 100
-            LIMIT 2000000
-        """)
+        runs = self.meta()["run_id"].tolist()
+        df_list = []
+        limit_per_run = 2000000 // len(runs) + 1000
+        for rid in runs:
+            sub_df = self.q(f"""
+                SELECT ar.archetype,
+                       rel.utility
+                FROM interactions i
+                JOIN agent_registry ar ON ar.run_id = '{rid}' AND i.from_id=ar.agent_id
+                JOIN agent_relations rel
+                    ON  rel.run_id = '{rid}'
+                    AND i.day_id=rel.day_id
+                    AND rel.slot_id=9
+                    AND i.from_id=rel.subject_id AND i.to_id=rel.object_id
+                WHERE i.run_id = '{rid}'
+                  AND i.day_id % 3 = 0
+                  AND rel.utility BETWEEN -100 AND 100
+                LIMIT {limit_per_run}
+            """)
+            if not sub_df.empty:
+                df_list.append(sub_df)
+        if len(df_list) == 0:
+            return rep + "\n*Нет данных.*\n"
+        df = pd.concat(df_list, ignore_index=True).head(2000000)
 
         log_mask  = df["archetype"].str.upper().isin([a.upper() for a in LOG_ARCHETYPES])
         df_log    = df[log_mask]
@@ -1029,7 +1062,6 @@ class MegaResearch:
             FROM interactions i
             JOIN agent_registry ar1 ON i.run_id=ar1.run_id AND i.from_id=ar1.agent_id
             JOIN agent_registry ar2 ON i.run_id=ar2.run_id AND i.to_id=ar2.agent_id
-            WHERE i.run_id = '{self.rep_run_id}'
             GROUP BY arch_initiator, arch_target
             ORDER BY refusal_pct DESC
         """)
@@ -1052,7 +1084,7 @@ class MegaResearch:
             FROM agent_relations rel
             JOIN agent_registry ar1 ON rel.run_id=ar1.run_id AND rel.subject_id=ar1.agent_id
             JOIN agent_registry ar2 ON rel.run_id=ar2.run_id AND rel.object_id=ar2.agent_id
-            WHERE rel.run_id = '{self.rep_run_id}' AND rel.day_id >= 1315
+            WHERE rel.day_id = 1365 AND (rel.trust != 0 OR rel.affinity != 0)
             GROUP BY subj, obj
         """)
         pivot_trust = df_trust.pivot_table(index="subj", columns="obj",
@@ -1086,15 +1118,15 @@ class MegaResearch:
         # Граф взаимодействий в GYM по архетипам
         df_gym = self.q(f"""
             SELECT ar1.archetype AS arch1, ar2.archetype AS arch2,
+                   i.run_id AS run_id,
                    greatest(i.from_id, i.to_id) AS a,
                    least(i.from_id, i.to_id)    AS b,
                    count() AS weight
             FROM interactions i
             JOIN agent_registry ar1 ON i.run_id=ar1.run_id AND i.from_id=ar1.agent_id
             JOIN agent_registry ar2 ON i.run_id=ar2.run_id AND i.to_id=ar2.agent_id
-            WHERE i.run_id = '{self.rep_run_id}'
-              AND i.slot_id = 8
-            GROUP BY arch1, arch2, a, b
+            WHERE i.slot_id = 8
+            GROUP BY arch1, arch2, i.run_id, a, b
         """)
 
         if df_gym.empty:
@@ -1105,14 +1137,21 @@ class MegaResearch:
 
         for arch in archetypes:
             sub = df_gym[(df_gym["arch1"]==arch) | (df_gym["arch2"]==arch)]
-            G = nx.Graph()
-            for _, row in sub.iterrows():
-                G.add_edge(row["a"], row["b"], weight=row["weight"])
-            if len(G.nodes) < 5: continue
-            clust = nx.average_clustering(G)
-            deg   = np.mean([d for _, d in G.degree()])
-            clust_results.append({"Архетип":arch, "Кластеризация":round(clust,4),
-                                   "Средняя степень":round(deg,2), "Вершин":len(G.nodes)})
+            run_coefficients = []
+            for rid, group in sub.groupby("run_id"):
+                G = nx.Graph()
+                for _, row in group.iterrows():
+                    G.add_edge(row["a"], row["b"], weight=row["weight"])
+                if len(G.nodes) < 5: continue
+                clust = nx.average_clustering(G)
+                deg   = np.mean([d for _, d in G.degree()])
+                run_coefficients.append((clust, deg, len(G.nodes)))
+            if not run_coefficients: continue
+            avg_clust = np.mean([x[0] for x in run_coefficients])
+            avg_deg   = np.mean([x[1] for x in run_coefficients])
+            avg_nodes = np.mean([x[2] for x in run_coefficients])
+            clust_results.append({"Архетип":arch, "Кластеризация":round(avg_clust,4),
+                                   "Средняя степень":round(avg_deg,2), "Вершин":int(avg_nodes)})
 
         df_clust = pd.DataFrame(clust_results).sort_values("Кластеризация", ascending=False)
 
@@ -1149,39 +1188,49 @@ class MegaResearch:
 
         # Финальный граф trust≥70 с архетипами
         df_edges = self.q(f"""
-            SELECT rel.subject_id, rel.object_id,
+            SELECT rel.run_id, rel.subject_id, rel.object_id,
                    avg(rel.trust) AS avg_trust,
                    ar.archetype
             FROM agent_relations rel
             JOIN agent_registry ar ON rel.run_id=ar.run_id AND rel.subject_id=ar.agent_id
-            WHERE rel.run_id = '{self.rep_run_id}' AND rel.day_id>=1315 AND rel.trust>=70
-            GROUP BY rel.subject_id, rel.object_id, ar.archetype
+            WHERE rel.day_id = 1365 AND rel.trust>=70
+            GROUP BY rel.run_id, rel.subject_id, rel.object_id, ar.archetype
         """)
         if df_edges.empty:
             return rep + "\n*Нет рёбер с trust≥70.*\n"
 
-        G = nx.Graph()
-        for _, row in df_edges.iterrows():
-            G.add_edge(row["subject_id"], row["object_id"], weight=row["avg_trust"])
-            G.nodes[row["subject_id"]]["archetype"] = row["archetype"]
+        # Получаем все пары agent_id -> archetype для точного маппинга
+        df_registry = self.q("SELECT run_id, agent_id, archetype FROM agent_registry")
+        registry_dict = {}
+        for _, row in df_registry.iterrows():
+            registry_dict[(row["run_id"], row["agent_id"])] = row["archetype"]
 
-        components = [c for c in nx.connected_components(G) if len(c) >= 3]
+        components = []
         comp_stats = []
-        for comp in sorted(components, key=len, reverse=True)[:20]:
-            arch_counts = {}
-            for node in comp:
-                a = G.nodes[node].get("archetype", "UNKNOWN")
-                arch_counts[a] = arch_counts.get(a, 0) + 1
-            dominant = max(arch_counts, key=arch_counts.get)
-            dom_pct  = arch_counts[dominant] / len(comp) * 100
-            comp_stats.append({
-                "Размер кластера": len(comp),
-                "Доминирующий архетип": dominant,
-                "Доля доминанта (%)": round(dom_pct, 1),
-                "Все архетипы": str(arch_counts)
-            })
+        for rid, group in df_edges.groupby("run_id"):
+            G = nx.Graph()
+            for _, row in group.iterrows():
+                G.add_edge(row["subject_id"], row["object_id"], weight=row["avg_trust"])
+            run_components = [c for c in nx.connected_components(G) if len(c) >= 3]
+            components.extend(run_components)
+            for comp in run_components:
+                arch_counts = {}
+                for node in comp:
+                    a = registry_dict.get((rid, node), "UNKNOWN")
+                    arch_counts[a] = arch_counts.get(a, 0) + 1
+                dominant = max(arch_counts, key=arch_counts.get)
+                dom_pct  = arch_counts[dominant] / len(comp) * 100
+                comp_stats.append({
+                    "run_id": rid,
+                    "Размер кластера": len(comp),
+                    "Доминирующий архетип": dominant,
+                    "Доля доминанта (%)": round(dom_pct, 1),
+                    "Все архетипы": str(arch_counts)
+                })
 
         df_comp = pd.DataFrame(comp_stats)
+        if not df_comp.empty:
+            df_comp = df_comp.sort_values("Размер кластера", ascending=False).head(20)
 
         # Распределение размеров компонент
         sizes = [len(c) for c in components]
@@ -1231,7 +1280,6 @@ class MegaResearch:
                    max(day_id)               AS last_day,
                    1                         AS broken
             FROM interactions
-            WHERE run_id = '{self.rep_run_id}'
             GROUP BY run_id,a,b
             HAVING last_day<1165 AND last_day>200
             LIMIT 50000
@@ -1245,7 +1293,6 @@ class MegaResearch:
                    max(day_id)               AS last_day,
                    0                         AS broken
             FROM interactions
-            WHERE run_id = '{self.rep_run_id}'
             GROUP BY run_id,a,b
             HAVING last_day>=1165
             LIMIT 50000
@@ -1255,18 +1302,17 @@ class MegaResearch:
 
         # Число отказов от Деструкторов, которые получил агент A
         df_destr = self.q(f"""
-            SELECT i.to_id AS agent_id,
+            SELECT i.run_id, i.to_id AS agent_id,
                    countIf(i.type=0) AS destructor_refusals
             FROM interactions i
             JOIN agent_registry ar ON i.run_id=ar.run_id AND i.from_id=ar.agent_id
-            WHERE i.run_id = '{self.rep_run_id}'
-              AND ar.archetype ILIKE '%Nihility%'
-            GROUP BY agent_id
+            WHERE ar.archetype ILIKE '%Nihility%'
+            GROUP BY i.run_id, agent_id
         """)
 
         df_all = df_all.merge(df_destr.rename(columns={"agent_id":"a",
                                                         "destructor_refusals":"destr_ref_a"}),
-                              on="a", how="left").fillna(0)
+                              on=["run_id", "a"], how="left").fillna(0)
 
         # Логистическая регрессия
         X = df_all[["destr_ref_a"]].values
@@ -1312,33 +1358,33 @@ class MegaResearch:
         d8_s, d8_e = sem_range(8)
 
         df_sem1 = self.q(f"""
-            SELECT agent_id, sum(cnt) AS contacts_s1 FROM (
-                SELECT from_id AS agent_id, count() AS cnt FROM interactions
+            SELECT run_id, agent_id, sum(cnt) AS contacts_s1 FROM (
+                SELECT run_id, from_id AS agent_id, count() AS cnt FROM interactions
                 WHERE run_id IN ({ids_str}) AND day_id BETWEEN {d1_s} AND {d1_e}
-                GROUP BY from_id
+                GROUP BY run_id, from_id
                 UNION ALL
-                SELECT to_id AS agent_id, count() AS cnt FROM interactions
+                SELECT run_id, to_id AS agent_id, count() AS cnt FROM interactions
                 WHERE run_id IN ({ids_str}) AND day_id BETWEEN {d1_s} AND {d1_e}
-                GROUP BY to_id
-            ) GROUP BY agent_id
+                GROUP BY run_id, to_id
+            ) GROUP BY run_id, agent_id
         """)
         df_sem8 = self.q(f"""
-            SELECT agent_id, sum(cnt) AS contacts_s8 FROM (
-                SELECT from_id AS agent_id, count() AS cnt FROM interactions
+            SELECT run_id, agent_id, sum(cnt) AS contacts_s8 FROM (
+                SELECT run_id, from_id AS agent_id, count() AS cnt FROM interactions
                 WHERE run_id IN ({ids_str}) AND day_id BETWEEN {d8_s} AND {d8_e}
-                GROUP BY from_id
+                GROUP BY run_id, from_id
                 UNION ALL
-                SELECT to_id AS agent_id, count() AS cnt FROM interactions
+                SELECT run_id, to_id AS agent_id, count() AS cnt FROM interactions
                 WHERE run_id IN ({ids_str}) AND day_id BETWEEN {d8_s} AND {d8_e}
-                GROUP BY to_id
-            ) GROUP BY agent_id
+                GROUP BY run_id, to_id
+            ) GROUP BY run_id, agent_id
         """)
-        df = df_sem1.merge(df_sem8, on="agent_id", how="inner").dropna()
+        df = df_sem1.merge(df_sem8, on=["run_id", "agent_id"], how="inner").dropna()
         if len(df) < 10:
             return rep + "\n*Недостаточно данных.*\n"
 
-        df["rank_s1"] = df["contacts_s1"].rank(ascending=False)
-        df["rank_s8"] = df["contacts_s8"].rank(ascending=False)
+        df["rank_s1"] = df.groupby("run_id")["contacts_s1"].rank(ascending=False)
+        df["rank_s8"] = df.groupby("run_id")["contacts_s8"].rank(ascending=False)
         rho, p = stats.spearmanr(df["rank_s1"], df["rank_s8"])
 
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -1394,6 +1440,16 @@ class MegaResearch:
         print("\n" + "═"*62)
         print("  MEGA RESEARCH — 18 блоков анализа")
         print("═"*62 + "\n")
+
+        import shutil
+        import os
+        plots_dir = "data/plots"
+        if os.path.exists(plots_dir):
+            try:
+                shutil.rmtree(plots_dir)
+            except Exception as e:
+                print(f"Предупреждение при очистке {plots_dir}: {e}", flush=True)
+        os.makedirs(plots_dir, exist_ok=True)
 
         meta = self.meta()
         print(f"  Сценариев в базе: {len(meta)}\n")
