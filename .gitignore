@@ -18,7 +18,10 @@ core/src/*.o
 *.csv
 agents.csv
 *.log
+
+# Diploma texts & research data (tracked separately)
 pdf/
+data/
 diplom.pdf
 scripts/*.json
 tests/
@@ -30,9 +33,6 @@ tests/
 .git 2/
 
 # Research & Analysis Data
-data/analysis/
-data/output/*.csv
-!data/scenarios/*.json
 archive/data/*.csv
 
 # Research-specific scripts (as per user preference for "clean" repo)
