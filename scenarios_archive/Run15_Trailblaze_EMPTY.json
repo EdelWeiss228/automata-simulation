@@ -1,0 +1,14 @@
+{
+    "scenario_name": "Run15_Trailblaze_EMPTY",
+    "run_name": "Run15_Trailblaze",
+    "description": "Research Batch. Archetype Dist: Run15_Trailblaze. Relations Mode: EMPTY",
+    "bachelor_counts": {
+        "TRAILBLAZE": 1500
+    },
+    "master_counts": {
+        "TRAILBLAZE": 120
+    },
+    "initial_relations_mode": "EMPTY",
+    "semesters": 8,
+    "seed": 676423
+}

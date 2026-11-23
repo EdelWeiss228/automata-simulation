@@ -1,0 +1,30 @@
+{
+    "scenario_name": "Run18_Weighted_Random_EMPTY",
+    "run_name": "Run18_Weighted_Random",
+    "description": "Research Batch. Archetype Dist: Run18_Weighted_Random. Relations Mode: EMPTY",
+    "bachelor_counts": {
+        "ERUDITION": 260,
+        "ENIGMATA": 130,
+        "HARMONY": 210,
+        "HUNT": 150,
+        "ELATION": 120,
+        "PRESERVATION": 180,
+        "NIHILITY": 100,
+        "TRAILBLAZE": 190,
+        "REMEMBRANCE": 160
+    },
+    "master_counts": {
+        "ERUDITION": 21,
+        "ENIGMATA": 10,
+        "HARMONY": 17,
+        "HUNT": 12,
+        "ELATION": 10,
+        "PRESERVATION": 14,
+        "NIHILITY": 8,
+        "TRAILBLAZE": 15,
+        "REMEMBRANCE": 13
+    },
+    "initial_relations_mode": "EMPTY",
+    "semesters": 8,
+    "seed": 720403
+}

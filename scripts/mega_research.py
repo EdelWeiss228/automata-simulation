@@ -175,6 +175,10 @@ class MegaResearch:
             self.max_day = int(self.q("SELECT max(day_id) FROM agent_states").iloc[0, 0])
         except Exception:
             self.max_day = 1212
+        try:
+            self.n_runs = max(1, int(self.s("SELECT count() FROM simulation_runs")))
+        except Exception:
+            self.n_runs = 1
 
     # ── Запросы ──────────────────────────────────────────────────
 
@@ -198,10 +202,12 @@ class MegaResearch:
                 if ("_" + t) in n.upper(): return t
             return "OTHER"
         def _group(n):
-            # run_name вида "RunXX_..." — берём только числовой номер
+            # Run15/Run16 — недостающие гомогенные архетипы.
             try:
-                num = int(n.split("_")[0].replace("Run","").replace("RUN",""))
-                return "Гомогенные" if num <= 7 else "Гетерогенные"
+                prefix = n.split("_")[0].replace("RUN", "Run")
+                homogeneous = {f"Run{i:02d}" for i in range(1, 8)}
+                homogeneous.update({"Run15", "Run16"})
+                return "Гомогенные" if prefix in homogeneous else "Гетерогенные"
             except Exception:
                 return "Неизвестно"
         def _nonlinear(n):
@@ -532,7 +538,7 @@ class MegaResearch:
                 for t in thresholds:
                     results[f"{t*100:.1f}%"].append({"Семестр": sem, "Стаб.пар": 0})
             else:
-                n_runs = 42  # нормируем на число университетов
+                n_runs = max(1, self.n_runs)  # нормируем на число университетов
                 results["90.0%"].append({"Семестр": sem, "Стаб.пар": int(df_s["cnt_90"].iloc[0]) // n_runs})
                 results["95.0%"].append({"Семестр": sem, "Стаб.пар": int(df_s["cnt_95"].iloc[0]) // n_runs})
                 results["99.5%"].append({"Семестр": sem, "Стаб.пар": int(df_s["cnt_995"].iloc[0]) // n_runs})
@@ -565,7 +571,7 @@ class MegaResearch:
         print("[Progress]  [05/18] Эмоциональный фон…", flush=True)
         rep = h2("5. Эмоциональный фон коллектива")
 
-        # Усредняем по ВСЕМ 42 прогонам — иначе среднее по 1620 агентов ≈ 0 из-за рандомной инициализации
+        # Усредняем по всем прогонам — иначе среднее по 1620 агентов ≈ 0 из-за рандомной инициализации
         emo_avg_sql = ", ".join([f"avg({e}) AS {e}_mean, stddevPop({e}) AS {e}_std" for e in EMOTION_AXES])
         df = self.q(f"""
             SELECT day_id, {emo_avg_sql}
@@ -602,7 +608,7 @@ class MegaResearch:
         for ax in [axes.flatten()[-2]]: ax.set_xlabel("День симуляции")
         # Аннотация: красные линии = начало семестра (сброс эмоций)
         fig.suptitle(
-            f"Динамика эмоционального фона — среднее по всем 42 прогонам\n"
+            f"Динамика эмоционального фона — среднее по всем {self.n_runs} прогонам\n"
             f"Красные линии = начало семестра (полный сброс эмоций до случайных [-30,30])",
             fontsize=12, fontweight="bold")
         fig.tight_layout(); p5a = savefig(fig, "05a_emotion_dynamics")
@@ -615,7 +621,7 @@ class MegaResearch:
         fig, ax = plt.subplots(figsize=(16, 5))
         sns.heatmap(hm, ax=ax, cmap="RdYlGn", center=0, vmin=-5, vmax=5,
                     linewidths=.2, cbar_kws={"label": "Среднее по всем прогонам"})
-        ax.set_title("Тепловая карта эмоций во времени (усреднено по 42 прогонам)",
+        ax.set_title(f"Тепловая карта эмоций во времени (усреднено по {self.n_runs} прогонам)",
                      fontsize=12, fontweight="bold")
         ax.set_xlabel("Временной бин (1–50)"); ax.set_ylabel("Эмоциональная ось")
         fig.tight_layout(); p5b = savefig(fig, "05b_emotion_heatmap")
@@ -626,7 +632,7 @@ class MegaResearch:
         drift = (late - early).abs()
         drift.index = [e.replace("_mean","") for e in drift.index]
 
-        rep += img_md(p5a, "Эмоциональный фон: среднее ± std по всем 42 прогонам")
+        rep += img_md(p5a, f"Эмоциональный фон: среднее ± std по всем {self.n_runs} прогонам")
         rep += img_md(p5b, "Тепловая карта эмоций во времени")
         rep += h3("Дрейф начало→конец")
         rep += ("\n*Примечание: из-за семестровых сбросов эмоций средние значения "
@@ -1638,8 +1644,8 @@ class MegaResearch:
 
             **Дата генерации:** {self._ts}
             **База данных:** ClickHouse (localhost:8123)
-            **Объём данных:** 42 серии × 1365 дней — ~56 млрд строк отношений,
-            90 млн состояний агентов, 147 млн взаимодействий.
+            **Объём данных:** {self.n_runs} серий × 1213 дней; отношения
+            пишутся только для ненулевых связей.
             **Блоков анализа:** 18 (9 базовых + 9 новых гипотез)
 
             ---

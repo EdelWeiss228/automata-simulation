@@ -39,6 +39,10 @@ class SimulationSession:
         self.first_log_interactions = True
         self.simulation_started = False
         self.gui_active = False # Флаг для динамического управления синхронизацией
+        # Счётчики для performance-лога: сравниваем не только wall time,
+        # но и объём реальной работы (дни, контакты).
+        self.total_interactions = 0
+        self.days_simulated = 0
         
         # Убеждаемся, что директория для вывода существует
         os.makedirs(self.output_dir, exist_ok=True)
@@ -234,6 +238,11 @@ class SimulationSession:
         elif self.collective.cpp_engine:
             self.collective._sync_from_cpp(sync_relations=False)
 
+        self.total_interactions += sum(
+            1 for _, _, result in all_interactions
+            if isinstance(result, str) and result in ("success", "failure", "refusal")
+        )
+        self.days_simulated += 1
         return all_interactions
 
     def log_states(self, slot_id=0):

@@ -152,8 +152,10 @@ class Baseline9:
             return "OTHER"
         def _group(n):
             try:
-                num = int(n.split("_")[0].replace("Run","").replace("RUN",""))
-                return "Гомогенные" if num <= 7 else "Гетерогенные"
+                prefix = n.split("_")[0].replace("RUN", "Run")
+                homogeneous = {f"Run{i:02d}" for i in range(1, 8)}
+                homogeneous.update({"Run15", "Run16"})
+                return "Гомогенные" if prefix in homogeneous else "Гетерогенные"
             except Exception:
                 return "Неизвестно"
         df["init_type"] = df["scenario_name"].apply(_init)

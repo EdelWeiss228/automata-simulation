@@ -1,0 +1,30 @@
+{
+    "scenario_name": "Run17_All_Nine_Uniform_MIXED",
+    "run_name": "Run17_All_Nine_Uniform",
+    "description": "Research Batch. Archetype Dist: Run17_All_Nine_Uniform. Relations Mode: MIXED",
+    "bachelor_counts": {
+        "ERUDITION": 167,
+        "ENIGMATA": 167,
+        "HARMONY": 167,
+        "HUNT": 167,
+        "ELATION": 166,
+        "PRESERVATION": 166,
+        "NIHILITY": 167,
+        "TRAILBLAZE": 166,
+        "REMEMBRANCE": 167
+    },
+    "master_counts": {
+        "ERUDITION": 13,
+        "ENIGMATA": 13,
+        "HARMONY": 13,
+        "HUNT": 14,
+        "ELATION": 13,
+        "PRESERVATION": 13,
+        "NIHILITY": 14,
+        "TRAILBLAZE": 13,
+        "REMEMBRANCE": 14
+    },
+    "initial_relations_mode": "MIXED",
+    "semesters": 8,
+    "seed": 740733
+}

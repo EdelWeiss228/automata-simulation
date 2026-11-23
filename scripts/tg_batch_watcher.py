@@ -38,8 +38,8 @@ LOGS_DIR = os.path.join(OUTPUT_ROOT, "logs")
 EXTERNAL_DISK = "/run/media/georgiy/home_external"
 SERVICE = "automata-batch.service"
 
-TOTAL_SCENARIOS = 42
-TOTAL_DAYS = 960  # 8 семестров по ~120 дней
+TOTAL_SCENARIOS = 54
+TOTAL_DAYS = 1213  # 8 семестров; летние каникулы в счёт дней не входят
 UPDATE_EVERY = timedelta(minutes=30)
 POLL_TIMEOUT = 25
 SIM_START_DATE = date(2024, 9, 1)
@@ -361,6 +361,42 @@ def progress_rows():
     )
 
 
+def timing_summary():
+    """Средняя скорость завершённых прогонов и грубая оценка остатка."""
+    exists = ch_query(
+        "SELECT count() FROM system.tables "
+        "WHERE database = 'default' AND name = 'run_timings'"
+    )
+    if not exists or not exists[0][0]:
+        return None
+    rows = ch_query(
+        "SELECT count(), avg(wall_seconds), avg(simulation_seconds), "
+        "avg(interactions) FROM run_timings "
+        "WHERE implementation = 'python-v2' AND status = 'ok'"
+    )
+    if not rows or not rows[0][0]:
+        return None
+    count, wall, simulation, interactions = rows[0]
+    count = int(count or 0)
+    wall = float(wall or 0.0)
+    simulation = float(simulation or 0.0)
+    interactions = float(interactions or 0.0)
+    if count <= 0 or wall <= 0:
+        return None
+
+    done = done_count()
+    remaining = max(0, TOTAL_SCENARIOS - done)
+    workers = max(1, worker_count())
+    waves = (remaining + workers - 1) // workers
+    eta_seconds = waves * wall
+    return (
+        f"Среднее время: <b>{wall / 60:.1f} мин</b> "
+        f"(симуляция {simulation / 60:.1f} мин, "
+        f"{interactions / 1e6:.1f} млн контактов)"
+        f"\nОсталось волн: {waves}, оценка: <b>{format_duration(eta_seconds)}</b>"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Ресурсы сервера
 # ---------------------------------------------------------------------------
@@ -505,6 +541,10 @@ def status_text():
 
     lines.append(f"Готово сценариев: <b>{done}/{TOTAL_SCENARIOS}</b>")
     lines.append(f"Текущий день: <b>{day}/{TOTAL_DAYS}</b>")
+
+    timing = timing_summary()
+    if timing:
+        lines.append(timing)
 
     summary = db_summary()
     if summary:
@@ -660,11 +700,17 @@ def clean_restart():
         lines.append("ClickHouse недоступен, таблицы не очищены.")
     else:
         try:
+            existing = {
+                row[0] for row in client.query(
+                    "SELECT name FROM system.tables WHERE database = 'default'"
+                ).result_rows
+            }
             for table in (
                 "agent_states", "interactions", "agent_relations",
-                "agent_registry", "simulation_runs",
+                "agent_registry", "simulation_runs", "run_timings",
             ):
-                client.command(f"TRUNCATE TABLE default.{table}")
+                if table in existing:
+                    client.command(f"TRUNCATE TABLE default.{table}")
             lines.append("Таблицы ClickHouse очищены.")
         except Exception as exc:  # pylint: disable=broad-exception-caught
             lines.append(f"Ошибка очистки ClickHouse: {html.escape(str(exc))}")
@@ -675,18 +721,23 @@ def clean_restart():
                 pass
 
     removed = 0
-    for directory in (DONE_DIR, LOGS_DIR):
+    for directory in (DONE_DIR, LOGS_DIR,
+                      os.path.join(OUTPUT_ROOT, "timings")):
         if not os.path.isdir(directory):
             continue
         for name in os.listdir(directory):
-            if not (name.endswith(".done") or name.endswith(".log")):
+            if not (
+                name.endswith(".done") or name.endswith(".log")
+                or name.endswith(".json")
+            ):
                 continue
             try:
                 os.remove(os.path.join(directory, name))
                 removed += 1
             except OSError:
                 pass
-    for path in (BATCH_LOG, PID_FILE):
+    for path in (BATCH_LOG, PID_FILE,
+                 os.path.join(OUTPUT_ROOT, "batch_timings.jsonl")):
         try:
             if os.path.exists(path):
                 os.remove(path)
@@ -914,7 +965,8 @@ def watcher_loop(token, chat_id, stop_event):
             elif done >= TOTAL_SCENARIOS:
                 send_message(
                     token, chat_id,
-                    "🏁 Матрица завершена: 42/42.\n" + status_text(),
+                    f"🏁 Матрица завершена: {done}/{TOTAL_SCENARIOS}.\n"
+                    + status_text(),
                     reply_markup=main_keyboard(), parse_mode="HTML")
             else:
                 send_message(

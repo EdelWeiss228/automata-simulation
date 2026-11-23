@@ -33,28 +33,72 @@ def main():
             print("[System] Bypassing GUI (Headless mode active)...", flush=True)
             with open(args.scenario, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-            
+
+            from core.performance import RunTimer
             from model.university_collective import UniversityCollective
             from model.simulation_session import SimulationSession
-            
+
             effective_seed = config.get("seed", args.seed)
-            univ = UniversityCollective(seed=effective_seed, config=config)
-            run_name = config.get("run_name", "Headless University Run")
-            description = config.get("description", "")
             scenario_name = config.get("scenario_name", os.path.basename(args.scenario))
-            session = SimulationSession(collective=univ, run_name=run_name, description=description, scenario_name=scenario_name)
-            
-            semesters = args.semesters if args.semesters is not None else config.get("semesters", 8)
-            print(f"[System] Headless University Mode: Running {semesters} semesters...", flush=True)
-            
-            if hasattr(session, 'run_semesters'):
-                session.run_semesters(semesters)
-            else:
-                steps = args.steps if args.steps else config.get("steps", 100)
-                for _ in range(steps): session.run_day()
-                
-            print("Done.", flush=True)
-            sys.exit(0)
+            timer = RunTimer(
+                scenario_name,
+                implementation="python-v2",
+                engine="cpp-openmp",
+                seed=effective_seed,
+                config_path=args.scenario,
+            )
+            session = None
+            univ = None
+            status = "error"
+            try:
+                univ = UniversityCollective(seed=effective_seed, config=config)
+                run_name = config.get("run_name", "Headless University Run")
+                description = config.get("description", "")
+                session = SimulationSession(
+                    collective=univ, run_name=run_name,
+                    description=description, scenario_name=scenario_name,
+                )
+                timer.mark("init")
+
+                semesters = (
+                    args.semesters if args.semesters is not None
+                    else config.get("semesters", 8)
+                )
+                print(
+                    f"[System] Headless University Mode: Running {semesters} semesters...",
+                    flush=True,
+                )
+
+                if hasattr(session, 'run_semesters'):
+                    session.run_semesters(semesters)
+                else:
+                    steps = args.steps if args.steps else config.get("steps", 100)
+                    for _ in range(steps):
+                        session.run_day()
+
+                timer.mark("simulation")
+                print("Done.", flush=True)
+                status = "ok"
+            finally:
+                extra = {
+                    "agents": len(getattr(univ, "agents", {}) or {}),
+                    "days": getattr(univ, "current_step", 0) if univ else 0,
+                    "semesters": (
+                        getattr(univ, "semesters_passed", 0) if univ else 0
+                    ),
+                    "interactions": (
+                        getattr(session, "total_interactions", 0)
+                        if session else 0
+                    ),
+                    "run_id": str(session.run_id) if session and session.run_id else None,
+                }
+                timer.finish(
+                    status=status,
+                    extra=extra,
+                    ch_logger=getattr(session, "ch_logger", None),
+                )
+
+            sys.exit(0 if status == "ok" else 1)
             
         try:
             import tkinter as tk

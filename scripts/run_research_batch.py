@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import zlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -17,7 +18,9 @@ except ImportError:
 # Варианты изначальных отношений (Варианты 1, 2, 3)
 RELATION_MODES = ["EMPTY", "RANDOM", "MIXED"]
 
-# Гомогенные прогоны (Прогоны 1-7)
+# Гомогенные прогоны: по одному на каждый из девяти архетипов.
+# Run15/Run16 добавлены после аудита: Trailblaze и Remembrance были
+# определены в модели, но не входили в исходную матрицу.
 HOMOGENEOUS_RUNS = {
     "Run01_Erudition": {"ERUDITION": 1500},
     "Run02_Enigmata": {"ENIGMATA": 1500},
@@ -26,14 +29,16 @@ HOMOGENEOUS_RUNS = {
     "Run05_Elation": {"ELATION": 1500},
     "Run06_Preservation": {"PRESERVATION": 1500},
     "Run07_Nihility": {"NIHILITY": 1500},
+    "Run15_Trailblaze": {"TRAILBLAZE": 1500},
+    "Run16_Remembrance": {"REMEMBRANCE": 1500},
 }
 
-# Гетерогенные прогоны (Прогоны 8-14)
-# Настраиваем распределения (условные 1500 бакалавров, 120 магистров)
+# Гетерогенные прогоны.
+# Настраиваем распределения (условные 1500 бакалавров, 120 магистров).
 HETEROGENEOUS_RUNS = {
     "Run08_Uniform_Random": {}, # Пустой словарь вызовет равномерное случайное распределение в ядре
     "Run09_Normal_Social": { # Преобладание социальных/командных архетипов
-        "HARMONY": 400, "PRESERVATION": 400, "INNOVATOR": 300, 
+        "HARMONY": 400, "PRESERVATION": 400, "INNOVATOR": 300,
         "ERUDITION": 200, "MEDIATOR": 200
     },
     "Run10_Extremes": { # Поляризованный коллектив
@@ -52,12 +57,24 @@ HETEROGENEOUS_RUNS = {
         "ANALYST": 300, "MEDIATOR": 300, "PROTECTOR": 300,
         "COMPETITOR": 200, "ERUDITION": 200, "HARMONY": 100,
         "DESTRUCTOR": 50, "NONCONFORMIST": 50
-    }
+    },
+    "Run17_All_Nine_Uniform": { # Все девять архетипов поровну
+        "ERUDITION": 167, "ENIGMATA": 167, "HARMONY": 167,
+        "HUNT": 167, "ELATION": 166, "PRESERVATION": 166,
+        "NIHILITY": 167, "TRAILBLAZE": 166, "REMEMBRANCE": 167,
+    },
+    "Run18_Weighted_Random": { # Взвешенная смесь всех девяти архетипов
+        "ERUDITION": 260, "ENIGMATA": 130, "HARMONY": 210,
+        "HUNT": 150, "ELATION": 120, "PRESERVATION": 180,
+        "NIHILITY": 100, "TRAILBLAZE": 190, "REMEMBRANCE": 160,
+    },
 }
 
 ALL_RUNS = {**HOMOGENEOUS_RUNS, **HETEROGENEOUS_RUNS}
 ARCHIVE_DIR = "scenarios_archive"
 OUTPUT_ROOT = os.path.join("data", "v2-corrected")
+BATCH_TIMINGS_FILE = os.path.join(OUTPUT_ROOT, "batch_timings.jsonl")
+TIMINGS_LOCK = threading.Lock()
 
 
 def _clickhouse_client():
@@ -99,11 +116,19 @@ def cleanup_scenario(scenario: str):
             parameters={"scenario": scenario},
         )
         run_ids = [str(row[0]) for row in result.result_rows]
+        existing = {
+            row[0] for row in client.query(
+                "SELECT name FROM system.tables WHERE database = currentDatabase()"
+            ).result_rows
+        }
+        tables = [
+            "agent_states", "agent_relations", "interactions",
+            "agent_registry", "simulation_runs", "run_timings",
+        ]
         for run_id in run_ids:
-            for table in (
-                "agent_states", "agent_relations", "interactions",
-                "agent_registry", "simulation_runs",
-            ):
+            for table in tables:
+                if table not in existing:
+                    continue
                 client.command(
                     f"ALTER TABLE {table} DELETE WHERE run_id = '{run_id}' "
                     "SETTINGS mutations_sync = 1"
@@ -122,6 +147,32 @@ def cleanup_scenario(scenario: str):
         except Exception:
             pass
 
+def scaled_master_counts(counts: dict, total_mag: int = 120,
+                         total_bac: int = 1500) -> dict:
+    """Пропорционально распределить магистров, сохранив ровно total_mag.
+
+    Старое `int(v * 0.08)` могло дать 117 мест вместо 120 и оставляло
+    добор случайным архетипам. Для воспроизводимости распределяем
+    остаток по наибольшим дробным частям.
+    """
+    if not counts:
+        return {}
+    total = sum(int(v) for v in counts.values())
+    if total <= 0:
+        return {}
+    raw = {k: int(v) * total_mag / total for k, v in counts.items()}
+    result = {k: int(value) for k, value in raw.items()}
+    remainder = total_mag - sum(result.values())
+    order = sorted(
+        raw,
+        key=lambda key: (raw[key] - result[key], key),
+        reverse=True,
+    )
+    for key in order[:max(0, remainder)]:
+        result[key] += 1
+    return result
+
+
 def generate_config(run_id: str, mode: str, counts: dict) -> str:
     scenario_name = f"{run_id}_{mode}"
     filepath = os.path.join(ARCHIVE_DIR, f"{scenario_name}.json")
@@ -137,7 +188,7 @@ def generate_config(run_id: str, mode: str, counts: dict) -> str:
         "run_name": run_id,
         "description": f"Research Batch. Archetype Dist: {run_id}. Relations Mode: {mode}",
         "bachelor_counts": counts,
-        "master_counts": {k: max(1, int(v * 0.08)) for k, v in counts.items()} if counts else {},
+        "master_counts": scaled_master_counts(counts),
         "initial_relations_mode": mode,
         "semesters": 8,
         # CRC32 стабилен между процессами и платформами.
@@ -149,7 +200,22 @@ def generate_config(run_id: str, mode: str, counts: dict) -> str:
 
     return filepath
 
-def run_simulation(config_path: str, is_test: bool = False, force: bool = False):
+def append_batch_timing(payload: dict):
+    """Дописать машинно-читаемую запись о времени сценария.
+
+    `main.py` пишет подробный JSON по каждому запуску, а здесь
+    фиксируется ещё и время оркестратора, включая очистку частичных
+    строк. Это нужно для сравнения Python и будущего Rust-ядра.
+    """
+    os.makedirs(OUTPUT_ROOT, exist_ok=True)
+    line = json.dumps(payload, ensure_ascii=False)
+    with TIMINGS_LOCK:
+        with open(BATCH_TIMINGS_FILE, "a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+
+
+def run_simulation(config_path: str, is_test: bool = False,
+                   force: bool = False, workers: int = 1):
     scenario = os.path.splitext(os.path.basename(config_path))[0]
     log_dir = os.path.join(OUTPUT_ROOT, "logs")
     done_dir = os.path.join(OUTPUT_ROOT, "done")
@@ -163,9 +229,12 @@ def run_simulation(config_path: str, is_test: bool = False, force: bool = False)
         print(f"[skip] {scenario} (уже завершён)", flush=True)
         return True
 
+    started_at = datetime.now()
+    cleanup_started = time.time()
     # Если маркера нет, предыдущая попытка оборвалась — убираем её
     # частичные строки, чтобы новый run_id не смешивался со старым.
     cleanup_scenario(scenario)
+    cleanup_seconds = time.time() - cleanup_started
 
     python_bin = "./venv/bin/python" if os.path.exists("./venv/bin/python") else "python"
     cmd = [python_bin, "main.py", "--university", "--silent", "--scenario", config_path]
@@ -177,17 +246,38 @@ def run_simulation(config_path: str, is_test: bool = False, force: bool = False)
 
     # stdout каждого прогона идёт в отдельный лог, чтобы 8 параллельных
     # процессов не перемешивали прогресс и ошибки.
+    env = os.environ.copy()
+    env["SIM_WORKERS"] = str(workers)
     with open(log_path, "w", encoding="utf-8") as log_file:
         process = subprocess.Popen(
             cmd,
             stdout=log_file,
             stderr=subprocess.STDOUT,
             text=True,
+            env=env,
         )
         process.wait()
 
-    elapsed = (time.time() - started) / 60
-    if process.returncode != 0:
+    elapsed_seconds = time.time() - started
+    elapsed = elapsed_seconds / 60
+    success = process.returncode == 0
+    record = {
+        "schema": "automata-run-timing/v1",
+        "scenario": scenario,
+        "implementation": "python-v2",
+        "started_at": started_at.isoformat(timespec="seconds"),
+        "finished_at": datetime.now().isoformat(timespec="seconds"),
+        "elapsed_seconds": round(elapsed_seconds, 3),
+        "elapsed_minutes": round(elapsed, 3),
+        "cleanup_seconds": round(cleanup_seconds, 3),
+        "returncode": process.returncode,
+        "success": success,
+        "workers": workers,
+        "log": log_path,
+    }
+    append_batch_timing(record)
+
+    if not success:
         print(
             f"[fail] {scenario} через {elapsed:.1f} мин; лог: {log_path}",
             flush=True,
@@ -217,6 +307,9 @@ def main():
                 continue
             tasks.append(config_path)
 
+    # Стабильный порядок волн: Run01..Run18, внутри — EMPTY/MIXED/RANDOM.
+    tasks.sort(key=lambda path: os.path.basename(path))
+
     missing = [path for path in tasks if not os.path.exists(path)]
     if missing:
         print("ОШИБКА: отсутствуют сценарии:", *missing, sep="\n  ", file=sys.stderr)
@@ -227,6 +320,8 @@ def main():
     manifest = {
         "created_at": datetime.now().isoformat(),
         "source": "v2-fixed",
+        "scenario_count": len(tasks),
+        "workers": args.workers,
         "scenarios": {},
     }
     for path in tasks:
@@ -251,7 +346,9 @@ def main():
     results = []
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         futures = {
-            pool.submit(run_simulation, path, args.test, args.force): path
+            pool.submit(
+                run_simulation, path, args.test, args.force, args.workers
+            ): path
             for path in tasks
         }
         for future in as_completed(futures):

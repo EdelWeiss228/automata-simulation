@@ -62,3 +62,32 @@ CREATE TABLE IF NOT EXISTS simulation_runs (
     scenario_name String
 ) ENGINE = MergeTree()
 ORDER BY (start_time, run_id);
+
+-- Таблица 6: Метрики скорости для сравнения Python и Rust
+CREATE TABLE IF NOT EXISTS run_timings (
+    run_id UUID,
+    scenario String,
+    implementation LowCardinality(String),
+    engine LowCardinality(String),
+    version String,
+    started_at DateTime64(3),
+    finished_at DateTime64(3),
+    wall_seconds Float64,
+    cpu_user_seconds Float64,
+    cpu_system_seconds Float64,
+    max_rss_kb UInt64,
+    init_seconds Float64,
+    simulation_seconds Float64,
+    finalize_seconds Float64,
+    agents UInt32,
+    days UInt32,
+    semesters UInt8,
+    interactions UInt64,
+    seed Int64,
+    status LowCardinality(String),
+    platform String,
+    python_version String,
+    omp_threads String,
+    workers String
+) ENGINE = MergeTree()
+ORDER BY (implementation, started_at, run_id);

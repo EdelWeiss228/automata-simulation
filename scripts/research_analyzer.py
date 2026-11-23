@@ -59,8 +59,19 @@ EMOTION_LABELS = {
     "alienation_openness": "Отчуждение–Открытость",
 }
 
-HOMOGENEOUS_RUNS = [f"Run{i:02d}" for i in range(1, 8)]   # Run01–Run07
-HETEROGENEOUS_RUNS = [f"Run{i:02d}" for i in range(8, 15)]  # Run08–Run14
+# Run15/Run16 — недостающие гомогенные Trailblaze и Remembrance.
+# Run17/Run18 — дополнительные гетерогенные распределения.
+HOMOGENEOUS_RUNS = [
+    f"Run{i:02d}" for i in range(1, 8)
+] + ["Run15", "Run16"]
+HETEROGENEOUS_RUNS = [
+    f"Run{i:02d}" for i in range(8, 15)
+] + ["Run17", "Run18"]
+
+
+def run_group(name: str) -> str:
+    prefix = name.split("_")[0]
+    return "homogeneous" if prefix in HOMOGENEOUS_RUNS else "heterogeneous"
 
 INIT_TYPES = ["EMPTY", "RANDOM", "MIXED"]
 
@@ -170,9 +181,7 @@ class ResearchAnalyzer:
 
         def _group(name: str) -> str:
             # run_name вида RunXX_...
-            prefix = name.split("_")[0]  # RunXX
-            num = int(prefix.replace("Run", ""))
-            return "homogeneous" if num <= 7 else "heterogeneous"
+            return run_group(name)
 
         def _nonlinear(name: str) -> bool:
             return "Run08" not in name
@@ -1241,8 +1250,9 @@ class ResearchAnalyzer:
 
             **Дата генерации:** {self._generated_at}
             **База данных:** ClickHouse (локальный)
-            **Объём данных:** 42 серии × 1365 дней, ~56 млрд строк отношений,
-            90 млн состояний агентов, 147 млн взаимодействий.
+            **Объём данных:** 54 серии × 1213 дней, строки отношений
+            пишутся только для ненулевых связей; состояния и контакты —
+            по фактическим прогонам.
 
             ---
         """).strip()
@@ -1260,9 +1270,7 @@ class ResearchAnalyzer:
         print(f"   Загружено сценариев: {len(runs_meta)}")
 
         # Найдём репрезентативный run_id для детального анализа (предпочтительно гетерогенный MIXED)
-        runs_meta["group"] = runs_meta["scenario_name"].apply(
-            lambda name: "homogeneous" if int(name.split("_")[0].replace("Run", "")) <= 7 else "heterogeneous"
-        )
+        runs_meta["group"] = runs_meta["scenario_name"].apply(run_group)
         rep_run = runs_meta[
             (runs_meta["group"] == "heterogeneous") &
             (runs_meta["scenario_name"].str.contains("MIXED", na=False))

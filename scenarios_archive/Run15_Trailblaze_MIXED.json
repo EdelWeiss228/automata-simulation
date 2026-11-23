@@ -1,0 +1,14 @@
+{
+    "scenario_name": "Run15_Trailblaze_MIXED",
+    "run_name": "Run15_Trailblaze",
+    "description": "Research Batch. Archetype Dist: Run15_Trailblaze. Relations Mode: MIXED",
+    "bachelor_counts": {
+        "TRAILBLAZE": 1500
+    },
+    "master_counts": {
+        "TRAILBLAZE": 120
+    },
+    "initial_relations_mode": "MIXED",
+    "semesters": 8,
+    "seed": 740416
+}

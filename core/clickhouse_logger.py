@@ -21,6 +21,7 @@ class ClickHouseLogger:
         # Буфер дневных отношений. Хранит столбцовые пакеты, а не 2.6M
         # Python-кортежей: при N=1620 разница по памяти — сотни мегабайт.
         self.relations_buffer = []
+        self._timings_table_ready = False
         
         try:
             self.client = clickhouse_connect.get_client(
@@ -49,6 +50,102 @@ class ClickHouseLogger:
             )
         except Exception as e:
             print(f"Ошибка при сохранении метаданных симуляции: {e}", flush=True)
+
+    def _ensure_timings_table(self):
+        """Создать run_timings на существующей базе без ручной миграции."""
+        if self._timings_table_ready or not self.client:
+            return
+        self.client.command("""
+            CREATE TABLE IF NOT EXISTS run_timings (
+                run_id UUID,
+                scenario String,
+                implementation LowCardinality(String),
+                engine LowCardinality(String),
+                version String,
+                started_at DateTime64(3),
+                finished_at DateTime64(3),
+                wall_seconds Float64,
+                cpu_user_seconds Float64,
+                cpu_system_seconds Float64,
+                max_rss_kb UInt64,
+                init_seconds Float64,
+                simulation_seconds Float64,
+                finalize_seconds Float64,
+                agents UInt32,
+                days UInt32,
+                semesters UInt8,
+                interactions UInt64,
+                seed Int64,
+                status LowCardinality(String),
+                platform String,
+                python_version String,
+                omp_threads String,
+                workers String
+            ) ENGINE = MergeTree
+            ORDER BY (implementation, started_at, run_id)
+        """)
+        self._timings_table_ready = True
+
+    def log_run_timing(self, payload: dict):
+        """Сохранить метрики скорости прогона для сравнения реализаций."""
+        if not self.client:
+            return
+        run_id = payload.get("run_id")
+        if not run_id:
+            # Ошибка до создания run_id: остаётся только JSON-файл.
+            return
+
+        def _dt(value):
+            if not value:
+                return datetime.datetime.now()
+            parsed = datetime.datetime.fromisoformat(str(value))
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+            return parsed
+
+        try:
+            self._ensure_timings_table()
+            row = [
+                str(run_id),
+                str(payload.get("scenario", "")),
+                str(payload.get("implementation", "")),
+                str(payload.get("engine", "")),
+                str(payload.get("version", "")),
+                _dt(payload.get("started_at")),
+                _dt(payload.get("finished_at")),
+                float(payload.get("wall_seconds", 0.0)),
+                float(payload.get("cpu_user_seconds", 0.0)),
+                float(payload.get("cpu_system_seconds", 0.0)),
+                int(payload.get("max_rss_kb", 0)),
+                float(payload.get("init_seconds", 0.0)),
+                float(payload.get("simulation_seconds", 0.0)),
+                float(payload.get("finalize_seconds", 0.0)),
+                int(payload.get("agents", 0)),
+                int(payload.get("days", 0)),
+                int(payload.get("semesters", 0)),
+                int(payload.get("interactions", 0)),
+                int(payload.get("seed") or 0),
+                str(payload.get("status", "")),
+                str(payload.get("platform", "")),
+                str(payload.get("python_version", "")),
+                str(payload.get("omp_threads", "")),
+                str(payload.get("workers", "")),
+            ]
+            self.client.insert(
+                'run_timings',
+                [row],
+                column_names=[
+                    'run_id', 'scenario', 'implementation', 'engine', 'version',
+                    'started_at', 'finished_at', 'wall_seconds',
+                    'cpu_user_seconds', 'cpu_system_seconds', 'max_rss_kb',
+                    'init_seconds', 'simulation_seconds', 'finalize_seconds',
+                    'agents', 'days', 'semesters', 'interactions', 'seed',
+                    'status', 'platform', 'python_version', 'omp_threads',
+                    'workers',
+                ],
+            )
+        except Exception as e:
+            print(f"Ошибка при сохранении таймингов прогона: {e}", flush=True)
 
     def log_agent_states(self, day_id: int, slot_id: int, engine):
         """
