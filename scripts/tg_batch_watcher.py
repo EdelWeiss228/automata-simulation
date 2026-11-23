@@ -91,6 +91,11 @@ def api_call(token, method, payload=None, timeout=35):
         if not result.get("ok"):
             log(f"[telegram] {method}: {result.get('description', 'unknown error')}")
         return result
+    except TimeoutError:
+        # Штатный таймаут длинного getUpdates — не ошибка.
+        if method != "getUpdates":
+            log(f"[telegram] {method}: таймаут")
+        return None
     except urllib.error.HTTPError as exc:
         try:
             body = exc.read().decode("utf-8", errors="replace")

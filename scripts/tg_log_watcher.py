@@ -1,3 +1,12 @@
+"""Устаревший Telegram-бот.
+
+Оставлен только как исторический пример. Не запускайте его: он использует
+старые пути (`simulation_batch.log`), зашитый пароль ClickHouse и будет
+конфликтовать с `scripts/tg_batch_watcher.py` за тот же токен.
+
+Актуальный бот — `scripts/tg_batch_watcher.py`.
+"""
+
 import os
 import time
 import signal
