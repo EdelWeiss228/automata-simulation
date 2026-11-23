@@ -276,25 +276,35 @@ void Engine::process_interaction(int from_idx, int to_idx, int sigma) {
 
     // По тексту исход контакта масштабируется эмоциональным
     // состоянием партнёра: для i -> j это E_j, для j -> i это E_i.
-    // Успех и неудача повышают U/T/A, но неудача — с половинной
-    // дельтой; только отказ понижает отношения.
     auto multiplier_for = [&](int partner_e) {
         return (partner_e >= 0) ? 2.0f : 0.5f;
     };
 
-    float strength = (sigma == -1) ? 0.5f : 1.0f;
+    // Та же логика, что и в Python: sigma=+1 ускоряет движение на
+    // положительной полуоси и замедляет на отрицательной; sigma=-1 —
+    // наоборот. Ноль относится к положительной полуоси.
+    auto sigma_factor = [](int value, int sigma) {
+        constexpr float rate = 0.5f;
+        const float high = 1.0f + rate;
+        const float low = 1.0f - rate;
+        if (value >= 0) {
+            return (sigma > 0) ? high : low;
+        }
+        return (sigma > 0) ? low : high;
+    };
 
     auto apply_side = [&](int actor, int other, float sensitivity, float multiplier) {
-        float base_affinity = 15.0f * multiplier * strength;
-        float base_trust = 10.0f * multiplier * strength;
+        float base_affinity = 15.0f * multiplier;
+        float base_trust = 10.0f * multiplier;
 
         int base = (actor * num_agents + other) * 3;
-        state.relations[base + 0] = std::max(-100, std::min(100,
-            (int)(state.relations[base + 0] + base_affinity * sensitivity)));
-        state.relations[base + 1] = std::max(-100, std::min(100,
-            (int)(state.relations[base + 1] + base_affinity * sensitivity)));
-        state.relations[base + 2] = std::max(-100, std::min(100,
-            (int)(state.relations[base + 2] + base_trust * sensitivity)));
+        for (int k = 0; k < 3; ++k) {
+            float base_delta = (k == 2) ? base_trust : base_affinity;
+            float delta = base_delta * sensitivity *
+                          sigma_factor(state.relations[base + k], sigma);
+            state.relations[base + k] = std::max(-100, std::min(100,
+                (int)(state.relations[base + k] + delta)));
+        }
     };
 
     apply_side(from_idx, to_idx, s_i, multiplier_for(e_t));

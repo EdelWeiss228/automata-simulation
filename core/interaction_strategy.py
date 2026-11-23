@@ -37,6 +37,36 @@ def normalize_outcome(value) -> Outcome:
     raise ValueError(f"Unknown interaction outcome: {value!r}")
 
 
+# Насколько сигма ускоряет или замедляет движение по полуоси текущего
+# значения: 0.5 = ±50 %. Это же значение используется в C++-ядре.
+SIGMA_RATE = 0.5
+
+
+def sigma_rate_factor(value, outcome) -> float:
+    """Множитель скорости изменения по полуоси текущего значения.
+
+    По тексту сигма работает одинаково для эмоций и для U/T/A:
+      * sigma=+1 ускоряет рост на положительной полуоси и замедляет
+        движение на отрицательной;
+      * sigma=-1 замедляет рост на положительной полуоси и ускоряет
+        движение на отрицательной;
+      * sigma=0 — резкая отрицательная реакция (отказ), множитель к
+        положительному/отрицательному росту не применяется.
+
+    Положительная полуось включает ноль: там успех получает множитель
+    (1+alpha), а неудача — (1-alpha).
+    """
+    outcome = normalize_outcome(outcome)
+    if outcome == Outcome.REFUSAL:
+        return 1.0
+
+    high = 1.0 + SIGMA_RATE
+    low = 1.0 - SIGMA_RATE
+    if outcome == Outcome.SUCCESS:
+        return high if value >= 0 else low
+    return low if value >= 0 else high
+
+
 class InteractionStrategy:
     """
     Класс, инкапсулирующий стратегию выбора цели и обработки результатов
@@ -202,32 +232,32 @@ class InteractionStrategy:
             }
 
     @staticmethod
-    def apply_emotional_reaction(actor, partner, outcome, context=None):
+    def apply_emotional_reaction(actor, partner, outcome, context=None,
+                                 own_emotions=None, partner_emotions=None):
         """Обновить эмоции актора по исходу контакта и эмоции партнёра.
 
-        Успех и неудача сближают эмоциональные профили (неудача — с меньшей
-        дельтой), отказ — разводит. Это соответствует тексту: эмоция
-        зависит от sigma и E_j, а отказ является единственным разрывающим
-        исходом.
+        Успех и неудача сближают эмоциональные профили, отказ — разводит.
+        Скорость сближения задаёт sigma_rate_factor: на положительной
+        полуоси успех ускоряется, а неудача замедляется; на отрицательной —
+        наоборот. Это соответствует тексту: эмоция зависит от sigma и E_j,
+        а отказ является единственным разрывающим исходом.
         """
         outcome = normalize_outcome(outcome)
-        if outcome == Outcome.SUCCESS:
-            strength = 1.0
-        elif outcome == Outcome.FAILURE:
-            strength = 0.5
-        else:
-            strength = -1.0
+        strength = -1.0 if outcome == Outcome.REFUSAL else 1.0
 
         sensitivity = float(getattr(actor, "sensitivity", 1.0))
         adaptability = getattr(actor, "context_adaptability", {}) or {}
         context_mod = adaptability.get(context, 1.0) if context else 1.0
 
-        partner_emotions = partner.get_emotions()
-        own_emotions = actor.get_emotions()
+        # Снимки нужны, чтобы обе стороны считали реакцию от одного и того
+        # же состояния E(t), а не от уже обновлённых эмоций партнёра.
+        partner_emotions = partner_emotions or partner.get_emotions()
+        own_emotions = own_emotions or actor.get_emotions()
         for axis_name, partner_value in partner_emotions.items():
             own_value = own_emotions.get(axis_name, 0)
+            factor = sigma_rate_factor(own_value, outcome)
             delta = (strength * sensitivity * context_mod * 0.15 *
-                     (float(partner_value) - float(own_value)))
+                     (float(partner_value) - float(own_value)) * factor)
             actor.automaton.adjust_emotion(axis_name, delta)
 
     @staticmethod
@@ -267,12 +297,28 @@ class InteractionStrategy:
         sigma принимает Outcome, int, bool или исторические строки.
         """
         outcome = normalize_outcome(sigma)
+
+        # Снимок E(t) до любых обновлений: и эмоциональные реакции, и
+        # множитель исхода должны считаться от одного состояния.
+        emotions = {
+            agent.id: agent.get_emotions(),
+            target_agent.id: target_agent.get_emotions(),
+        }
+        primary_emotions = {
+            agent.id: agent.get_primary_emotion()[2],
+            target_agent.id: target_agent.get_primary_emotion()[2],
+        }
+
         if outcome == Outcome.REFUSAL:
             InteractionStrategy.process_refusal(agent, target_agent, context)
             InteractionStrategy.apply_emotional_reaction(
-                agent, target_agent, outcome, context)
+                agent, target_agent, outcome, context,
+                own_emotions=emotions[agent.id],
+                partner_emotions=emotions[target_agent.id])
             InteractionStrategy.apply_emotional_reaction(
-                target_agent, agent, outcome, context)
+                target_agent, agent, outcome, context,
+                own_emotions=emotions[target_agent.id],
+                partner_emotions=emotions[agent.id])
             return outcome
 
         s_i = float(getattr(agent, "sensitivity", 1.0))
@@ -288,29 +334,37 @@ class InteractionStrategy:
 
             # По тексту эмоциональное состояние обновляется не только
             # отношениями, но и исходом контакта sigma и эмоцией партнёра E_j.
-            InteractionStrategy.apply_emotional_reaction(a, t_obj, outcome, context)
+            InteractionStrategy.apply_emotional_reaction(
+                a, t_obj, outcome, context,
+                own_emotions=emotions[a.id],
+                partner_emotions=emotions[t_id])
 
             # По тексту исход контакта масштабируется эмоциональным
-            # состоянием партнёра E_j, то есть t_obj. Успех и неудача
-            # повышают U/T/A, но неудача — с половинной дельтой; только
-            # отказ понижает отношения.
-            _, _, partner_e = t_obj.get_primary_emotion()
+            # состоянием партнёра E_j(t), то есть t_obj. Успех и неудача
+            # повышают U/T/A; сигма ускоряет или замедляет движение в
+            # зависимости от полуоси текущего значения. Только отказ
+            # понижает отношения.
+            partner_e = primary_emotions[t_id]
             multiplier = 2.0 if partner_e >= 0 else 0.5
-            strength = 1.0 if outcome == Outcome.SUCCESS else 0.5
 
-            base_affinity = 15 * multiplier * strength
-            base_trust = 10 * multiplier * strength
+            base_affinity = 15 * multiplier
+            base_trust = 10 * multiplier
+            rel = a.relations[t_id]
 
-            a.relations[t_id]['affinity'] = a.limit_predicate_value(
-                a.relations[t_id].get('affinity', 0) + int(base_affinity * s * c_mod)
+            affinity_factor = sigma_rate_factor(rel.get('affinity', 0), outcome)
+            utility_factor = sigma_rate_factor(rel.get('utility', 0), outcome)
+            trust_factor = sigma_rate_factor(rel.get('trust', 0), outcome)
+
+            rel['affinity'] = a.limit_predicate_value(
+                rel.get('affinity', 0) + int(base_affinity * s * c_mod * affinity_factor)
             )
             # В текущей модели utility исторически использует ту же базовую
             # дельту, что и affinity.
-            a.relations[t_id]['utility'] = a.limit_predicate_value(
-                a.relations[t_id].get('utility', 0) + int(base_affinity * s * c_mod)
+            rel['utility'] = a.limit_predicate_value(
+                rel.get('utility', 0) + int(base_affinity * s * c_mod * utility_factor)
             )
-            a.relations[t_id]['trust'] = a.limit_predicate_value(
-                a.relations[t_id].get('trust', 0) + int(base_trust * s * c_mod)
+            rel['trust'] = a.limit_predicate_value(
+                rel.get('trust', 0) + int(base_trust * s * c_mod * trust_factor)
             )
 
         return outcome
