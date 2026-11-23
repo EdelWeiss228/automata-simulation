@@ -39,7 +39,10 @@ EXTERNAL_DISK = "/run/media/georgiy/home_external"
 SERVICE = "automata-batch.service"
 
 TOTAL_SCENARIOS = 54
-TOTAL_DAYS = 1213  # 8 семестров; летние каникулы в счёт дней не входят
+# 1213 = 4 учебных года: 153 дня осенью + 150 весной (весна 2028 — 151
+# из-за 29 февраля). Июль и август не симулируются. В ClickHouse
+# day_id 0..1212, поэтому в сообщениях показываем день на единицу больше.
+TOTAL_DAYS = 1213
 UPDATE_EVERY = timedelta(minutes=30)
 POLL_TIMEOUT = 25
 SIM_START_DATE = date(2024, 9, 1)
@@ -333,11 +336,14 @@ def max_day():
     # agent_states пишется каждый день для всех агентов, поэтому это
     # канонический источник текущего дня. agent_relations — запасной
     # вариант, если состояния ещё не записались.
+    # Возвращаем -1, если данных ещё нет: day_id начинается с нуля.
     rows = ch_query("SELECT max(day_id) FROM agent_states")
     if rows and rows[0][0] is not None:
         return int(rows[0][0])
     rows = ch_query("SELECT max(day_id) FROM agent_relations")
-    return int(rows[0][0]) if rows and rows[0][0] is not None else 0
+    if rows and rows[0][0] is not None:
+        return int(rows[0][0])
+    return -1
 
 
 def db_summary():
@@ -521,7 +527,7 @@ def status_text():
     active = service_active(state)
     done = done_count()
     failures = failure_lines()
-    day = max_day()
+    day = max(0, max_day() + 1)
     workers = worker_count()
     elapsed = service_elapsed_seconds(state) if active else 0
 
@@ -572,14 +578,14 @@ def progress_text():
     done = done_count()
     lines = [
         f"📈 Прогресс: готово {done}/{TOTAL_SCENARIOS}",
-        f"Текущий день: {max_day()}/{TOTAL_DAYS}",
+        f"Текущий день: {max(0, max_day() + 1)}/{TOTAL_DAYS}",
         "",
     ]
     for name, day in rows:
         day = int(day or 0)
         sim_date = SIM_START_DATE + timedelta(days=day)
         lines.append(
-            f"{name}: день {day}/{TOTAL_DAYS} "
+            f"{name}: день {day + 1}/{TOTAL_DAYS} "
             f"({sim_date.strftime('%d.%m.%Y')})")
     return "\n".join(lines)
 

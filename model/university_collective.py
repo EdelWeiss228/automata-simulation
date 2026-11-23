@@ -589,6 +589,11 @@ class UniversityCollective(Collective):
                 agent.apply_emotion_decay()
 
         self.current_date += datetime.timedelta(days=1)
+        # Академический цикл нужно проверять и после воскресного перехода.
+        # Иначе, если 1 февраля приходится на понедельник (31 января —
+        # воскресенье), весенний семестр пропускается: проверка увидит
+        # 2 февраля и условие `day == 1` уже не сработает.
+        self._check_academic_cycle()
         self.current_step += 1
         self.current_slot_idx = 0
         return [("System", "All", "New_Day_Ready")]

@@ -191,7 +191,7 @@ class SundayResetAnalyzer:
 
         emotions_avg = ", ".join([f"avg({e}) AS {e}" for e in EMOTION_AXES])
 
-        # Строим список воскресных дней: 7, 14, 21, ..., 1365
+        # Строим список воскресных дней: 7, 14, 21, ..., 1212
         # Используем modulo в ClickHouse — day_id % 7 = 0
         # Нормируем: offset = day_id - ближайшее_воскресенье
         sql = f"""
@@ -213,7 +213,7 @@ class SundayResetAnalyzer:
                     SELECT number - 3 AS offset
                     FROM numbers(10)  -- offset: -3..+6
                 ) offsets
-                WHERE s.sunday_day + offset BETWEEN 1 AND 1365
+                WHERE s.sunday_day + offset BETWEEN 1 AND 1212
             )
             SELECT
                 w.sunday_day,

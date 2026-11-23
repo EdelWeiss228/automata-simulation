@@ -517,26 +517,26 @@ class ResearchAnalyzer:
         print("📊  [4/9] Стабильные пары…")
         report = _section("4. Стабильные пары")
 
-        # Семестровые бины (каждые ~170 дней = 1 семестр, 1365 / 8 ≈ 171)
-        semester_size = 171
+        # Семестровые бины: 1213 дней / 8 ≈ 152 дня на семестр.
+        semester_size = 152
         n_semesters = 8
 
-        # Динамические семестровые границы
-        max_day = 1213
+        # Динамические семестровые границы (day_id начинается с нуля)
+        max_day = 1212
         try:
             max_day = int(self._scalar("SELECT max(day_id) FROM agent_states"))
         except Exception:
             pass
 
         sem_ranges = {
-            1: (1, 153),
-            2: (154, 303),
-            3: (304, 456),
-            4: (457, 606),
-            5: (607, 759),
-            6: (760, 909),
-            7: (910, 1062),
-            8: (1063, min(1213, max_day))
+            1: (0, 152),
+            2: (153, 302),
+            3: (303, 455),
+            4: (456, 605),
+            5: (606, 758),
+            6: (759, 908),
+            7: (909, 1061),
+            8: (1062, min(1212, max_day))
         }
         n_semesters = 8
 
@@ -673,14 +673,14 @@ class ResearchAnalyzer:
         axes_flat[-1].set_visible(False)
         for ax in axes_flat[-2:]:
             ax.set_xlabel("День симуляции")
-        fig.suptitle("Динамика среднего эмоционального фона коллектива\n(7 осей, 1365 дней)",
+        fig.suptitle("Динамика среднего эмоционального фона коллектива\n(7 осей, 1213 дней)",
                      fontsize=14, fontweight="bold")
         fig.tight_layout()
         p5a = _savefig(fig, "5a_emotional_dynamics")
 
         # 5b. Оценка стабилизации — последние 200 дней vs первые 200
-        early = df_emo[df_emo["day_id"] <= 200][EMOTION_AXES].mean()
-        late = df_emo[df_emo["day_id"] >= 1165][EMOTION_AXES].mean()
+        early = df_emo[df_emo["day_id"] < 200][EMOTION_AXES].mean()
+        late = df_emo[df_emo["day_id"] >= 1013][EMOTION_AXES].mean()
         drift = (late - early).abs()
 
         fig, ax = plt.subplots(figsize=(9, 5))
@@ -736,7 +736,7 @@ class ResearchAnalyzer:
         print("📊  [6/9] Эффект «Выгорания лидера»…")
         report = _section("6. Эффект «Выгорания лидера» (Popularity-Induced Burnout)")
 
-        days_str = ", ".join(str(d) for d in range(30, 1365, 30))
+        days_str = ", ".join(str(d) for d in range(30, 1213, 30))
         # Входящая популярность: число агентов, у кого trust >= 80 AND affinity >= 80
         df_pop = self._q(
             f"""
@@ -864,7 +864,7 @@ class ResearchAnalyzer:
             idx, row = idx_row
             rid = row["run_id"]
             t_client = self._create_client()
-            max_day_run = 1213
+            max_day_run = 1212
             try:
                 max_day_run = int(t_client.query(f"SELECT max(day_id) FROM agent_states WHERE run_id = '{rid}'").result_rows[0][0])
             except Exception:

@@ -65,7 +65,7 @@ EMOTION_RU = {
 }
 INIT_TYPES  = ["EMPTY", "RANDOM", "MIXED"]
 C3          = ["#2196F3", "#FF9800", "#4CAF50"]   # EMPTY / RANDOM / MIXED
-SEMESTER_LEN = 171   # дней в семестре ≈ 1365/8
+SEMESTER_LEN = 152   # дней в семестре ≈ 1213/8
 N_SEMESTERS  = 8
 
 # Архетипы с нелинейным log() в формуле приоритета
@@ -93,30 +93,31 @@ def hr() -> str: return "\n---\n"
 
 def sem_range(sem: int) -> Tuple[int, int]:
     ranges = {
-        1: (1, 153),
-        2: (154, 303),
-        3: (304, 456),
-        4: (457, 606),
-        5: (607, 759),
-        6: (760, 909),
-        7: (910, 1062),
-        8: (1063, 1213)
+        # day_id начинается с нуля: 0..1212 — 1213 дней.
+        1: (0, 152),
+        2: (153, 302),
+        3: (303, 455),
+        4: (456, 605),
+        5: (606, 758),
+        6: (759, 908),
+        7: (909, 1061),
+        8: (1062, 1212)
     }
-    return ranges.get(sem, (1, 1213))
+    return ranges.get(sem, (0, 1212))
 
 def get_sem_from_day(day: int) -> int:
-    if day <= 153: return 1
-    if day <= 303: return 2
-    if day <= 456: return 3
-    if day <= 606: return 4
-    if day <= 759: return 5
-    if day <= 909: return 6
-    if day <= 1062: return 7
+    if day <= 152: return 1
+    if day <= 302: return 2
+    if day <= 455: return 3
+    if day <= 605: return 4
+    if day <= 758: return 5
+    if day <= 908: return 6
+    if day <= 1061: return 7
     return 8
 
 def sem_start_day(sem: int) -> int:
-    starts = {1: 1, 2: 154, 3: 304, 4: 457, 5: 607, 6: 760, 7: 910, 8: 1063}
-    return starts.get(sem, 1063)
+    starts = {1: 0, 2: 153, 3: 303, 4: 456, 5: 606, 6: 759, 7: 909, 8: 1062}
+    return starts.get(sem, 1062)
 
 
 

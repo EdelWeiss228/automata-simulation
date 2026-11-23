@@ -3,7 +3,7 @@
 -- База: ClickHouse, схема дипломной симуляции
 -- ============================================================
 -- В модели: WEEK_LEN = 7, воскресенье = day_id % 7 = 0
---           (дни: 7, 14, 21, ..., 1365)
+--           (дни: 7, 14, 21, ..., 1212)
 -- ============================================================
 
 
@@ -66,7 +66,7 @@ windows AS (
         SELECT number - 3 AS offset
         FROM numbers(10)             -- числа 0..9 → offset: -3..+6
     ) offsets
-    WHERE s.sunday_day + offset BETWEEN 1 AND 1365
+    WHERE s.sunday_day + offset BETWEEN 1 AND 1212
       AND s.sunday_day + offset > 0
 )
 
@@ -148,7 +148,7 @@ windows AS (
         offset
     FROM sundays s
     CROSS JOIN (SELECT number - 3 AS offset FROM numbers(10)) offsets
-    WHERE s.sunday_day + offset BETWEEN 1 AND 1365
+    WHERE s.sunday_day + offset BETWEEN 1 AND 1212
       AND s.sunday_day + offset > 0
 )
 
@@ -229,7 +229,7 @@ post_sunday AS (
          ast.shame_confidence + ast.alienation_openness) / 7.0  AS mood_post
     FROM sundays s
     JOIN agent_states ast ON ast.day_id = s.sunday_day + 6
-    WHERE s.sunday_day + 6 <= 1365
+    WHERE s.sunday_day + 6 <= 1212
 )
 
 SELECT
@@ -299,7 +299,7 @@ FROM sundays s
 CROSS JOIN (SELECT number AS offset FROM numbers(7)) w_offset  -- offset: 0..6
 JOIN agent_states ast
     ON ast.day_id = s.sunday_day + w_offset.offset
-    AND s.sunday_day + w_offset.offset BETWEEN 1 AND 1365
+    AND s.sunday_day + w_offset.offset BETWEEN 1 AND 1212
 JOIN baseline b
     ON  b.run_id   = ast.run_id
     AND b.agent_id = ast.agent_id
