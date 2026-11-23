@@ -93,7 +93,11 @@ class ClickHouseLogger:
         relations = np.array(state.relations, dtype=np.int8).reshape((n, n, 3))
 
         ii, jj = np.indices((n, n))
-        mask = ii != jj
+        # Нулевая связь — это tabula rasa, а не «нейтральное отношение».
+        # Полная матрица 1620x1620 давала 2.6 млн строк в день и десятки
+        # миллиардов строк за матрицу 42 прогонов. Храним только реально
+        # существующие связи; отсутствие строки означает ноль.
+        mask = (ii != jj) & np.any(relations != 0, axis=2)
 
         sub_ids = ii[mask].astype(np.uint32)
         obj_ids = jj[mask].astype(np.uint32)

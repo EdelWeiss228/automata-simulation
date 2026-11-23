@@ -4,6 +4,15 @@
 
 namespace core_engine {
 
+namespace {
+// Эмоциональное заражение идёт по ближайшим связям, а не по всем 1600
+// знакомым сразу. Сигнал — не «добавить эмоцию партнёра», а шаг к
+// взвешенному среднему ближайшего круга: так система не уходит в
+// насыщение ±30 и сохраняет различия между группами.
+constexpr int INFLUENCE_TOP_K = 8;
+constexpr float INFLUENCE_RATE = 0.6f;
+}
+
 void Engine::influence_emotions() {
     // Предрасчёт основных эмоций агентов. Это только чтение состояния,
     // поэтому выполняется последовательно и одинаково при любом числе потоков.
@@ -43,81 +52,105 @@ void Engine::influence_emotions() {
     // матрицы отношений и локальный буфер эмоций, поэтому гонки нет.
     #pragma omp parallel for schedule(static)
     for (int j = 0; j < num_agents; ++j) {
-        float delta_emotions[SimulationState::NUM_AXES] = {0.0f};
-
         // Влияют только те, с кем уже есть связь. Нулевая строка — это
-        // tabula rasa; глобальное усреднение по всем N превращало любую
-        // случайную флуктуацию в общий дрейф всего коллектива.
-        int active_count = 0;
+        // tabula rasa. Из существующих связей берём K самых сильных:
+        // именно они образуют близкий круг агента.
+        struct InfluenceCandidate {
+            float effect;
+            int idx;
+        };
+        std::vector<InfluenceCandidate> candidates;
+        candidates.reserve(num_agents - 1);
         for (int i = 0; i < num_agents; ++i) {
             if (i == j) continue;
-            int base_ij = (i * num_agents + j) * 3;
-            if (relations_snapshot[base_ij + 0] != 0 ||
-                relations_snapshot[base_ij + 1] != 0 ||
-                relations_snapshot[base_ij + 2] != 0) {
-                ++active_count;
-            }
-        }
-        if (active_count == 0) {
-            continue;
-        }
-
-        for (int i = 0; i < num_agents; ++i) {
-            if (i == j || !active[i]) continue;
-
-            int base_ji = (j * num_agents + i) * 3;
             int base_ij = (i * num_agents + j) * 3;
             float u_ij = (float)relations_snapshot[base_ij + 0];
             float a_ij = (float)relations_snapshot[base_ij + 1];
             float t_ij = (float)relations_snapshot[base_ij + 2];
             if (u_ij == 0.0f && a_ij == 0.0f && t_ij == 0.0f) continue;
+            candidates.push_back({(a_ij + t_ij + u_ij) / 3.0f, i});
+        }
+        if (candidates.empty()) {
+            continue;
+        }
+        const size_t top_k = std::min(
+            candidates.size(), static_cast<size_t>(INFLUENCE_TOP_K));
+        std::partial_sort(
+            candidates.begin(), candidates.begin() + top_k, candidates.end(),
+            [](const InfluenceCandidate& lhs, const InfluenceCandidate& rhs) {
+                float lhs_abs = std::abs(lhs.effect);
+                float rhs_abs = std::abs(rhs.effect);
+                if (lhs_abs != rhs_abs) return lhs_abs > rhs_abs;
+                return lhs.idx < rhs.idx;
+            });
 
-            float effect_strength = (a_ij + t_ij + u_ij) / 3.0f;
-            // Знак связи важен: при положительном отношении агент
-            // сближается с эмоцией партнёра, при отрицательном —
-            // отталкивается. Раньше abs() превращал любую связь в
-            // imitation и усреднял весь коллектив в ноль.
-            float common_factor =
-                (effect_strength / 100.0f) * state.sensitivities[j] * 0.2f /
-                std::max(1, active_count);
-
+        // Взвешенное среднее эмоций ближайшего круга. Вес связи — сила
+        // отношения; доминирующая ось партнёра весит больше остальных.
+        float weighted_value[SimulationState::NUM_AXES] = {0.0f};
+        float weight_sum[SimulationState::NUM_AXES] = {0.0f};
+        for (size_t c = 0; c < top_k; ++c) {
+            int i = candidates[c].idx;
+            if (!active[i]) continue;
+            float relation_weight =
+                (std::abs(candidates[c].effect) + 20.0f) / 100.0f;
             int offset_i = i * SimulationState::NUM_AXES;
-            float r_sens = state.sensitivities[j];
-            // Разные эмоциональные оси могут писать в одну и ту же
-            // реляционную функцию. Суммируем вклад осей локально, иначе
-            // последняя ось перезаписывала бы предыдущие.
-            float rel_delta[3] = {0.0f, 0.0f, 0.0f};
-
             for (int a = 0; a < SimulationState::NUM_AXES; ++a) {
-                float val_i = (float)state.emotions[offset_i + a];
-                float weight = (a == primary_axis[i])
-                                   ? weight_primary[i]
-                                   : weight_secondary[i];
-                float delta = val_i * common_factor * weight;
-                delta_emotions[a] += delta;
-
-                int weight_base = (i * SimulationState::NUM_AXES + a) * 3;
-                rel_delta[0] += delta * state.emission_weights[weight_base + 0] *
-                                r_sens * 10.0f;
-                rel_delta[1] += delta * state.emission_weights[weight_base + 1] *
-                                r_sens * 10.0f;
-                rel_delta[2] += delta * state.emission_weights[weight_base + 2] *
-                                r_sens * 10.0f;
+                float axis_weight = (a == primary_axis[i])
+                                        ? weight_primary[i]
+                                        : weight_secondary[i];
+                float contribution = relation_weight * axis_weight;
+                weighted_value[a] +=
+                    contribution * (float)state.emotions[offset_i + a];
+                weight_sum[a] += contribution;
             }
+        }
 
+        int offset_j = j * SimulationState::NUM_AXES;
+        // Шаг к среднему ограничен сверху: при большой чувствительности
+        // иначе получается перелёт и колебания вокруг цели.
+        const float step =
+            std::min(0.9f, INFLUENCE_RATE * state.sensitivities[j]);
+        float delta_emotions[SimulationState::NUM_AXES] = {0.0f};
+        for (int a = 0; a < SimulationState::NUM_AXES; ++a) {
+            if (weight_sum[a] <= 0.0f) continue;
+            float target = weighted_value[a] / weight_sum[a];
+            delta_emotions[a] =
+                step * (target - (float)state.emotions[offset_j + a]);
+            new_emotions[offset_j + a] = std::max(
+                -30, std::min(30,
+                    (int)std::round((float)state.emotions[offset_j + a] +
+                                    delta_emotions[a])));
+        }
+
+        // Эмоциональный сдвиг слегка переписывает и отношения j к i:
+        // вклад каждого партнёра пропорционален его весу в среднем.
+        for (size_t c = 0; c < top_k; ++c) {
+            int i = candidates[c].idx;
+            if (!active[i]) continue;
+            int base_ji = (j * num_agents + i) * 3;
+            float relation_weight =
+                (std::abs(candidates[c].effect) + 20.0f) / 100.0f;
+            float rel_delta[3] = {0.0f, 0.0f, 0.0f};
+            for (int a = 0; a < SimulationState::NUM_AXES; ++a) {
+                if (weight_sum[a] <= 0.0f) continue;
+                float axis_weight = (a == primary_axis[i])
+                                        ? weight_primary[i]
+                                        : weight_secondary[i];
+                float share = (relation_weight * axis_weight) / weight_sum[a];
+                float delta = delta_emotions[a] * share;
+                int weight_base = (i * SimulationState::NUM_AXES + a) * 3;
+                for (int k = 0; k < 3; ++k) {
+                    rel_delta[k] += delta *
+                                    state.emission_weights[weight_base + k] *
+                                    state.sensitivities[j];
+                }
+            }
             for (int k = 0; k < 3; ++k) {
                 state.relations[base_ji + k] = std::max(
                     -100, std::min(100,
                         (int)std::round(relations_snapshot[base_ji + k] +
                                         rel_delta[k])));
             }
-        }
-
-        int offset_j = j * SimulationState::NUM_AXES;
-        for (int a = 0; a < SimulationState::NUM_AXES; ++a) {
-            new_emotions[offset_j + a] = std::max(
-                -30, std::min(30,
-                    (int)std::round(state.emotions[offset_j + a] + delta_emotions[a])));
         }
     }
 
@@ -241,21 +274,19 @@ void Engine::process_interaction(int from_idx, int to_idx, int sigma) {
     int e_i = primary_emotion_value(from_idx);
     int e_t = primary_emotion_value(to_idx);
 
-    // По тексту положительный исход масштабируется эмоциональным
+    // По тексту исход контакта масштабируется эмоциональным
     // состоянием партнёра: для i -> j это E_j, для j -> i это E_i.
+    // Успех и неудача повышают U/T/A, но неудача — с половинной
+    // дельтой; только отказ понижает отношения.
     auto multiplier_for = [&](int partner_e) {
-        if (sigma == 1) return (partner_e >= 0) ? 2.0f : 0.5f;
-        if (sigma == -1) return (partner_e >= 0) ? 0.5f : 2.0f;
-        return 1.0f;
+        return (partner_e >= 0) ? 2.0f : 0.5f;
     };
 
+    float strength = (sigma == -1) ? 0.5f : 1.0f;
+
     auto apply_side = [&](int actor, int other, float sensitivity, float multiplier) {
-        float base_affinity = 15.0f * multiplier;
-        float base_trust = 10.0f * multiplier;
-        if (sigma == -1) {
-            base_trust = -20.0f * multiplier;
-            base_affinity = -5.0f * multiplier;
-        }
+        float base_affinity = 15.0f * multiplier * strength;
+        float base_trust = 10.0f * multiplier * strength;
 
         int base = (actor * num_agents + other) * 3;
         state.relations[base + 0] = std::max(-100, std::min(100,

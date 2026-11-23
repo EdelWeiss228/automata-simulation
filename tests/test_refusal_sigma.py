@@ -33,13 +33,20 @@ class SigmaModelTest(unittest.TestCase):
         self.assertEqual(a.relations["B"], {"utility": 30, "affinity": 30, "trust": 20})
         self.assertEqual(b.relations["A"], {"utility": 30, "affinity": 30, "trust": 20})
 
-    def test_failure_updates_both_sides_and_trust_is_stronger(self):
+    def test_failure_updates_both_sides_but_weaker_than_success(self):
+        a_s, b_s = make_pair()
+        InteractionStrategy.process_interaction_result(a_s, b_s, Outcome.SUCCESS)
+
         a, b = make_pair()
         InteractionStrategy.process_interaction_result(a, b, Outcome.FAILURE)
         for rel in (a.relations["B"], b.relations["A"]):
-            self.assertLess(rel["affinity"], 0)
-            self.assertLess(rel["utility"], 0)
-            self.assertLess(rel["trust"], rel["affinity"])
+            # Неудача — это тоже состоявшийся контакт: U/T/A растут,
+            # но вдвое слабее успеха. Отрицательным остаётся только отказ.
+            self.assertGreater(rel["affinity"], 0)
+            self.assertGreater(rel["utility"], 0)
+            self.assertGreater(rel["trust"], 0)
+            self.assertLess(rel["affinity"], a_s.relations["B"]["affinity"])
+            self.assertLess(rel["trust"], a_s.relations["B"]["trust"])
 
     def test_partner_emotion_scales_success(self):
         a_pos, b_pos = make_pair()
@@ -83,6 +90,43 @@ class SigmaModelTest(unittest.TestCase):
         study = InteractionStrategy.calculate_refusal_chance(b, a, context="STUDY")
         gym = InteractionStrategy.calculate_refusal_chance(b, a, context="GYM")
         self.assertLess(study, gym)
+
+
+class EmotionalReactionTest(unittest.TestCase):
+    def test_success_pulls_emotions_toward_partner(self):
+        a, b = make_pair()
+        a.emotion_vector = [-20] * 7
+        b.emotion_vector = [20] * 7
+        InteractionStrategy.process_interaction_result(a, b, Outcome.SUCCESS)
+        # Успешный контакт сближает эмоциональные профили.
+        self.assertGreater(a.emotion_vector[0], -20)
+        self.assertLess(b.emotion_vector[0], 20)
+
+    def test_failure_still_converges_but_weaker(self):
+        a_s, b_s = make_pair()
+        a_s.emotion_vector = [-20] * 7
+        b_s.emotion_vector = [20] * 7
+        InteractionStrategy.process_interaction_result(a_s, b_s, Outcome.SUCCESS)
+
+        a_f, b_f = make_pair()
+        a_f.emotion_vector = [-20] * 7
+        b_f.emotion_vector = [20] * 7
+        InteractionStrategy.process_interaction_result(a_f, b_f, Outcome.FAILURE)
+
+        # Оба исхода сближают профили, но неудачный — с меньшей дельтой.
+        self.assertGreater(a_f.emotion_vector[0], -20)
+        self.assertLess(b_f.emotion_vector[0], 20)
+        self.assertGreater(a_s.emotion_vector[0], a_f.emotion_vector[0])
+        self.assertLess(b_s.emotion_vector[0], b_f.emotion_vector[0])
+
+    def test_refusal_pushes_emotions_apart(self):
+        a, b = make_pair()
+        a.emotion_vector = [-20] * 7
+        b.emotion_vector = [20] * 7
+        InteractionStrategy.process_interaction_result(a, b, Outcome.REFUSAL)
+        # Отказ — единственный исход, который разводит профили.
+        self.assertLess(a.emotion_vector[0], -20)
+        self.assertGreater(b.emotion_vector[0], 20)
 
 
 if __name__ == "__main__":

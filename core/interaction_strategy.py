@@ -202,6 +202,35 @@ class InteractionStrategy:
             }
 
     @staticmethod
+    def apply_emotional_reaction(actor, partner, outcome, context=None):
+        """Обновить эмоции актора по исходу контакта и эмоции партнёра.
+
+        Успех и неудача сближают эмоциональные профили (неудача — с меньшей
+        дельтой), отказ — разводит. Это соответствует тексту: эмоция
+        зависит от sigma и E_j, а отказ является единственным разрывающим
+        исходом.
+        """
+        outcome = normalize_outcome(outcome)
+        if outcome == Outcome.SUCCESS:
+            strength = 1.0
+        elif outcome == Outcome.FAILURE:
+            strength = 0.5
+        else:
+            strength = -1.0
+
+        sensitivity = float(getattr(actor, "sensitivity", 1.0))
+        adaptability = getattr(actor, "context_adaptability", {}) or {}
+        context_mod = adaptability.get(context, 1.0) if context else 1.0
+
+        partner_emotions = partner.get_emotions()
+        own_emotions = actor.get_emotions()
+        for axis_name, partner_value in partner_emotions.items():
+            own_value = own_emotions.get(axis_name, 0)
+            delta = (strength * sensitivity * context_mod * 0.15 *
+                     (float(partner_value) - float(own_value)))
+            actor.automaton.adjust_emotion(axis_name, delta)
+
+    @staticmethod
     def process_refusal(initiator, target_agent, context=None):
         """Обработать отказ.
 
@@ -240,6 +269,10 @@ class InteractionStrategy:
         outcome = normalize_outcome(sigma)
         if outcome == Outcome.REFUSAL:
             InteractionStrategy.process_refusal(agent, target_agent, context)
+            InteractionStrategy.apply_emotional_reaction(
+                agent, target_agent, outcome, context)
+            InteractionStrategy.apply_emotional_reaction(
+                target_agent, agent, outcome, context)
             return outcome
 
         s_i = float(getattr(agent, "sensitivity", 1.0))
@@ -253,20 +286,20 @@ class InteractionStrategy:
             t_id = t_obj.id
             InteractionStrategy._ensure_relation(a, t_id)
 
-            # По тексту положительный исход масштабируется эмоциональным
-            # состоянием партнёра E_j, то есть t_obj.
-            _, _, partner_e = t_obj.get_primary_emotion()
-            multiplier = 1.0
-            if outcome == Outcome.SUCCESS:
-                multiplier = 2.0 if partner_e >= 0 else 0.5
-            elif outcome == Outcome.FAILURE:
-                multiplier = 0.5 if partner_e >= 0 else 2.0
+            # По тексту эмоциональное состояние обновляется не только
+            # отношениями, но и исходом контакта sigma и эмоцией партнёра E_j.
+            InteractionStrategy.apply_emotional_reaction(a, t_obj, outcome, context)
 
-            base_affinity = 15 * multiplier
-            base_trust = 10 * multiplier
-            if outcome == Outcome.FAILURE:
-                base_trust = -20 * multiplier
-                base_affinity = -5 * multiplier
+            # По тексту исход контакта масштабируется эмоциональным
+            # состоянием партнёра E_j, то есть t_obj. Успех и неудача
+            # повышают U/T/A, но неудача — с половинной дельтой; только
+            # отказ понижает отношения.
+            _, _, partner_e = t_obj.get_primary_emotion()
+            multiplier = 2.0 if partner_e >= 0 else 0.5
+            strength = 1.0 if outcome == Outcome.SUCCESS else 0.5
+
+            base_affinity = 15 * multiplier * strength
+            base_trust = 10 * multiplier * strength
 
             a.relations[t_id]['affinity'] = a.limit_predicate_value(
                 a.relations[t_id].get('affinity', 0) + int(base_affinity * s * c_mod)

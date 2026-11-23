@@ -293,10 +293,13 @@ class Collective:
         for arch_enum, arch in ARCHETYPE_WEIGHTS.items():
             idx = self._arch_map[arch.name]
             
-            # Подготовка коэффициентов эмоций
+            # C++ react_to_relations — аналог Python adjust_emotion:
+            # каждая ось масштабируется весом восприятия архетипа (5..15),
+            # а не одинаковым коэффициентом 10. Иначе все семь осей
+            # получают общий сдвиг и схлопываются в одно значение.
             e_coeffs = []
             for axis in EmotionAxis:
-                e_coeffs.append(arch.emotion_coefficients.get(axis.value, 0.0))
+                e_coeffs.append(float(arch.weights.get(axis.value, 10)))
             
             self.cpp_engine.set_archetype_config(
                 idx,
@@ -440,7 +443,11 @@ class Collective:
                     target_agent, agent
                 )
                 if random.random() < final_chance:
-                    InteractionStrategy.process_refusal(agent, target_agent)
+                    # Единая точка обработки отказа: штраф U/T/A и
+                    # расхождение эмоциональных профилей у обоих.
+                    InteractionStrategy.process_interaction_result(
+                        agent, target_agent, Outcome.REFUSAL
+                    )
                     interactions.append((agent.name, target, "refusal"))
                     continue
 

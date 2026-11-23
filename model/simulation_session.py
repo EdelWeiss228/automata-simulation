@@ -209,9 +209,11 @@ class SimulationSession:
                     if is_last_slot:
                         self.log_states(slot_id=slot_id)
                     
-                    # Синхронизация C++ и логирование отношений — РАЗ В 3 ДНЯ
-                    should_sync_rel = (is_last_slot and self.collective.current_step % 3 == 0)
-                    
+                    # Синхронизация C++ и логирование отношений — каждый день.
+                    # В ClickHouse пишутся только ненулевые связи, поэтому
+                    # это ~15-20 тысяч строк в день, а не 2.6 млн.
+                    should_sync_rel = is_last_slot
+
                     if self.collective.cpp_engine and is_last_slot:
                         self.collective._sync_to_cpp(sync_relations=should_sync_rel)
                     

@@ -8,6 +8,12 @@ import zlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # Варианты изначальных отношений (Варианты 1, 2, 3)
 RELATION_MODES = ["EMPTY", "RANDOM", "MIXED"]
 
@@ -53,6 +59,69 @@ ALL_RUNS = {**HOMOGENEOUS_RUNS, **HETEROGENEOUS_RUNS}
 ARCHIVE_DIR = "scenarios_archive"
 OUTPUT_ROOT = os.path.join("data", "v2-corrected")
 
+
+def _clickhouse_client():
+    """Клиент ClickHouse для очистки частичных прогонов.
+
+    Если зависимостей или БД нет, очистка пропускается: сам прогон от
+    этого не должен падать.
+    """
+    try:
+        import clickhouse_connect
+        return clickhouse_connect.get_client(
+            host=os.getenv("CLICKHOUSE_HOST", "localhost"),
+            port=int(os.getenv("CLICKHOUSE_PORT", "8123")),
+            username=os.getenv("CLICKHOUSE_USER", "default"),
+            password=os.getenv("CLICKHOUSE_PASSWORD", ""),
+            secure=os.getenv("CLICKHOUSE_SECURE", "False").lower()
+            in ("true", "1", "yes"),
+        )
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        print(f"[cleanup] ClickHouse недоступен: {exc}", flush=True)
+        return None
+
+
+def cleanup_scenario(scenario: str):
+    """Удалить строки прошлых незавершённых попыток этого сценария.
+
+    Маркер .done создаётся только после успешного завершения. Если его нет,
+    значит, предыдущая попытка оборвалась (перезагрузка/падение), и её
+    частичные строки нельзя смешивать с новым прогоном.
+    """
+    client = _clickhouse_client()
+    if client is None:
+        return
+
+    try:
+        result = client.query(
+            "SELECT run_id FROM simulation_runs "
+            "WHERE scenario_name = {scenario:String}",
+            parameters={"scenario": scenario},
+        )
+        run_ids = [str(row[0]) for row in result.result_rows]
+        for run_id in run_ids:
+            for table in (
+                "agent_states", "agent_relations", "interactions",
+                "agent_registry", "simulation_runs",
+            ):
+                client.command(
+                    f"ALTER TABLE {table} DELETE WHERE run_id = '{run_id}' "
+                    "SETTINGS mutations_sync = 1"
+                )
+        if run_ids:
+            print(
+                f"[cleanup] {scenario}: удалено частичных прогонов "
+                f"{len(run_ids)}",
+                flush=True,
+            )
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        print(f"[cleanup] {scenario}: ошибка очистки: {exc}", flush=True)
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
+
 def generate_config(run_id: str, mode: str, counts: dict) -> str:
     scenario_name = f"{run_id}_{mode}"
     filepath = os.path.join(ARCHIVE_DIR, f"{scenario_name}.json")
@@ -93,6 +162,10 @@ def run_simulation(config_path: str, is_test: bool = False, force: bool = False)
     if os.path.exists(done_path) and not force:
         print(f"[skip] {scenario} (уже завершён)", flush=True)
         return True
+
+    # Если маркера нет, предыдущая попытка оборвалась — убираем её
+    # частичные строки, чтобы новый run_id не смешивался со старым.
+    cleanup_scenario(scenario)
 
     python_bin = "./venv/bin/python" if os.path.exists("./venv/bin/python") else "python"
     cmd = [python_bin, "main.py", "--university", "--silent", "--scenario", config_path]

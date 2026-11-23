@@ -118,16 +118,22 @@ class UniversityCollective(Collective):
         for name1, agent1 in self.agents.items():
             if mode == "MIXED" and agent1.course_year == 1:
                 continue
-                
+
+            group1 = getattr(agent1, "group_id", None)
             for name2, agent2 in self.agents.items():
                 if name1 == name2:
                     continue
                 if mode == "MIXED" and agent2.course_year == 1:
                     continue
-                    
+                # Изначальные отношения — внутри своей группы/когорты,
+                # а не между всеми 1620 агентами. Иначе RANDOM/MIXED
+                # создают почти полный граф и десятки миллионов строк.
+                if not group1 or group1 != getattr(agent2, "group_id", None):
+                    continue
+
                 # 2-4 курсы и магистры 2-го года по умолчанию знают друг друга
                 prob = 1.0
-                    
+
                 if prob > 0 and random.random() < prob:
                     agent1.update_relation(
                         name2,
@@ -743,7 +749,10 @@ class UniversityCollective(Collective):
         # Отказ считает цель (a2), а не инициатор.
         refusal_chance = InteractionStrategy.calculate_refusal_chance(a2, a1, context)
         if random.random() < refusal_chance:
-            InteractionStrategy.process_refusal(a1, a2, context)
+            # Единая точка обработки отказа: штраф U/T/A и расхождение
+            # эмоциональных профилей у обоих участников.
+            InteractionStrategy.process_interaction_result(
+                a1, a2, Outcome.REFUSAL, context)
             return (name1, name2, "refusal")
 
         # По тексту при состоявшемся контакте успех и неудача равновероятны.

@@ -26,6 +26,29 @@ def rotate(collective, times=1):
 
 
 class MasterStructureTest(unittest.TestCase):
+    def test_random_initial_relations_stay_within_group(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            c = UniversityCollective(
+                seed=777,
+                config={
+                    "start_year": 2024,
+                    "initial_relations_mode": "RANDOM",
+                    "total_bac": 1500,
+                    "total_mag": 120,
+                },
+            )
+
+        pairs = []
+        for agent in c.agents.values():
+            for other_id, rel in agent.relations.items():
+                if any(rel.get(axis, 0) for axis in ("utility", "affinity", "trust")):
+                    pairs.append((agent, c.agents[other_id]))
+
+        self.assertTrue(pairs)
+        # RANDOM заполняет связи только внутри группы/когорты, а не
+        # почти полный граф на 1620 агентов.
+        self.assertTrue(all(a.group_id == b.group_id for a, b in pairs))
+        self.assertLess(len(pairs), 100000)
     def test_initial_structure(self):
         c = build()
         self.assertEqual(len(c.agents), 1620)
