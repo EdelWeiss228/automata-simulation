@@ -229,7 +229,7 @@ def run_simulation(config_path: str, is_test: bool = False,
         print(f"[skip] {scenario} (уже завершён)", flush=True)
         return True
 
-    started_at = datetime.now()
+    started_at = datetime.now().astimezone()
     cleanup_started = time.time()
     # Если маркера нет, предыдущая попытка оборвалась — убираем её
     # частичные строки, чтобы новый run_id не смешивался со старым.
@@ -266,7 +266,7 @@ def run_simulation(config_path: str, is_test: bool = False,
         "scenario": scenario,
         "implementation": "python-v2",
         "started_at": started_at.isoformat(timespec="seconds"),
-        "finished_at": datetime.now().isoformat(timespec="seconds"),
+        "finished_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "elapsed_seconds": round(elapsed_seconds, 3),
         "elapsed_minutes": round(elapsed, 3),
         "cleanup_seconds": round(cleanup_seconds, 3),

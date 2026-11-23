@@ -80,9 +80,15 @@ def main():
                 print("Done.", flush=True)
                 status = "ok"
             finally:
+                simulated_days = (
+                    getattr(session, "days_simulated", 0) if session else 0
+                )
                 extra = {
                     "agents": len(getattr(univ, "agents", {}) or {}),
-                    "days": getattr(univ, "current_step", 0) if univ else 0,
+                    "days": (
+                        simulated_days
+                        or (getattr(univ, "current_step", 0) if univ else 0)
+                    ),
                     "semesters": (
                         getattr(univ, "semesters_passed", 0) if univ else 0
                     ),
