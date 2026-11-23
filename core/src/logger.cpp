@@ -83,14 +83,19 @@ void CSVLogger::log_interactions(
         f << "Дата,Источник,Цель,Успех\n";
     }
 
-    const char* type_map[] = {"refusal", "success", "fail"};
+    auto type_name = [](int type) -> const char* {
+        if (type == 1) return "success";
+        if (type == -1) return "fail";
+        if (type == 0) return "refusal";
+        return "unknown";
+    };
     std::string short_date = date_str.substr(0, 10);
 
     for (const auto& inter : interactions) {
-        if (inter.from_idx >= 0 && inter.from_idx < agent_names.size() &&
-            inter.to_idx >= 0 && inter.to_idx < agent_names.size()) {
+        if (inter.from_idx >= 0 && inter.from_idx < (int)agent_names.size() &&
+            inter.to_idx >= 0 && inter.to_idx < (int)agent_names.size()) {
             f << short_date << "," << agent_names[inter.from_idx] << "," 
-              << agent_names[inter.to_idx] << "," << type_map[inter.type] << "\n";
+              << agent_names[inter.to_idx] << "," << type_name(inter.type) << "\n";
         }
     }
 }

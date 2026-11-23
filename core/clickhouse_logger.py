@@ -153,7 +153,8 @@ class ClickHouseLogger:
         """
         data = []
         type_map = {'refusal': 0, 'success': 1, 'fail': -1}
-        cpp_type_map = {0: 0, 1: 1, 2: -1} # Map C++ enum directly to ClickHouse ints
+        # C++ уже пишет -1/0/1, как и Python Outcome.
+        cpp_type_map = {-1: -1, 0: 0, 1: 1}
         
         if interactions_list and name_to_id:
             for from_name, to_name, status in interactions_list:
@@ -262,7 +263,7 @@ class ClickHouseLogger:
         
         # Получение relations
         relations_query = f"""
-            SELECT ID субъекта, ID объекта, utility, affinity, trust
+            SELECT subject_id, object_id, utility, affinity, trust
             FROM agent_relations
             WHERE run_id = '{target_run_id}' AND day_id = {day_id} AND slot_id = {slot_id}
         """

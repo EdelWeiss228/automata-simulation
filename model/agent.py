@@ -70,16 +70,30 @@ class Agent:
         self.emotion_effects = emotion_effects or self.archetype.emotion_effects
         self.emotion_coefficients = emotion_coefficients or self.archetype.emotion_coefficients
         self.emotions = emotions
-        
-        # Инициализация вектора эмоций (7 измерений) в диапазоне [-30, 30]
+
+        # Эмоциональное состояние живёт в automaton.pairs. emotion_vector —
+        # только view, чтобы старый код не создавал вторую независимую копию.
         if emotions:
-            # Если передан словарь эмоций, используем его значения для вектора (соответствие осям)
-            self.emotion_vector = [int(emotions.get(axis.value, random.randint(-30, 30))) for axis in EmotionAxis]
-            for emotion_name, value in emotions.items():
-                self.automaton.set_emotion(emotion_name, value)
-        else:
-            # Случайный вектор эмоций по умолчанию
-            self.emotion_vector = [random.randint(-30, 30) for _ in range(7)]
+            for axis in EmotionAxis:
+                self.automaton.set_emotion(
+                    axis, emotions.get(axis.value, random.randint(-30, 30))
+                )
+
+    @property
+    def emotion_vector(self):
+        """Текущий семимерный вектор эмоций (view поверх automaton.pairs)."""
+        return [pair.value for pair in self.automaton.pairs.values()]
+
+    @emotion_vector.setter
+    def emotion_vector(self, values):
+        values = list(values)
+        if len(values) != len(self.automaton.pairs):
+            raise ValueError(
+                f"emotion_vector must have {len(self.automaton.pairs)} values, "
+                f"got {len(values)}"
+            )
+        for axis, value in zip(self.automaton.pairs.keys(), values):
+            self.automaton.pairs[axis].set(value)
 
     def set_university_info(self, faculty, stream, group_id):
         """
@@ -172,8 +186,10 @@ class Agent:
         """
         Вызывает постепенное затухание эмоций в автомате (целочисленный масштаб x10).
         """
+        # d_E = 0.2 во внешней шкале; внутри x10 это 2 единицы.
         decay_rate = getattr(self.archetype, 'emotion_decay', 2)
-        self.automaton.apply_decay((decay_rate * self.sensitivity) // 10)
+        step = max(0, int(round(float(decay_rate) * float(self.sensitivity))))
+        self.automaton.apply_decay(step)
 
     def _adjust_affinity(self, target_name: str, delta: float, target_emotion: Optional[list] = None):
         """
@@ -274,7 +290,7 @@ class Agent:
 
         for target_name, relation in self.relations.items():
             target_agent = self.group.get_agent(target_name) if self.group else None
-            if not target_agent or target_agent.classify_relationship(self.id) == "avoid":
+            if not target_agent:
                 continue
 
             avg_rel = (relation["affinity"] + relation["trust"] + relation["utility"]) // 3
@@ -289,16 +305,18 @@ class Agent:
         """
         Закон прощения: Отношения стремятся к нулю со временем (integer x10 scale).
         """
+        # decay_rate уже в целочисленной x10-шкале (0.8 -> 8).
         decay_rate = getattr(self.archetype, 'decay_rate', 1)
-        step = (decay_rate * self.sensitivity) // 10
-        
+        step = float(decay_rate) * float(self.sensitivity)
+
         for target_name in list(self.relations.keys()):
             for key in ['trust', 'affinity', 'utility']:
                 current_val = self.relations[target_name].get(key, 0)
                 if current_val > 0:
-                    self.relations[target_name][key] = max(0, current_val - int(step * 0.5))
+                    # Положительные связи ослабевают с весом 0.5 * d_i.
+                    self.relations[target_name][key] = max(0, int(current_val - step * 0.5))
                 elif current_val < 0:
-                    self.relations[target_name][key] = min(0, current_val + step)
+                    self.relations[target_name][key] = min(0, int(current_val + step))
 
     def classify_relationship(self, other_name: str) -> str:
         """

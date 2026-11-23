@@ -24,7 +24,6 @@ pdf/
 data/
 diplom.pdf
 scripts/*.json
-tests/
 
 # IDEs & System
 .DS_Store

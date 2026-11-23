@@ -3,6 +3,7 @@ import sys
 import json
 import subprocess
 import time
+import zlib
 from datetime import datetime
 
 # Варианты изначальных отношений (Варианты 1, 2, 3)
@@ -51,6 +52,14 @@ ARCHIVE_DIR = "scenarios_archive"
 
 def generate_config(run_id: str, mode: str, counts: dict) -> str:
     scenario_name = f"{run_id}_{mode}"
+    filepath = os.path.join(ARCHIVE_DIR, f"{scenario_name}.json")
+
+    # Архивные сценарии уже содержат зафиксированные seed'ы. Их нельзя
+    # перегенерировать: встроенный hash() для строк рандомизирован между
+    # процессами (PYTHONHASHSEED), и тогда "те же данные" не воспроизводятся.
+    if os.path.exists(filepath):
+        return filepath
+
     config = {
         "scenario_name": scenario_name,
         "run_name": run_id,
@@ -59,13 +68,13 @@ def generate_config(run_id: str, mode: str, counts: dict) -> str:
         "master_counts": {k: max(1, int(v * 0.08)) for k, v in counts.items()} if counts else {},
         "initial_relations_mode": mode,
         "semesters": 8,
-        "seed": hash(scenario_name) % 1000000 # Фиксируем seed для воспроизводимости (до миллиона для C++)
+        # CRC32 стабилен между процессами и платформами.
+        "seed": zlib.crc32(scenario_name.encode("utf-8")) % 1000000
     }
-    
-    filepath = os.path.join(ARCHIVE_DIR, f"{scenario_name}.json")
+
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=4, ensure_ascii=False)
-        
+
     return filepath
 
 def run_simulation(config_path: str, is_test: bool = False):

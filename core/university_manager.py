@@ -7,9 +7,13 @@ from model.agent import Agent
 
 class UniversityManager:
     """Управляющий структурой и логикой университета."""
-    
+
     FACULTY_NAMES = ["П", "Ф", "Р", "М", "Эк"]
     MASTER_FACULTIES = ["ММ", "ПМ", "ПО", "ЭкМ", "РМ", "ГП"]
+    MASTER_YEARS = (1, 2)
+    MASTER_GROUP_SIZE = 10
+    MASTER_GROUPS = len(MASTER_FACULTIES) * len(MASTER_YEARS)
+    MASTER_CAPACITY = MASTER_GROUPS * MASTER_GROUP_SIZE
     
     NAMES_M = ["Иван", "Александр", "Сергей", "Дмитрий", "Андрей", "Алексей", "Максим", "Евгений", "Михаил", "Владимир", "Никита", "Артем", "Игорь"]
     SURNAMES_M = ["Иванов", "Петров", "Сидоров", "Смирнов", "Кузнецов", "Попов", "Васильев", "Соколов", "Михайлов", "Новиков", "Федоров", "Морозов"]
@@ -53,6 +57,44 @@ class UniversityManager:
         if rtype in ["CORRIDOR", "GYM"]: return 42
         return 6
 
+    @staticmethod
+    def stable_hash(text: str) -> int:
+        """Стабильный FNV-1a хэш.
+
+        Встроенный hash() для строк рандомизирован в каждом процессе
+        (PYTHONHASHSEED), из-за чего визуальные координаты менялись от запуска
+        к запуску. Для воспроизводимости нужен собственный хэш.
+        """
+        value = 2166136261
+        for byte in text.encode("utf-8"):
+            value ^= byte
+            value = (value * 16777619) & 0xFFFFFFFF
+        return value
+
+    @staticmethod
+    def year_suffix(year: int) -> str:
+        """Двузначный суффикс года набора: 2024 -> 24."""
+        return str(int(year))[2:]
+
+    @classmethod
+    def master_group_id(cls, direction: str, enrollment_year: int) -> str:
+        """Идентификатор магистерской когорты по направлению и году набора."""
+        return f"{direction}-{cls.year_suffix(enrollment_year)}"
+
+    @classmethod
+    def master_group_ids(cls, academic_year: int) -> List[str]:
+        """Активные магистерские когорты: текущий набор и предыдущий.
+
+        У магистратуры нет подгрупп внутри курса: 6 направлений x 2 курса,
+        по одной группе-когорте на направление и год набора. Идентификатор
+        когорты не меняется при переходе с первого курса на второй.
+        """
+        return [
+            cls.master_group_id(direction, academic_year - offset)
+            for direction in cls.MASTER_FACULTIES
+            for offset in (0, 1)
+        ]
+
     def get_seat_coordinates(self, room_id, s_idx):
         info = self.rooms_info.get(room_id)
         if not info: return 0, 0
@@ -64,7 +106,7 @@ class UniversityManager:
         rx = info["x"] + mx + (s_idx % cols) * step_x
         ry = info["y"] + my + (s_idx // cols) * step_y
         if info["type"] in ["CORRIDOR", "GYM"]:
-            rnd = random.Random(s_idx + hash(room_id))
+            rnd = random.Random(s_idx + self.stable_hash(room_id))
             jx = (step_x / 3) if step_x > 0 else 5
             jy = (step_y / 3) if step_y > 0 else 5
             rx += rnd.uniform(-jx, jx); ry += rnd.uniform(-jy, jy)
@@ -100,24 +142,67 @@ class UniversityManager:
                         group_schedule[day] = pairs
                     self.schedules[group_id] = group_schedule
                     
+        for m_name in self.MASTER_FACULTIES:
+            for course_year in self.MASTER_YEARS:
+                enrollment_year = self.start_academic_year - (course_year - 1)
+                group_id = self.master_group_id(m_name, enrollment_year)
+                self.ensure_master_schedule(group_id)
+
+    def _build_master_schedule(self) -> dict:
         all_lectures = [r for r in self.rooms_info if r.endswith("_L")]
         all_seminars = [r for r in self.rooms_info if r.endswith("_S")]
-        
-        for m_name in self.MASTER_FACULTIES:
-            for year in [1, 2]:
-                group_id = f"{m_name}-M{year}-1"
-                group_schedule = {}
-                for day in range(6):
-                    pairs = []
-                    for p in range(4):
-                        if random.random() < 0.15:
-                            pairs.append("EMPTY")
-                        elif random.random() < 0.3: 
-                            pairs.append(random.choice(all_lectures))
-                        else: 
-                            pairs.append("GYM" if random.random() < 0.1 else random.choice(all_seminars))
-                    group_schedule[day] = pairs
-                self.schedules[group_id] = group_schedule
+        group_schedule = {}
+        for day in range(6):
+            pairs = []
+            for _ in range(4):
+                if random.random() < 0.15:
+                    pairs.append("EMPTY")
+                elif random.random() < 0.3 and all_lectures:
+                    pairs.append(random.choice(all_lectures))
+                elif all_seminars:
+                    pairs.append(
+                        "GYM" if random.random() < 0.1
+                        else random.choice(all_seminars)
+                    )
+                else:
+                    pairs.append("GYM")
+            group_schedule[day] = pairs
+        return group_schedule
+
+    def ensure_master_schedule(self, group_id: str) -> None:
+        """Создать расписание для магистерской когорты, если его ещё нет."""
+        if group_id not in self.schedules:
+            self.schedules[group_id] = self._build_master_schedule()
+
+    def ensure_bachelor_schedule(self, group_id: str) -> None:
+        """Создать расписание для новой бакалаврской группы.
+
+        `generate_schedules` строит расписание только для лет, существующих на
+        старте симуляции. После ротации появляются группы следующего года,
+        и без расписания их студенты не попадают ни на одну пару.
+        """
+        if group_id in self.schedules:
+            return
+        parts = group_id.split("-")
+        if len(parts) != 3:
+            return
+        f_name, year_suffix, _ = parts
+        all_lectures = [r for r in self.rooms_info if r.endswith("_L")]
+        all_seminars = [r for r in self.rooms_info if r.endswith("_S")]
+        group_schedule = {}
+        for day in range(6):
+            pairs = []
+            for _ in range(4):
+                if random.random() < 0.15:
+                    pairs.append("EMPTY")
+                elif random.random() < 0.3 and all_lectures:
+                    pairs.append(random.choice(all_lectures))
+                elif all_seminars:
+                    pairs.append("GYM" if random.random() < 0.1 else random.choice(all_seminars))
+                else:
+                    pairs.append(f"Aud_{f_name}_{year_suffix}_L")
+            group_schedule[day] = pairs
+        self.schedules[group_id] = group_schedule
 
     def get_group_schedule(self, group_id, day_idx):
         return getattr(self, 'schedules', {}).get(group_id, {}).get(day_idx, [])
@@ -139,6 +224,7 @@ class UniversityManager:
             # В ротации добавляем один новый набор (1-й курс)
             for g in range(self.groups_per_stream):
                 group_id = f"{f_name}-{year_suffix}-{g+1}"
+                self.ensure_bachelor_schedule(group_id)
                 for i in range(25):
                     agent_id = f"S-{group_id}-{i+1:02d}"
                     arch = self._pick_archetype(b_weights)
@@ -148,22 +234,26 @@ class UniversityManager:
                     agent.enrollment_year = academic_year
                     agents.append(agent)
                     
-        # 2. Новые магистры (1 курс)
+        # 2. Новые магистры (1 курс). Когорта набора academic_year добивается
+        # до 10 человек: продолжающие занимают часть мест, остальные — внешние.
         for m_idx, m_name in enumerate(self.MASTER_FACULTIES):
-            group_id = f"{m_name}-M1-1"
-            already_filled = master_filled.get(group_id, 0)
-            to_add = max(0, 15 - already_filled)
+            group_id = self.master_group_id(m_name, academic_year)
+            self.ensure_master_schedule(group_id)
+            already_filled = int(master_filled.get(group_id, 0))
+            to_add = max(0, self.MASTER_GROUP_SIZE - already_filled)
             for i in range(to_add):
-                agent_id = f"M-{group_id}-{already_filled + i + 1:02d}"
+                agent_id = (
+                    f"M-{group_id}-{already_filled + i + 1:02d}"
+                )
                 arch = self._pick_archetype(m_weights)
                 agent = AgentFactory.create_agent(self._generate_human_name(), archetype_enum=arch, agent_id=agent_id)
                 agent.degree_type = "MASTER"
                 agent.course_year = 1
                 agent.enrollment_year = academic_year
                 parent_faculty = self.FACULTY_NAMES[m_idx % len(self.FACULTY_NAMES)]
-                agent.set_university_info(parent_faculty, f"{m_name}-M1", group_id)
+                agent.set_university_info(parent_faculty, m_name, group_id)
                 agents.append(agent)
-                
+
         return agents
 
     def _pick_archetype(self, weights):
@@ -192,12 +282,16 @@ class UniversityManager:
             return f"{random.choice(self.NAMES_M)} {random.choice(self.SURNAMES_M)}"
         return f"{random.choice(self.NAMES_F)} {random.choice(self.SURNAMES_F)}"
 
-    def create_university_agents(self, total_bac=1500, total_mag=180, bachelor_counts=None, master_counts=None) -> List[Agent]:
+    def create_university_agents(self, total_bac=1500, total_mag=None, bachelor_counts=None, master_counts=None) -> List[Agent]:
         from core.agent_factory import AgentFactory
         from model.archetypes import ArchetypeEnum
         agents = []
         b_counts = bachelor_counts or {}
         m_counts = master_counts or {}
+
+        if total_mag is None:
+            total_mag = self.MASTER_CAPACITY
+        total_mag = max(0, min(int(total_mag), self.MASTER_CAPACITY))
         
         def build_pool(counts, total):
             pool = []
@@ -245,22 +339,41 @@ class UniversityManager:
                         agent = AgentFactory.create_agent(self._generate_human_name(), archetype_enum=bac_pool.pop(), agent_id=agent_id)
                         agent.set_university_info(f_name, f"{f_name}-{year_suffix}", group_id)
                         agent.course_year = s + 1
+                        agent.enrollment_year = self.start_academic_year - s
                         agents.append(agent)
 
-        # 3. Генерация магистров
-        for m_idx, m_name in enumerate(self.MASTER_FACULTIES):
-            if not mag_pool: break
-            for year in [1, 2]:
-                if not mag_pool: break
-                group_id = f"{m_name}-M{year}-1"
-                for i in range(15):
-                    if not mag_pool: break
-                    # Униканый ID: M-ММ-M1-01
-                    agent_id = f"M-{group_id}-{i+1:02d}"
-                    agent = AgentFactory.create_agent(self._generate_human_name(), archetype_enum=mag_pool.pop(), agent_id=agent_id)
-                    agent.degree_type = "MASTER"
-                    agent.course_year = year
-                    parent_faculty = self.FACULTY_NAMES[m_idx % len(self.FACULTY_NAMES)]
-                    agent.set_university_info(parent_faculty, f"{m_name}-M{year}", group_id)
-                    agents.append(agent)
+        # 3. Генерация магистров. 6 направлений x 2 активные когорты
+        # (текущий набор и предыдущий), по 10 человек. Пул распределяется
+        # по всем 12 когортам, а не заполняет первые группы подряд.
+        active_master_groups = []
+        for m_name in self.MASTER_FACULTIES:
+            for course_year in self.MASTER_YEARS:
+                enrollment_year = self.start_academic_year - (course_year - 1)
+                active_master_groups.append((
+                    self.master_group_id(m_name, enrollment_year),
+                    m_name,
+                    enrollment_year,
+                    course_year,
+                ))
+
+        group_counters = {gid: 0 for gid, _, _, _ in active_master_groups}
+        for pool_idx in range(len(mag_pool)):
+            group_id, direction, enrollment_year, course_year = (
+                active_master_groups[pool_idx % len(active_master_groups)]
+            )
+            group_counters[group_id] += 1
+            agent_id = f"M-{group_id}-{group_counters[group_id]:02d}"
+            agent = AgentFactory.create_agent(
+                self._generate_human_name(),
+                archetype_enum=mag_pool[pool_idx],
+                agent_id=agent_id,
+            )
+            agent.degree_type = "MASTER"
+            agent.course_year = course_year
+            agent.enrollment_year = enrollment_year
+            parent_faculty = self.FACULTY_NAMES[
+                self.MASTER_FACULTIES.index(direction) % len(self.FACULTY_NAMES)
+            ]
+            agent.set_university_info(parent_faculty, direction, group_id)
+            agents.append(agent)
         return agents

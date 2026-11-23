@@ -10,7 +10,7 @@ namespace core_engine {
 struct InteractionLogEntry {
     int from_idx;
     int to_idx;
-    int type; // 0: refusal, 1: success, 2: fail
+    int type; // -1: fail, 0: refusal, 1: success
 };
 
 class CSVLogger {

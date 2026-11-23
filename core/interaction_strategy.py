@@ -1,19 +1,75 @@
-import random
 import math
+import random
+from enum import IntEnum
+
+
+class Outcome(IntEnum):
+    """Дискретный исход взаимодействия (Sigma-модель)."""
+    FAILURE = -1
+    REFUSAL = 0
+    SUCCESS = 1
+
+
+def normalize_outcome(value) -> Outcome:
+    """Приводит bool/str/int/Outcome к Outcome.
+
+    Нужен на границах Python/C++, где исторически встречались и строки,
+    и bool, и числа.
+    """
+    if isinstance(value, Outcome):
+        return value
+    if isinstance(value, bool):
+        return Outcome.SUCCESS if value else Outcome.FAILURE
+    if isinstance(value, str):
+        key = value.strip().lower()
+        if key in ("success", "ok", "1", "+1"):
+            return Outcome.SUCCESS
+        if key in ("fail", "failure", "error", "-1"):
+            return Outcome.FAILURE
+        if key in ("refusal", "refuse", "0"):
+            return Outcome.REFUSAL
+    if isinstance(value, (int, float)):
+        if value > 0:
+            return Outcome.SUCCESS
+        if value < 0:
+            return Outcome.FAILURE
+        return Outcome.REFUSAL
+    raise ValueError(f"Unknown interaction outcome: {value!r}")
+
 
 class InteractionStrategy:
     """
-    Класс, инкапсулирующий стратегию выбора цели and обработки результатов взаимодействия.
-    Вынесен из Collective для декомпозиции 'God Object'.
+    Класс, инкапсулирующий стратегию выбора цели и обработки результатов
+    взаимодействия. Вынесен из Collective для декомпозиции 'God Object'.
     """
 
     @staticmethod
-    def calculate_refusal_chance(agent, target_agent) -> float:
+    def calculate_refusal_chance(target_agent, initiator_agent, context=None) -> float:
+        """Вероятность отказа цели от контакта с инициатором.
+
+        Базовая вероятность берётся у цели. Текущее отношение цели к
+        инициатору сдвигает её: плохие отношения повышают шанс отказа,
+        хорошие — понижают. Контекст тоже учитывается.
         """
-        Рассчитывает вероятность отказа на основе базового шанса архетипа.
-        """
-        base_factor = getattr(agent.archetype, "refusal_chance", 0.3)
-        return min(0.95, base_factor)
+        base_factor = float(getattr(target_agent.archetype, "refusal_chance", 0.3))
+
+        metrics = target_agent.relations.get(initiator_agent.id, {}) or {}
+        u = float(metrics.get("utility", 0))
+        a = float(metrics.get("affinity", 0))
+        t = float(metrics.get("trust", 0))
+        relation_mean = (u + a + t) / 3.0
+
+        # При нейтральных отношениях factor == 1.0.
+        # При -100 -> почти 2.0, при +100 -> почти 0.0.
+        relation_factor = 2.0 / (1.0 + math.exp(relation_mean / 25.0))
+
+        context_factor = 1.0
+        if context:
+            adaptability = getattr(target_agent, "context_adaptability", {}) or {}
+            context_factor = 1.0 / max(0.25, float(adaptability.get(context, 1.0)))
+
+        chance = base_factor * relation_factor * context_factor
+        return max(0.01, min(0.95, chance))
 
     @staticmethod
     def handle_player_interaction(agent, player):
@@ -23,11 +79,11 @@ class InteractionStrategy:
         emotion_name, _, emotion_value = agent.get_primary_emotion()
         # Игрок отвечает на эмоцию
         player.respond_to_agent(agent.id, emotion_name, emotion_value)
-        
+
         # Агент обновляет отношение к игроку (delta теперь в x10)
         s_i = getattr(agent, 'sensitivity', 1.0)
-        delta_scaled = emotion_value * s_i # emotion_value уже до 30
-        
+        delta_scaled = emotion_value * s_i  # emotion_value уже до 30
+
         # При успехе контакта с игроком (инициатива агента)
         agent.relations[player.name]['affinity'] = agent.limit_predicate_value(
             agent.relations[player.name].get('affinity', 0) + int(delta_scaled * 2.0)
@@ -42,7 +98,7 @@ class InteractionStrategy:
     @staticmethod
     def _apply_transformation(val, transform_type):
         """Применяет математическую трансформацию к значению (scaled input)."""
-        val_orig = val / 10.0 # Ожидаем логарифм/экспоненту в шкале 0..10
+        val_orig = val / 10.0  # Ожидаем логарифм/экспоненту в шкале 0..10
         if transform_type == "log":
             return math.log(abs(val_orig) + 1) * (1 if val_orig >= 0 else -1)
         elif transform_type == "exp":
@@ -51,19 +107,20 @@ class InteractionStrategy:
             return 10 / (1 + math.exp(-val_orig))
         elif transform_type == "periodic":
             return math.sin(val_orig) * 5.0
-        return val_orig # linear по умолчанию
+        return val_orig  # linear по умолчанию
 
     @classmethod
     def priority_score(cls, agent, target_name, metrics, context=None):
         """
         Расчет приоритета цели на основе реляционных метрик.
-        Если отношений еще нет (первокурсник), возвращается 0.5 для равномерного Softmax-распределения.
+        Если отношений еще нет (первокурсник), возвращается 0.5 для равномерного
+        Softmax-распределения.
         """
         if not metrics:
             return 0.5
-            
+
         config = getattr(agent.archetype, 'scoring_config', {})
-        
+
         affinity = metrics.get('affinity', 0)
         utility = metrics.get('utility', 0)
         trust = metrics.get('trust', 0)
@@ -73,20 +130,21 @@ class InteractionStrategy:
         u_score = cls._apply_transformation(utility, config.get("utility", "linear"))
         t_score = cls._apply_transformation(trust, config.get("trust", "linear"))
 
-        alpha = 1.5
-        
-        base_score = a_score + u_score + alpha * t_score
-        
-        # Влияние Среды: Умножаем итоговый скор на коэффициент общительности в данном контексте
+        base_score = a_score + u_score + t_score
+
+        # Влияние Среды: умножаем итоговый скор на коэффициент общительности
         if context and hasattr(agent, 'context_adaptability'):
             context_multiplier = agent.context_adaptability.get(context, 1.0)
             base_score *= context_multiplier
-            
+
         return base_score
 
     @staticmethod
     def categorize_relationships(agent):
-        """Классифицировать отношения агента."""
+        """Классифицировать отношения агента (только для статистики).
+
+        В управлении взаимодействием эта классификация больше не участвует.
+        """
         mandatory = []
         optional = []
         avoid = []
@@ -101,103 +159,125 @@ class InteractionStrategy:
         return mandatory, optional, avoid
 
     @classmethod
-    def choose_target(cls, agent, mandatory, optional):
-        """Выбрать цель взаимодействия на основе Softmax-распределения."""
-        candidates = mandatory if mandatory else optional
+    def choose_target(cls, agent, candidates, context=None):
+        """Выбрать цель взаимодействия на основе Softmax-распределения.
+
+        Кандидаты — все доступные цели; никаких mandatory/optional/avoid
+        в управлении. `candidates` может быть списком (name, metrics) или
+        словарём name -> metrics.
+        """
+        if isinstance(candidates, dict):
+            candidates = list(candidates.items())
+        else:
+            candidates = list(candidates)
+
         if not candidates:
             return None
-            
         if len(candidates) == 1:
             return candidates[0]
 
         temp = getattr(agent.archetype, 'temperature', 1.0)
         temp = max(0.01, temp)
-        
+
         scores = []
         for target_name, metrics in candidates:
-            score = cls.priority_score(agent, target_name, metrics)
+            score = cls.priority_score(agent, target_name, metrics, context)
             scores.append(score)
-            
+
         max_score = max(scores)
         exp_scores = [math.exp((s - max_score) / temp) for s in scores]
-        
+
         chosen_idx = random.choices(range(len(candidates)), weights=exp_scores, k=1)[0]
         return candidates[chosen_idx]
 
     @staticmethod
-    def process_refusal(agent, target_agent):
+    def _ensure_relation(actor, other_id):
+        if other_id not in actor.relations:
+            # Отсутствие связи — это tabula rasa, а не случайная связь.
+            # C++-ядро для новой пары тоже хранит нули.
+            actor.relations[other_id] = {
+                'utility': 0,
+                'affinity': 0,
+                'trust': 0,
+            }
+
+    @staticmethod
+    def process_refusal(initiator, target_agent, context=None):
+        """Обработать отказ.
+
+        По тексту отказавший и инициатор оба ухудшают все три функции друг
+        к другу. Главная ось архетипа получает больший вес, остальные —
+        меньший. Контекст масштабирует силу реакции.
         """
-        Обработать отказ взаимодействия между агентами.
-        """
-        s_i = getattr(agent, 'sensitivity', 1.0)
+        for actor, other in ((initiator, target_agent), (target_agent, initiator)):
+            InteractionStrategy._ensure_relation(actor, other.id)
 
-        if target_agent.id not in agent.relations:
-            from core.agent_factory import AgentFactory
-            AgentFactory.initialize_agent_relations(agent, [target_agent.id])
+            impact = getattr(actor.archetype, 'refusal_impact', None)
+            if not impact:
+                impact = {'utility': 0.5, 'affinity': 0.5, 'trust': 0.5}
 
-        vuln_i = getattr(agent.archetype, 'refusal_vulnerability', 0)
-        penalty = 20 * s_i # Умеренный штраф (-2.0 в старой шкале)
+            adaptability = getattr(actor, 'context_adaptability', {}) or {}
+            c_mod = adaptability.get(context, 1.0) if context else 1.0
+            penalty = 20.0 * float(getattr(actor, 'sensitivity', 1.0)) * c_mod
 
-        if vuln_i == 0:
-            agent.relations[target_agent.id]['utility'] = agent.limit_predicate_value(
-                agent.relations[target_agent.id].get('utility', 0) - penalty
+            rel = actor.relations[other.id]
+            rel['utility'] = actor.limit_predicate_value(
+                rel.get('utility', 0) - penalty * float(impact.get('utility', 0.5))
             )
-        elif vuln_i == 1:
-            agent.relations[target_agent.id]['affinity'] = agent.limit_predicate_value(
-                agent.relations[target_agent.id].get('affinity', 0) - penalty
+            rel['affinity'] = actor.limit_predicate_value(
+                rel.get('affinity', 0) - penalty * float(impact.get('affinity', 0.5))
             )
-        else:
-            agent.relations[target_agent.id]['trust'] = agent.limit_predicate_value(
-                agent.relations[target_agent.id].get('trust', 0) - penalty
+            rel['trust'] = actor.limit_predicate_value(
+                rel.get('trust', 0) - penalty * float(impact.get('trust', 0.5))
             )
-
-        # Тот, кто отказал, не меняет мнения. Логика изменений убрана.
 
     @staticmethod
     def process_interaction_result(agent, target_agent, sigma, context=None):
-        """
-        Обработать результат взаимодействия (Sigma) and обновить отношения.
-        Интеграция пространственного контекста (учеба, спортзал, перерыв).
-        """
-        s_i = getattr(agent, "sensitivity", 1.0)
-        s_t = getattr(target_agent, "sensitivity", 1.0)
-        
-        # Получаем знак and силу первичной эмоции инициатора
-        _, _, e_val = agent.get_primary_emotion()
-        
-        # Определяем множитель на основе Сигма-модели
-        multiplier = 1.0
-        if sigma == 1: # Успех
-            multiplier = 2.0 if e_val >= 0 else 0.5
-        elif sigma == -1: # Неудача
-            multiplier = 0.5 if e_val >= 0 else 2.0
+        """Обработать результат взаимодействия и обновить отношения.
 
-        # Базовые дельты в x10
-        base_affinity = 15 * multiplier
-        base_trust = 10 * multiplier
-        
-        # При неудаче (-1) доверие всегда падает сильнее, а аффинити страдает от 'шума'
-        if sigma == -1:
-            base_trust = -20 * multiplier
-            base_affinity = -5 * multiplier
-            
-        # Влияние Среды: Динамический мультипликатор получения опыта отношений в контесте
+        sigma принимает Outcome, int, bool или исторические строки.
+        """
+        outcome = normalize_outcome(sigma)
+        if outcome == Outcome.REFUSAL:
+            InteractionStrategy.process_refusal(agent, target_agent, context)
+            return outcome
+
+        s_i = float(getattr(agent, "sensitivity", 1.0))
+        s_t = float(getattr(target_agent, "sensitivity", 1.0))
+
+        # Влияние среды: динамический мультипликатор получения опыта.
         c_i = agent.context_adaptability.get(context, 1.0) if hasattr(agent, 'context_adaptability') and context else 1.0
         c_t = target_agent.context_adaptability.get(context, 1.0) if hasattr(target_agent, 'context_adaptability') and context else 1.0
 
-        for a, t_obj, s, c_mod in [(agent, target_agent, s_i, c_i), (target_agent, agent, s_t, c_t)]:
+        for a, t_obj, s, c_mod in ((agent, target_agent, s_i, c_i), (target_agent, agent, s_t, c_t)):
             t_id = t_obj.id
-            if t_id not in a.relations:
-                from core.agent_factory import AgentFactory
-                AgentFactory.initialize_agent_relations(a, [t_id])
-            
-            # Применяем изменения с учетом чувствительности (s) and адаптивности к контексту (c_mod)
+            InteractionStrategy._ensure_relation(a, t_id)
+
+            # По тексту положительный исход масштабируется эмоциональным
+            # состоянием партнёра E_j, то есть t_obj.
+            _, _, partner_e = t_obj.get_primary_emotion()
+            multiplier = 1.0
+            if outcome == Outcome.SUCCESS:
+                multiplier = 2.0 if partner_e >= 0 else 0.5
+            elif outcome == Outcome.FAILURE:
+                multiplier = 0.5 if partner_e >= 0 else 2.0
+
+            base_affinity = 15 * multiplier
+            base_trust = 10 * multiplier
+            if outcome == Outcome.FAILURE:
+                base_trust = -20 * multiplier
+                base_affinity = -5 * multiplier
+
             a.relations[t_id]['affinity'] = a.limit_predicate_value(
                 a.relations[t_id].get('affinity', 0) + int(base_affinity * s * c_mod)
             )
+            # В текущей модели utility исторически использует ту же базовую
+            # дельту, что и affinity.
             a.relations[t_id]['utility'] = a.limit_predicate_value(
                 a.relations[t_id].get('utility', 0) + int(base_affinity * s * c_mod)
             )
             a.relations[t_id]['trust'] = a.limit_predicate_value(
                 a.relations[t_id].get('trust', 0) + int(base_trust * s * c_mod)
             )
+
+        return outcome

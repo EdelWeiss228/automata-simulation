@@ -12,9 +12,14 @@ class LocationType(Enum):
     HOME = "HOME"
 
 class SportType(Enum):
+    BADMINTON = "Badminton"
+    FOOTBALL = "Football"
     BASKETBALL = "Basketball"
-    VOLLEYBALL = "Volleyball"
-    TENNIS = "Tennis"
+
+    @property
+    def index(self) -> int:
+        """Индекс секции для пространственной рассадки в зале."""
+        return list(SportType).index(self)
 
 class TimeSlotType(Enum):
     PAIR_1 = "Pair 1"

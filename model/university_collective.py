@@ -15,7 +15,7 @@ from model.collective import Collective, CPP_ENGINE_AVAILABLE
 from model.agent import Agent
 from model.constants import AgentStatus, LocationType, SportType, TimeSlotType
 from core.university_manager import UniversityManager
-from core.interaction_strategy import InteractionStrategy
+from core.interaction_strategy import InteractionStrategy, Outcome
 
 
 class UniversityCollective(Collective):
@@ -98,8 +98,8 @@ class UniversityCollective(Collective):
         if gid:
             if gid not in self.groups_map:
                 self.groups_map[gid] = []
-            if agent.name not in self.groups_map[gid]:
-                self.groups_map[gid].append(agent.name)
+            if agent.id not in self.groups_map[gid]:
+                self.groups_map[gid].append(agent.id)
 
     def _populate_initial_relations(self):
         """
@@ -141,12 +141,38 @@ class UniversityCollective(Collective):
         Удалить агента и очистить упоминания в группах.
         """
         agent = self.get_agent(agent_name)
+        if agent is None:
+            # GUI исторически мог передавать человеческое имя вместо id.
+            agent = next(
+                (a for a in self.agents.values() if a.name == agent_name),
+                None,
+            )
         if agent:
             gid = getattr(agent, 'group_id', None)
-            if gid in self.groups_map and agent_name in self.groups_map[gid]:
-                self.groups_map[gid].remove(agent_name)
-        
+            # groups_map хранит id агентов, а не человеческие имена.
+            if gid in self.groups_map and agent.id in self.groups_map[gid]:
+                self.groups_map[gid].remove(agent.id)
+                if not self.groups_map[gid]:
+                    del self.groups_map[gid]
+            agent_name = agent.id
+
         super().remove_agent(agent_name)
+
+    def _set_agent_group(self, agent: Agent, group_id: str, stream: Optional[str] = None):
+        """Перевести агента в другую группу, не оставляя его в старой."""
+        old_gid = getattr(agent, 'group_id', None)
+        if old_gid in self.groups_map and agent.id in self.groups_map[old_gid]:
+            self.groups_map[old_gid].remove(agent.id)
+            if not self.groups_map[old_gid]:
+                del self.groups_map[old_gid]
+
+        agent.group_id = group_id
+        if stream is not None:
+            agent.stream = stream
+
+        members = self.groups_map.setdefault(group_id, [])
+        if agent.id not in members:
+            members.append(agent.id)
 
     def perform_next_step(self) -> List[Tuple[str, str, str]]:
         """
@@ -222,20 +248,26 @@ class UniversityCollective(Collective):
         self.current_slot_idx += 1
         self.last_interactions = interactions  # Сохраняем для GUI
         
-        # Обновление эмоций после слота
-        if CPP_ENGINE_AVAILABLE:
-            self._sync_to_cpp(sync_relations=False)
-            self.cpp_engine.apply_emotion_decay()
-            self.cpp_engine.react_to_relations()
-            self.cpp_engine.react_to_emotions()
-            self.cpp_engine.influence_emotions()
-            self._sync_from_cpp(sync_relations=False)
-        else:
-            for agent in self.agents.values():
-                agent.apply_emotion_decay()
-                agent.react_to_relations()
-                agent.react_to_emotions()
-            self.influence_emotions()
+        # Затухание и эмоциональные реакции — раз в день, в конце дня.
+        # В общем (не университетском) цикле эти шаги тоже выполняются
+        # один раз за такт-день. Повторять их после каждой пары нельзя:
+        # d_E=0.2 при девяти слотах гасил эмоции за один учебный день.
+        if slot_type == TimeSlotType.CLEANUP:
+            if CPP_ENGINE_AVAILABLE:
+                self._sync_to_cpp(sync_relations=True)
+                self.cpp_engine.apply_relation_decay()
+                self.cpp_engine.react_to_relations()
+                self.cpp_engine.apply_emotion_decay()
+                self.cpp_engine.react_to_emotions()
+                self.cpp_engine.influence_emotions()
+                self._sync_from_cpp(sync_relations=True)
+            else:
+                for agent in self.agents.values():
+                    agent.apply_relation_decay()
+                    agent.react_to_relations()
+                    agent.apply_emotion_decay()
+                    agent.react_to_emotions()
+                self.influence_emotions()
         
         return interactions
 
@@ -253,7 +285,8 @@ class UniversityCollective(Collective):
         
         return all_interactions
 
-    def _seat_students(self, room_id: str, student_names: List[str], cols: int) -> List[Optional[str]]:
+    def _seat_students(self, room_id: str, student_names: List[str], cols: int,
+                       context: Optional[str] = None) -> List[Optional[str]]:
         """
         Алгоритм Умной Рассадки (Софтмакс) — NumPy-оптимизированная версия.
         """
@@ -271,13 +304,21 @@ class UniversityCollective(Collective):
             if not empty_indices:
                 break
             
-            # GYM: Фильтр мест по уровню спортивности агента
+            # GYM: три равноправные секции. Секция выбирается равномерно
+            # при входе в зал, sportiness влияет только на посещение.
             if room_id == "GYM":
-                cluster_id = int(agent.sportiness * 2.99)
+                section = getattr(agent, 'gym_section', None)
+                section_idx = section.index if hasattr(section, 'index') else int(section or 0)
                 slice_w = cols / 3.0
-                valid_empty = [i for i in empty_indices if int((i % cols) / slice_w) == cluster_id]
-                if valid_empty:
-                    empty_indices = valid_empty
+                valid_empty = [
+                    i for i in empty_indices
+                    if int((i % cols) / slice_w) == section_idx
+                ]
+                # Секции изолированы: если в своей секции мест нет,
+                # студент не садится в чужую.
+                if not valid_empty:
+                    continue
+                empty_indices = valid_empty
             
             # Ограничение выборки кандидатов для производительности
             if len(empty_indices) > MAX_CANDIDATES:
@@ -305,53 +346,18 @@ class UniversityCollective(Collective):
                     seat_p = base_weight
                     for n_name in occupied_neighbors:
                         metrics = agent.relations.get(n_name, {})
-                        score = InteractionStrategy.priority_score(agent, n_name, metrics)
+                        score = InteractionStrategy.priority_score(agent, n_name, metrics, context)
                         seat_p += math.exp(score * 1.5)
                     seat_weights.append(seat_p)
             
-            # Выбор наиболее желаемого места по взвешенному алгоритму
+            # Выбор наиболее желаемого места по взвешенному алгоритму.
+            # Отказ — это событие контакта, а не свойство места: рассадка
+            # не должна отбрасывать студента и создавать скрытые отказы.
             choices = list(zip(empty_indices, seat_weights))
             choices.sort(key=lambda x: random.random() * x[1], reverse=True)
-            
-            seated_successfully = False
-            for seat_idx, _ in choices:
-                neighbors = []
-                if seat_idx % cols > 0:
-                    neighbors.append(seat_idx - 1)
-                if seat_idx % cols < cols - 1 and seat_idx + 1 < len(seated):
-                    neighbors.append(seat_idx + 1)
-                if seat_idx >= cols:
-                    neighbors.append(seat_idx - cols)
-                if seat_idx + cols < len(seated):
-                    neighbors.append(seat_idx + cols)
-                
-                refused = False
-                for n_idx in neighbors:
-                    if 0 <= n_idx < len(seated):
-                        n_name = seated[n_idx]
-                        if n_name:
-                            n_agent = self.agents[n_name]
-                            metrics = n_agent.relations.get(student_name, {})
-                            score = InteractionStrategy.priority_score(n_agent, student_name, metrics)
-                            p_accept = math.exp(score) / (math.exp(score) + 1.0)
-                            if random.random() > p_accept:
-                                refused = True
-                                break
-                            ref_chance = InteractionStrategy.calculate_refusal_chance(n_agent, agent)
-                            if random.random() < ref_chance:
-                                refused = True
-                                break
-                            
-                if not refused:
-                    seated[seat_idx] = student_name
-                    seated_successfully = True
-                    break
-                    
-            if not seated_successfully:
-                all_empty = [i for i, seat in enumerate(seated) if seat is None]
-                if all_empty:
-                    seated[random.choice(all_empty)] = student_name
-                
+            seat_idx, _ = choices[0]
+            seated[seat_idx] = student_name
+
         return seated
 
     def _interact_group(self, group_list: List[str], context: str) -> List[Tuple[str, str, str]]:
@@ -396,16 +402,32 @@ class UniversityCollective(Collective):
                 neighbors.append(i + cols)
             
             valid_n = [n for n in neighbors if 0 <= n < len(seated) and seated[n] is not None and n not in interacted]
+
+            # В спортзале три секции образуют изолированные графы: даже
+            # соседние места на границе секций не дают контакта.
+            if context == 'GYM':
+                my_section = getattr(agent1, 'gym_section', None)
+                valid_n = [
+                    n for n in valid_n
+                    if getattr(self.agents[seated[n]], 'gym_section', None) == my_section
+                ]
+
             if not valid_n:
                 continue
                 
-            weights = []
+            scores = []
             for n_idx in valid_n:
                 n_name = seated[n_idx]
                 metrics = agent1.relations.get(n_name, {})
-                score = InteractionStrategy.priority_score(agent1, n_name, metrics, context)
-                weights.append(math.exp(score))
-                
+                scores.append(
+                    InteractionStrategy.priority_score(agent1, n_name, metrics, context)
+                )
+
+            # Softmax с температурой архетипа, как в статье.
+            temp = max(0.01, float(getattr(agent1.archetype, 'temperature', 1.0)))
+            max_score = max(scores)
+            weights = [math.exp((score - max_score) / temp) for score in scores]
+
             # Естественный барьер размера группы на базе STOP-выбора
             valid_n.append(None)
             mean_weight = sum(weights) / len(weights) if weights else 1.0
@@ -472,14 +494,19 @@ class UniversityCollective(Collective):
                     room_assignments[room_id] = []
                 room_assignments[room_id].append(name)
                 
-        # Рассадка и общение внутри аудиторий
+        # Рассадка и общение внутри аудиторий. Контекст зависит от локации:
+        # пара — STUDY, свободное окно в холле — BREAK, физкультура — GYM.
         for room_id, students in room_assignments.items():
             cols = self.uni_manager.get_room_cols(room_id)
-            
             if room_id == "CORRIDOR":
                 random.shuffle(students)
-                
-            seated = self._seat_students(room_id, students, cols)
+                context = 'BREAK'
+            elif room_id == "GYM":
+                context = 'GYM'
+            else:
+                context = 'STUDY'
+
+            seated = self._seat_students(room_id, students, cols, context=context)
             
             # Сохранение мест рассадки для визуализации GUI
             for idx, name in enumerate(seated):
@@ -487,7 +514,7 @@ class UniversityCollective(Collective):
                     self.agent_current_seat[name] = idx
                 
             self.current_rooms[room_id] = seated
-            room_interactions = self._interact_in_room(seated, cols, context='STUDY')
+            room_interactions = self._interact_in_room(seated, cols, context=context)
             interactions.extend(room_interactions)
             
         return interactions
@@ -500,7 +527,7 @@ class UniversityCollective(Collective):
         cols = self.uni_manager.get_room_cols("CORRIDOR")
         
         random.shuffle(corridor_students)
-        seated = self._seat_students("CORRIDOR", corridor_students, cols)
+        seated = self._seat_students("CORRIDOR", corridor_students, cols, context='BREAK')
         for idx, name in enumerate(seated):
             if name:
                 self.agent_current_seat[name] = idx
@@ -518,12 +545,14 @@ class UniversityCollective(Collective):
             if agent.status == AgentStatus.HOME:
                 continue
             if random.random() < agent.sportiness:
+                # Равномерный выбор одной из трёх секций, как в тексте.
+                agent.gym_section = random.choice(list(SportType))
                 gym_students.append(name)
             else:
                 agent.status = AgentStatus.HOME
 
         cols = self.uni_manager.get_room_cols("GYM")
-        seated_gym = self._seat_students("GYM", gym_students, cols)
+        seated_gym = self._seat_students("GYM", gym_students, cols, context='GYM')
         for idx, name in enumerate(seated_gym):
             if name:
                 self.agent_current_seat[name] = idx
@@ -535,16 +564,24 @@ class UniversityCollective(Collective):
     def _handle_sunday(self) -> List[Tuple[str, str, str]]:
         """
         Логика выходного дня (Family Day): смещение настроений во внешней среде.
+
+        По тексту каждый агент получает своё случайное смещение delta, но
+        одно и то же для всех семи осей его вектора. После смещения эмоции
+        продолжают затухать, как на любом другом такте.
         """
-        delta = random.randint(-30, 30)
         for agent in self.agents.values():
-            agent.emotion_vector = [
-                max(-30, min(30, e + delta)) for e in agent.emotion_vector
-            ]
-            agent.automaton.apply_decay(5)
-            family_impact = random.randint(-10, 10)
-            agent.automaton.adjust_emotion("joy_sadness", family_impact)
-                
+            delta = random.randint(-30, 30)
+            agent.emotion_vector = [e + delta for e in agent.emotion_vector]
+
+        if CPP_ENGINE_AVAILABLE:
+            self._sync_to_cpp(sync_relations=True)
+            if self.cpp_engine is not None:
+                self.cpp_engine.apply_emotion_decay()
+                self._sync_from_cpp(sync_relations=True)
+        else:
+            for agent in self.agents.values():
+                agent.apply_emotion_decay()
+
         self.current_date += datetime.timedelta(days=1)
         self.current_step += 1
         self.current_slot_idx = 0
@@ -576,65 +613,115 @@ class UniversityCollective(Collective):
 
     def _handle_graduation_and_enrollment(self):
         """
-        Интеллектуальная ротация: Бакалавры -> Магистры.
+        Академическая ротация: выпуск бакалавров и магистров, перевод
+        магистров M1 -> M2, набор новых когорт.
         """
-        new_enroll_year = self.current_academic_year
-        print(f"--- АКАДЕМИЧЕСКАЯ РОТАЦИЯ: {new_enroll_year} ---", flush=True)
-        
-        faculty_graduates = {f: [] for f in self.uni_manager.FACULTY_NAMES}
+        next_year = self.current_academic_year + 1
+        print(f"--- АКАДЕМИЧЕСКАЯ РОТАЦИЯ: {next_year} ---", flush=True)
+
         graduates_to_remove = []
         continuants = []
-        
+
+        # Пять бакалаврских факультетов feeding пять магистерских направлений.
         faculty_to_master = {"П": "ММ", "Р": "РМ", "М": "ЭкМ", "Эк": "ЭкМ", "Ф": "ПМ"}
-        
-        for name, agent in self.agents.items():
-            if agent.degree_type == "BACHELOR" and agent.enrollment_year <= (self.current_academic_year - 3):
-                can_continue = agent.faculty in faculty_to_master
-                if can_continue and random.random() < self.master_chance:
-                    agent.degree_type = "MASTER"
-                    agent.enrollment_year = self.current_academic_year
-                    agent.course_year = 1
-                    year_suffix = str(self.current_academic_year)[2:]
-                    agent.group_id = f"M-{faculty_to_master[agent.faculty]}-{year_suffix}"
-                    continuants.append(agent)
-                else:
-                    graduates_to_remove.append(name)
-            elif agent.degree_type == "MASTER" and agent.enrollment_year <= (self.current_academic_year - 1):
+        # Новый набор магистров получает когорту по году поступления.
+        master_m1_counts = {
+            self.uni_manager.master_group_id(direction, next_year): 0
+            for direction in self.uni_manager.MASTER_FACULTIES
+        }
+
+        # Бакалавры выпускаются после четырёх лет. Порядок кандидатов
+        # перемешивается, чтобы квоты не доставались первым по списку.
+        eligible_bachelors = [
+            name for name, agent in self.agents.items()
+            if agent.degree_type == "BACHELOR"
+            and agent.enrollment_year <= next_year - 4
+        ]
+        random.shuffle(eligible_bachelors)
+
+        for name in eligible_bachelors:
+            agent = self.agents[name]
+            direction = faculty_to_master.get(agent.faculty)
+            group_id = (
+                self.uni_manager.master_group_id(direction, next_year)
+                if direction else None
+            )
+            has_place = (
+                group_id is not None
+                and master_m1_counts[group_id] < self.uni_manager.MASTER_GROUP_SIZE
+            )
+            if has_place and random.random() < self.master_chance:
+                agent.degree_type = "MASTER"
+                agent.enrollment_year = next_year
+                agent.course_year = 1
+                self._set_agent_group(agent, group_id, direction)
+                master_m1_counts[group_id] += 1
+                continuants.append(agent)
+            else:
                 graduates_to_remove.append(name)
 
-        # Распределение квот продолжающих студентов в Магистратуру
-        m_counts = {}
-        for c in continuants:
-            m_counts[c.group_id] = m_counts.get(c.group_id, 0) + 1
-            
+        # Магистры выпускаются после двух лет.
+        for name, agent in self.agents.items():
+            if agent.degree_type != "MASTER":
+                continue
+            if agent.enrollment_year <= next_year - 2:
+                graduates_to_remove.append(name)
+
+        # Действующие магистры M1 переходят на второй курс; когорта та же.
+        for name, agent in self.agents.items():
+            if agent.degree_type != "MASTER" or name in graduates_to_remove:
+                continue
+            if agent in continuants or agent.course_year != 1:
+                continue
+            # Когорта набора не переименовывается: ММ-24 остаётся ММ-24
+            # и на первом, и на втором курсе. Меняется только course_year.
+            agent.course_year = 2
+
+        # Удаление выпускников и чистка связей.
+        for g_name in graduates_to_remove:
+            self.remove_agent(g_name)
+        # remove_agent уже чистит входящие связи у оставшихся агентов.
+
+        # Оставшиеся бакалавры переходят на следующий курс. Группа-когорта
+        # (например, П-24-1) при этом не меняется.
+        for agent in self.agents.values():
+            if agent.degree_type == "BACHELOR":
+                agent.course_year = min(4, agent.course_year + 1)
+
+        # Новые первокурсники и внешние магистры; M1 добивается до 10.
         new_batch = self.uni_manager.create_new_cohort(
-            new_enroll_year, 
-            master_filled_counts=m_counts,
+            next_year,
+            master_filled_counts=master_m1_counts,
             bachelor_weights=self.bac_weights_list,
             master_weights=self.mag_weights_list
         )
         for agent in new_batch:
             self.add_agent(agent)
-            
-        print(f"Выпущено студентов: {len(graduates_to_remove)}, Продолжили обучение: {len(continuants)}", flush=True)
-        
-        self.current_academic_year += 1
-        
-        # Удаление выпускников и чистка памяти
-        for g_name in graduates_to_remove:
-            self.remove_agent(g_name)
-            
-        for agent in self.agents.values():
-            if agent not in continuants:
-                for g_name in graduates_to_remove:
-                    if g_name in agent.relations:
-                        del agent.relations[g_name]
-                agent.course_year = min(4 if agent.degree_type == "BACHELOR" else 2, agent.course_year + 1)
-        
-        # Сброс C++ ядра для пересоздания с новыми индексами
+
+        self.current_academic_year = next_year
+
+        # Расписания выпустившихся когорт больше не нужны: иначе они
+        # накапливаются и попадают в списки групп GUI.
+        active_groups = {
+            agent.group_id for agent in self.agents.values()
+            if agent.group_id
+        }
+        self.uni_manager.schedules = {
+            group_id: schedule
+            for group_id, schedule in self.uni_manager.schedules.items()
+            if group_id in active_groups
+        }
+
+        print(
+            f"Выпущено студентов: {len(graduates_to_remove)}, "
+            f"Продолжили обучение: {len(continuants)}",
+            flush=True,
+        )
+
+        # Сброс C++ ядра для пересоздания с новыми индексами.
         self.cpp_engine = None
         self._update_id_maps()
-            
+
         print("----------------------------------------", flush=True)
 
     def _reinitialize_emotions(self):
@@ -644,24 +731,23 @@ class UniversityCollective(Collective):
         for agent in self.agents.values():
             agent.emotion_vector = [random.randint(-30, 30) for _ in range(7)]
 
+        if CPP_ENGINE_AVAILABLE and self.cpp_engine is not None:
+            self._sync_to_cpp(sync_relations=True)
+
     def _interact_pair(self, name1: str, name2: str, context: Optional[str] = None) -> Tuple[str, str, str]:
         """
         Моделирует парный дискретный акт общения.
         """
         a1, a2 = self.agents[name1], self.agents[name2]
-        
-        # Проверка на отказ собеседника (Sigma = 0)
-        refusal_chance = InteractionStrategy.calculate_refusal_chance(a2, a1)
+
+        # Отказ считает цель (a2), а не инициатор.
+        refusal_chance = InteractionStrategy.calculate_refusal_chance(a2, a1, context)
         if random.random() < refusal_chance:
-            InteractionStrategy.process_refusal(a1, a2)
+            InteractionStrategy.process_refusal(a1, a2, context)
             return (name1, name2, "refusal")
-            
-        # Проверка успеха или провала коммуникации (Sigma = 1 или -1)
-        score = InteractionStrategy.priority_score(a1, name2, a1.relations.get(name2, {}), context)
-        success_chance = math.exp(score) / (math.exp(score) + 1.0)
-        success_chance = max(0.1, min(0.9, success_chance))
-        
-        success = random.random() < success_chance
-        InteractionStrategy.process_interaction_result(a1, a2, "success" if success else "failure", context)
-        
-        return (name1, name2, "success" if success else "fail")
+
+        # По тексту при состоявшемся контакте успех и неудача равновероятны.
+        outcome = Outcome.SUCCESS if random.random() < 0.5 else Outcome.FAILURE
+        InteractionStrategy.process_interaction_result(a1, a2, outcome, context)
+
+        return (name1, name2, "success" if outcome == Outcome.SUCCESS else "fail")

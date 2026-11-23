@@ -3,7 +3,7 @@ import numpy as np
 from .agent import Agent
 from .player import Player
 from .emotion_automaton import EmotionAxis
-from core.interaction_strategy import InteractionStrategy
+from core.interaction_strategy import InteractionStrategy, Outcome
 from typing import List, Tuple
 from core.agent_factory import AgentFactory
 import datetime
@@ -153,6 +153,7 @@ class Collective:
         self.current_step = 0
         self.current_date = datetime.date(2025, 1, 1)
         self.cpp_engine = None
+        self._cpp_seed_engine = None  # движок, которому уже выдан seed
         self._id_map = {} # Name to index
         self._reverse_id_map = {} # Index to name
         
@@ -302,7 +303,7 @@ class Collective:
                 arch.refusal_chance,
                 arch.decay_rate,
                 arch.temperature,
-                getattr(arch, 'emotion_decay', 0.2),
+                getattr(arch, 'emotion_decay', 2.0),  # d_E = 0.2 в x10-шкале
                 getattr(arch, 'refusal_vulnerability', 0),
                 e_coeffs,
                 arch.scoring_config.get("affinity", "linear"),
@@ -323,12 +324,15 @@ class Collective:
             
         # Синхронизируем конфиги архетипов один раз (или при изменении состава)
         self._sync_archetypes()
-        
-        # Устанавливаем сид для детерминизма
-        if hasattr(self, 'seed') and self.seed is not None:
-            self.cpp_engine.seed(self.seed)
-        elif hasattr(self, 'random_seed') and self.random_seed is not None:
-            self.cpp_engine.seed(self.random_seed)
+
+        # Seed выдаётся один раз на движок. Повторный seed на каждой
+        # синхронизации возвращал бы RNG в начало и повторял последовательности.
+        seed_value = getattr(self, 'seed', None)
+        if seed_value is None:
+            seed_value = getattr(self, 'random_seed', None)
+        if seed_value is not None and self._cpp_seed_engine is not self.cpp_engine:
+            self.cpp_engine.seed(int(seed_value))
+            self._cpp_seed_engine = self.cpp_engine
             
         # Устанавливаем имена агентов для логгера
         names_list = [self._reverse_id_map[i] for i in range(n)]
@@ -417,33 +421,34 @@ class Collective:
             
         interactions = []
         for agent in self.agents.values():
-            mandatory, optional, avoid = InteractionStrategy.categorize_relationships(agent)
-            chosen = InteractionStrategy.choose_target(agent, mandatory, optional)
-            
+            # Классификация больше не управляет выбором: рассматриваем всех,
+            # у кого есть отношение к агенту.
+            chosen = InteractionStrategy.choose_target(
+                agent, list(agent.relations.items())
+            )
+
             if not chosen:
-                # При отказе от всех контактов отношения немного деградируют
-                for target_name in agent.relations.keys():
-                    target_agent = self.get_agent(target_name)
-                    if target_agent:
-                        InteractionStrategy.process_refusal(agent, target_agent)
-                    interactions.append((agent.name, target_name, "refusal"))
+                interactions.append((agent.name, "None", "no_contact"))
                 continue
-                
+
             target, metrics = chosen
             target_agent = self.get_agent(target)
-            
+
             if target_agent is not None:
-                final_chance = InteractionStrategy.calculate_refusal_chance(agent, target_agent)
-                if random.random() < final_chance or target_agent.classify_relationship(agent.name) == "avoid":
+                # Отказ считает цель, а не инициатор.
+                final_chance = InteractionStrategy.calculate_refusal_chance(
+                    target_agent, agent
+                )
+                if random.random() < final_chance:
                     InteractionStrategy.process_refusal(agent, target_agent)
                     interactions.append((agent.name, target, "refusal"))
                     continue
 
-            sigma = 1 if random.random() < 0.5 else -1
-            
+            sigma = Outcome.SUCCESS if random.random() < 0.5 else Outcome.FAILURE
+
             InteractionStrategy.process_interaction_result(agent, target_agent, sigma)
-            interactions.append((agent.name, target, "success" if sigma == 1 else "fail"))
-            
+            interactions.append((agent.name, target, "success" if sigma == Outcome.SUCCESS else "fail"))
+
         return interactions
 
     def _run_cpp_interactions(self) -> List[Tuple[str, str, str]]:
@@ -462,23 +467,21 @@ class Collective:
             target_idx = self.cpp_engine.choose_target(i)
             
             if target_idx == -1:
-                # Все отказались или некого выбирать
-                for j in range(n):
-                    if i == j: continue
-                    target_name = self._reverse_id_map[j]
-                    self.cpp_engine.process_refusal(i, j)
-                    interactions.append((agent_name, target_name, "refusal"))
+                # Некого выбирать: это не отказ и не должно штрафовать всех.
+                interactions.append((agent_name, "None", "no_contact"))
                 continue
-                
+
             target_name = self._reverse_id_map[target_idx]
-            
+
             # Проверка на отказ со стороны цели
             if self.cpp_engine.should_refuse(i, target_idx):
                 self.cpp_engine.process_refusal(i, target_idx)
                 interactions.append((agent_name, target_name, "refusal"))
             else:
                 success = random.random() < 0.5
-                self.cpp_engine.process_interaction(i, target_idx, success)
+                self.cpp_engine.process_interaction(
+                    i, target_idx, 1 if success else -1
+                )
                 interactions.append((agent_name, target_name, "success" if success else "fail"))
 
         # После всех взаимодействий синхронизируем реляционные изменения обратно
@@ -518,7 +521,7 @@ class Collective:
             
             # Получаем записанные взаимодействия для логов и GUI
             interactions = []
-            type_map = {0: "refusal", 1: "success", 2: "fail"}
+            type_map = {-1: "fail", 0: "refusal", 1: "success"}
             for interact in self.cpp_engine.last_day_interactions:
                 from_name = self._reverse_id_map.get(interact.from_idx)
                 to_name = self._reverse_id_map.get(interact.to_idx)

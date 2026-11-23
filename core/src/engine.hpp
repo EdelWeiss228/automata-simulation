@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <random>
 #include "logger.hpp"
 
 namespace core_engine {
@@ -131,6 +132,12 @@ public:
 private:
     int num_agents;
     std::vector<std::string> agent_names;
+    std::mt19937 rng{0};
+
+    // Собственные преобразования вместо rand(): последовательность не
+    // зависит от платформы и не пересекается с другими генераторами.
+    float random_unit();
+    int random_percent();
 };
 
 } // namespace core_engine

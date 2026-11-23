@@ -30,7 +30,7 @@ class ArchetypeEnum(Enum):
 
 
 class Archetype:
-    def __init__(self, name, weights, description, refusal_chance=0.3, decay_rate=0.1, temperature=1.0, refusal_vulnerability=0, emotion_effects=None, emotion_coefficients=None, scoring_config=None, context_adaptability=None, subject_resistance=None):
+    def __init__(self, name, weights, description, refusal_chance=0.3, decay_rate=0.1, temperature=1.0, refusal_vulnerability=0, emotion_effects=None, emotion_coefficients=None, scoring_config=None, context_adaptability=None, subject_resistance=None, refusal_impact=None):
         self.name = name
         self.weights = weights
         self.description = description
@@ -38,6 +38,13 @@ class Archetype:
         self.decay_rate = decay_rate
         self.temperature = temperature
         self.refusal_vulnerability = refusal_vulnerability
+        # Отказ затрагивает все три функции. Главная ось определяется
+        # refusal_vulnerability, остальные получают половинный вес.
+        self.refusal_impact = refusal_impact or {
+            'utility': 1.0 if refusal_vulnerability == 0 else 0.5,
+            'affinity': 1.0 if refusal_vulnerability == 1 else 0.5,
+            'trust': 1.0 if refusal_vulnerability == 2 else 0.5,
+        }
         self.context_adaptability = context_adaptability or {
             'STUDY': 1.0,
             'BREAK': 1.0,
