@@ -1,9 +1,11 @@
-import os
-import sys
+import argparse
 import json
+import os
 import subprocess
+import sys
 import time
 import zlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 # Варианты изначальных отношений (Варианты 1, 2, 3)
@@ -49,6 +51,7 @@ HETEROGENEOUS_RUNS = {
 
 ALL_RUNS = {**HOMOGENEOUS_RUNS, **HETEROGENEOUS_RUNS}
 ARCHIVE_DIR = "scenarios_archive"
+OUTPUT_ROOT = os.path.join("data", "v2-corrected")
 
 def generate_config(run_id: str, mode: str, counts: dict) -> str:
     scenario_name = f"{run_id}_{mode}"
@@ -77,39 +80,59 @@ def generate_config(run_id: str, mode: str, counts: dict) -> str:
 
     return filepath
 
-def run_simulation(config_path: str, is_test: bool = False):
+def run_simulation(config_path: str, is_test: bool = False, force: bool = False):
+    scenario = os.path.splitext(os.path.basename(config_path))[0]
+    log_dir = os.path.join(OUTPUT_ROOT, "logs")
+    done_dir = os.path.join(OUTPUT_ROOT, "done")
+    os.makedirs(log_dir, exist_ok=True)
+    os.makedirs(done_dir, exist_ok=True)
+
+    log_path = os.path.join(log_dir, scenario + ".log")
+    done_path = os.path.join(done_dir, scenario + ".done")
+
+    if os.path.exists(done_path) and not force:
+        print(f"[skip] {scenario} (уже завершён)", flush=True)
+        return True
+
     python_bin = "./venv/bin/python" if os.path.exists("./venv/bin/python") else "python"
-    
     cmd = [python_bin, "main.py", "--university", "--silent", "--scenario", config_path]
     if is_test:
-        cmd.extend(["--semesters", "0"]) # В тестовом режиме 0 семестров (или минимально)
-        cmd.extend(["--steps", "1"])
-    
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Выполнение: {' '.join(cmd)}")
-    
-    # Запускаем как subprocess, ждем завершения
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
-    
-    for line in process.stdout:
-        if "System" in line or "АКАДЕМИЧЕСКАЯ РОТАЦИЯ" in line or "[Progress]" in line:
-            sys.stdout.write("  " + line)
-            sys.stdout.flush()
-            
-    process.wait()
-    
+        cmd.extend(["--semesters", "0", "--steps", "1"])
+
+    print(f"[start] {scenario}", flush=True)
+    started = time.time()
+
+    # stdout каждого прогона идёт в отдельный лог, чтобы 8 параллельных
+    # процессов не перемешивали прогресс и ошибки.
+    with open(log_path, "w", encoding="utf-8") as log_file:
+        process = subprocess.Popen(
+            cmd,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        process.wait()
+
+    elapsed = (time.time() - started) / 60
     if process.returncode != 0:
-        print(f"Ошибка при выполнении {config_path}")
-        print(process.stderr.read())
+        print(
+            f"[fail] {scenario} через {elapsed:.1f} мин; лог: {log_path}",
+            flush=True,
+        )
         return False
+
+    with open(done_path, "w", encoding="utf-8") as marker:
+        marker.write(f"{datetime.now().isoformat()}\t{elapsed:.2f} min\n")
+
+    print(f"[done] {scenario} за {elapsed:.1f} мин", flush=True)
     return True
 
 def main():
-    import argparse
-    from multiprocessing import Pool
-    
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--test", action="store_true", help="Запустить по 1 шагу для проверки работоспособности")
-    parser.add_argument("--workers", type=int, default=10, help="Количество параллельных процессов")
+    parser = argparse.ArgumentParser(description="Полный матричный прогон v2-corrected")
+    parser.add_argument("--test", action="store_true", help="Короткий тестовый запуск")
+    parser.add_argument("--workers", type=int, default=8, help="Количество параллельных процессов")
+    parser.add_argument("--only", type=str, default=None, help="Фильтр по имени сценария")
+    parser.add_argument("--force", action="store_true", help="Перезапустить уже завершённые сценарии")
     args = parser.parse_args()
 
     # Собираем все задачи в список
@@ -117,21 +140,60 @@ def main():
     for run_id, counts in ALL_RUNS.items():
         for mode in RELATION_MODES:
             config_path = generate_config(run_id, mode, counts)
-            tasks.append((config_path, args.test))
+            if args.only and args.only not in os.path.basename(config_path):
+                continue
+            tasks.append(config_path)
 
-    print(f"Начинаем серию из {len(tasks)} симуляций в {args.workers} потоках...")
-    
+    missing = [path for path in tasks if not os.path.exists(path)]
+    if missing:
+        print("ОШИБКА: отсутствуют сценарии:", *missing, sep="\n  ", file=sys.stderr)
+        sys.exit(1)
+
+    # Манифест фиксирует, что именно было запущено. Сиды берутся из архива.
+    os.makedirs(OUTPUT_ROOT, exist_ok=True)
+    manifest = {
+        "created_at": datetime.now().isoformat(),
+        "source": "v2-fixed",
+        "scenarios": {},
+    }
+    for path in tasks:
+        with open(path, "r", encoding="utf-8") as handle:
+            cfg = json.load(handle)
+        manifest["scenarios"][os.path.basename(path)] = {
+            "seed": cfg.get("seed"),
+            "initial_relations_mode": cfg.get("initial_relations_mode"),
+            "semesters": cfg.get("semesters"),
+            "bachelor_counts": cfg.get("bachelor_counts"),
+            "master_counts": cfg.get("master_counts"),
+        }
+    with open(os.path.join(OUTPUT_ROOT, "manifest.json"), "w", encoding="utf-8") as handle:
+        json.dump(manifest, handle, indent=2, ensure_ascii=False)
+
+    print(
+        f"Начинаем серию из {len(tasks)} симуляций в {args.workers} потоках...",
+        flush=True,
+    )
     start_time = time.time()
-    
-    # Запускаем пул воркеров
-    with Pool(processes=args.workers) as pool:
-        results = pool.starmap(run_simulation, tasks)
-    
+
+    results = []
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = {
+            pool.submit(run_simulation, path, args.test, args.force): path
+            for path in tasks
+        }
+        for future in as_completed(futures):
+            path = futures[future]
+            try:
+                results.append(future.result())
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                print(f"[fail] {path}: {exc}", flush=True)
+                results.append(False)
+
+    elapsed = (time.time() - start_time) / 60
     if all(results):
-        elapsed = time.time() - start_time
-        print(f"\nВсе симуляции успешно завершены за {elapsed/60:.2f} минут.")
+        print(f"\nВсе симуляции успешно завершены за {elapsed:.2f} минут.", flush=True)
     else:
-        print("\nОШИБКА: Некоторые симуляции завершились неудачно.")
+        print("\nОШИБКА: Некоторые симуляции завершились неудачно.", flush=True)
         sys.exit(1)
 
 if __name__ == "__main__":

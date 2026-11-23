@@ -18,7 +18,9 @@ class ClickHouseLogger:
         self.port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
         self.secure = os.getenv("CLICKHOUSE_SECURE", "False").lower() in ("true", "1", "yes")
         
-        self.relations_buffer = [] # Буфер для накопления данных за день
+        # Буфер дневных отношений. Хранит столбцовые пакеты, а не 2.6M
+        # Python-кортежей: при N=1620 разница по памяти — сотни мегабайт.
+        self.relations_buffer = []
         
         try:
             self.client = clickhouse_connect.get_client(
@@ -81,69 +83,74 @@ class ClickHouseLogger:
 
     def log_agent_relations(self, day_id: int, slot_id: int, engine):
         """
-        Extracts relations из C++ ядра and сохраняет в БУФЕР (для последующей отправки раз в день).
+        Извлекает отношения из C++ ядра и складывает столбцовый пакет в буфер.
         """
+        if not self.client:
+            return
+
         state = engine.state
         n = state.num_agents
         relations = np.array(state.relations, dtype=np.int8).reshape((n, n, 3))
-        
+
         ii, jj = np.indices((n, n))
         mask = ii != jj
-        
-        sub_ids = ii[mask]
-        obj_ids = jj[mask]
+
+        sub_ids = ii[mask].astype(np.uint32)
+        obj_ids = jj[mask].astype(np.uint32)
         rel_values = relations[mask]
-        
         num_rows = len(sub_ids)
-        
-        # Подготовка данных через zip
-        data_slot = list(zip(
-            [self.run_id] * num_rows,
-            [day_id] * num_rows,
-            [slot_id] * num_rows,
-            sub_ids.tolist(),
-            obj_ids.tolist(),
-            rel_values[:, 0].tolist(),
-            rel_values[:, 1].tolist(),
-            rel_values[:, 2].tolist()
+
+        run_ids = np.empty(num_rows, dtype=object)
+        run_ids[:] = self.run_id
+        day_ids = np.full(num_rows, day_id, dtype=np.uint32)
+        slot_ids = np.full(num_rows, slot_id, dtype=np.uint8)
+
+        self.relations_buffer.append((
+            run_ids,
+            day_ids,
+            slot_ids,
+            sub_ids,
+            obj_ids,
+            rel_values[:, 0],
+            rel_values[:, 1],
+            rel_values[:, 2],
         ))
-        
-        # Добавляем в дневной буфер
-        self.relations_buffer.extend(data_slot)
 
     def flush_day_relations(self):
         """Отправляет накопленные за день отношения в ClickHouse."""
         if not self.client or not self.relations_buffer:
             return
-            
-        print(f"ClickHouseLogger: Флеш дневного буфера ({len(self.relations_buffer)} записей)...", flush=True)
-        
-        # Отправляем пачками по 100к (для стабильности даже локально)
-        batch_size = 100000
-        total_size = len(self.relations_buffer)
-        
-        for start_idx in range(0, total_size, batch_size):
-            end_idx = min(start_idx + batch_size, total_size)
-            chunk = self.relations_buffer[start_idx:end_idx]
+
+        total_size = sum(len(chunk[0]) for chunk in self.relations_buffer)
+        print(f"ClickHouseLogger: Флеш дневного буфера ({total_size} записей)...", flush=True)
+
+        for chunk in self.relations_buffer:
             self._flush_relations(chunk)
-            
+
         # Очищаем буфер после отправки
         self.relations_buffer = []
 
     def _flush_relations(self, data):
         if not self.client or not data: return
+        columns = [
+            'run_id', 'day_id', 'slot_id', 'subject_id', 'object_id',
+            'utility', 'affinity', 'trust'
+        ]
         try:
-            self.client.insert('agent_relations', data, column_names=[
-                'run_id', 'day_id', 'slot_id', 'subject_id', 'object_id',
-                'utility', 'affinity', 'trust'
-            ])
+            self.client.insert(
+                'agent_relations', data,
+                column_names=columns, column_oriented=True
+            )
         except Exception as e:
             print(f"Ошибка при вставке отношений (localhost): {e}", flush=True)
             try:
                 time.sleep(0.5)
-                self.client.insert('agent_relations', data)
-            except:
-                pass
+                self.client.insert(
+                    'agent_relations', data,
+                    column_names=columns, column_oriented=True
+                )
+            except Exception as e2:
+                print(f"Критическая ошибка ClickHouse (Relations): {e2}", flush=True)
 
     def log_interactions(self, day_id: int, slot_id: int, engine, interactions_list=None, name_to_id=None):
         """
