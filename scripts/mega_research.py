@@ -355,10 +355,12 @@ class MegaResearch:
         ax.set_ylabel("Доля отказов (%)"); fig.tight_layout(); p2a = savefig(fig, "02a_refusals_location")
 
         # Кривая Лоренца
+        # ID агента уникален только внутри прогона: складывать to_id из
+        # разных run_id нельзя, иначе один «агент» — это 54 человека.
         ag = self.q("""
-            SELECT to_id AS agent_id,
+            SELECT run_id, to_id AS agent_id,
                    countIf(type=0) AS refusals
-            FROM interactions GROUP BY to_id ORDER BY refusals
+            FROM interactions GROUP BY run_id, to_id ORDER BY refusals
         """)
         vals = ag["refusals"].values.astype(float)
         n = len(vals)

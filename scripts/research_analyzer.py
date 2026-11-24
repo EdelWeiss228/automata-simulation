@@ -340,11 +340,12 @@ class ResearchAnalyzer:
         df_agent_ref = self._q(
             """
             SELECT
+                run_id,
                 to_id               AS agent_id,
                 countIf(type = 0)   AS refusals,
                 count()             AS total_as_target
             FROM interactions
-            GROUP BY to_id
+            GROUP BY run_id, to_id
             ORDER BY refusals DESC
             """
         )
