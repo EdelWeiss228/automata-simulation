@@ -758,10 +758,7 @@ class SundayResetAnalyzer:
 # ─────────────────────────────── ТОЧКА ВХОДА ─────────────────────────────────
 
 if __name__ == "__main__":
-    analyzer = SundayResetAnalyzer(
-        host="localhost",
-        port=8123,
-        username="default",
-        password="clickhouse_pass",
-    )
+    # Параметры подключения берутся из окружения/.env, чтобы локальный
+    # и серверный ClickHouse не требовали правки кода.
+    analyzer = SundayResetAnalyzer()
     analyzer.run()
