@@ -968,6 +968,15 @@ class ResearchAnalyzer:
         print("📊  [8/9] Эмоциональные пузыри…")
         report = _section("8. Эмоциональные пузыри (Emotional Contagion & Clustering)")
 
+        # Последние 100 дней конкретного прогона: граница зависит от
+        # фактического max(day_id), а не от длины старой симуляции.
+        max_day = int(
+            self._scalar(
+                f"SELECT max(day_id) FROM agent_states WHERE run_id = '{rep_run_id}'"
+            )
+        )
+        window_start = max_day - 100
+
         # Для каждого агента — топ-3 друга по affinity (по последним 100 дням)
         df_friends = self._q(
             f"""
@@ -977,7 +986,7 @@ class ResearchAnalyzer:
                 avg(affinity) AS avg_affinity
             FROM agent_relations
             WHERE run_id = '{rep_run_id}'
-              AND day_id >= 1265
+              AND day_id >= {window_start}
             GROUP BY subject_id, object_id
             QUALIFY row_number() OVER (PARTITION BY subject_id ORDER BY avg_affinity DESC) <= 3
             """
@@ -990,7 +999,7 @@ class ResearchAnalyzer:
             SELECT agent_id, {emotions_sql}
             FROM agent_states
             WHERE run_id = '{rep_run_id}'
-              AND day_id >= 1265
+              AND day_id >= {window_start}
             GROUP BY agent_id
             """
         )

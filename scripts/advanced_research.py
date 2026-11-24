@@ -41,8 +41,8 @@ SELECT
 FROM (
     SELECT 
         from_id,
-        multiIf(day_id <= 153, 1, day_id <= 303, 2, day_id <= 456, 3, day_id <= 606, 4,
-                day_id <= 759, 5, day_id <= 909, 6, day_id <= 1062, 7, 8) AS semester,
+        multiIf(day_id <= 152, 1, day_id <= 302, 2, day_id <= 455, 3, day_id <= 605, 4,
+                day_id <= 758, 5, day_id <= 908, 6, day_id <= 1061, 7, 8) AS semester,
         -sum((cnt / total) * log(cnt / total)) as entropy
     FROM (
         SELECT 
