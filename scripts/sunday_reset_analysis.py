@@ -195,99 +195,125 @@ class SundayResetAnalyzer:
 
     # ─────────────────── ШАГ 2: ДИНАМИКА ВОКРУГ ВОСКРЕСЕНИЙ ─────────────────
 
-    def _get_sunday_windows(self, agent_groups: pd.DataFrame) -> pd.DataFrame:
+    def _get_sunday_windows(self) -> pd.DataFrame:
         """
-        Для каждого воскресенья извлекает эмоциональный фон агентов
-        в окне [-3, +6] дней (3 дня до сброса и 6 дней после).
+        Агрегирует эмоциональный фон вокруг воскресений по группам.
 
-        SQL: join agent_states с таблицей классификации агентов.
-        Тяжёлая группировка остаётся в ClickHouse.
+        В `agent_states` нет строк за воскресенье: сдвиг применяется в
+        `_handle_sunday`, а состояние пишется только в учебные дни.
+        Поэтому наблюдаемое окно — [-3, -1] ∪ [+1, +6]; offset=0
+        (воскресенье) отсутствует и восстанавливается только моделью.
+
+        SQL сразу группирует по run_id, воскресенью, offset и группе:
+        иначе для 54 прогонов в pandas приходит ~136 млн строк.
         """
-        print("[2/6] Извлечение эмоционального фона вокруг воскресений…")
+        print("[2/6] Агрегация эмоционального фона вокруг воскресений…")
 
-        emotions_avg = ", ".join([f"avg({e}) AS {e}" for e in EMOTION_AXES])
+        axes_sum = " + ".join(f"s.{e}" for e in EMOTION_AXES)
+        axes_avg = " + ".join(f"avg({e})" for e in EMOTION_AXES)
+        sunday_count = max(int(self.max_day / WEEK_LEN) - 1, 0)
 
-        # Строим список воскресных дней: 7, 14, 21, ..., 1212
-        # Используем modulo в ClickHouse — day_id % 7 = 0
-        # Нормируем: offset = day_id - ближайшее_воскресенье
+        # Первое воскресенье — день 14, чтобы окно [-3, -1] не пересекалось
+        # с днями 1–6, по которым строится классификация.
         sql = f"""
-            WITH sundays AS (
-                -- Список всех воскресений в симуляции
-                SELECT DISTINCT
-                    intDiv(day_id - 1, {WEEK_LEN}) * {WEEK_LEN} + {WEEK_LEN} AS sunday_day
-                FROM agent_states
-                WHERE day_id % {WEEK_LEN} = 0
+            WITH
+            sundays AS (
+                SELECT number * {WEEK_LEN} AS sunday_day
+                FROM numbers(2, {sunday_count})
             ),
             windows AS (
-                -- Для каждого дня в окне [-3, +6] от воскресенья
                 SELECT
-                    s.sunday_day,
-                    s.sunday_day + offset AS target_day,
+                    sunday_day,
+                    sunday_day + offset AS target_day,
                     offset
-                FROM sundays s
+                FROM sundays
                 CROSS JOIN (
                     SELECT number - 3 AS offset
                     FROM numbers(10)  -- offset: -3..+6
                 ) offsets
-                WHERE s.sunday_day + offset BETWEEN 1 AND 1212
+                WHERE offset != 0
+                  AND sunday_day + offset BETWEEN 1 AND {self.max_day}
+            ),
+            cls AS (
+                SELECT
+                    run_id,
+                    agent_id,
+                    ({axes_avg}) / 7.0 AS baseline_mood
+                FROM agent_states
+                WHERE day_id BETWEEN 1 AND 6
+                GROUP BY run_id, agent_id
             )
             SELECT
                 w.sunday_day,
                 w.offset,
-                as2.run_id,
-                as2.agent_id,
-                ({' + '.join([f'as2.{e}' for e in EMOTION_AXES])}) / 7.0 AS mood_composite,
-                {', '.join([f'as2.{e}' for e in EMOTION_AXES])}
+                s.run_id,
+                multiIf(
+                    c.baseline_mood < {CHRONIC_NEGATIVE_THRESHOLD},
+                    'negative',
+                    c.baseline_mood > {CHRONIC_POSITIVE_THRESHOLD},
+                    'positive',
+                    'neutral'
+                ) AS agent_group,
+                avg(({axes_sum}) / 7.0) AS mean_mood,
+                stddevPop(({axes_sum}) / 7.0) AS std_mood,
+                count() AS n
             FROM windows w
-            JOIN agent_states as2
-                ON as2.day_id = w.target_day
-            ORDER BY w.sunday_day, w.offset, as2.agent_id
+            JOIN agent_states s ON s.day_id = w.target_day
+            JOIN cls c ON c.run_id = s.run_id AND c.agent_id = s.agent_id
+            GROUP BY w.sunday_day, w.offset, s.run_id, agent_group
+            ORDER BY w.sunday_day, w.offset, s.run_id
         """
-        df_raw = self._q(sql)
-
-        # Подтягиваем группы агентов
-        df_classified = agent_groups[["run_id", "agent_id", "group", "baseline_mood"]]
-        df_merged = df_raw.merge(df_classified, on=["run_id", "agent_id"], how="inner")
-
-        return df_merged
+        return self._q(sql).rename(columns={"agent_group": "group"})
 
     # ─────────────────── ШАГ 3: АГРЕГАЦИЯ ПО ГРУППАМ И OFFSET ───────────────
 
     def _aggregate_recovery(self, df_windows: pd.DataFrame) -> pd.DataFrame:
         """
-        Усредняет настроение по группам и offset-дням.
-        Нормирует настроение относительно значения в день воскресенья (offset=0).
+        Сводит предварительно агрегированные окна в кривые по группам.
+
+        `df_windows` содержит среднее, std и n на каждый run/воскресенье/
+        offset/группу. Здесь они объединяются взвешенно по n; нормировка —
+        относительно среднего за три дня до воскресенья (offset -3..-1).
         """
-        print("[3/6] Агрегация кривых восстановления…")
+        print("[3/6] Сводка кривых восстановления…")
 
-        # Среднее настроение по группам и offset
-        df_agg = (
-            df_windows.groupby(["group", "offset"])["mood_composite"]
-            .agg(["mean", "std", "count"])
-            .reset_index()
-        )
-        df_agg.columns = ["group", "offset", "mean_mood", "std_mood", "n"]
-        df_agg["se"] = df_agg["std_mood"] / np.sqrt(df_agg["n"])  # стандартная ошибка
+        rows = []
+        for (group, offset), sub in df_windows.groupby(["group", "offset"]):
+            n = sub["n"].to_numpy(dtype=float)
+            mean = float(np.average(sub["mean_mood"], weights=n))
+            # Пул дисперсий: внутригрупповая + разброс средних.
+            var = float(
+                (
+                    (sub["n"] - 1) * sub["std_mood"] ** 2
+                    + sub["n"] * (sub["mean_mood"] - mean) ** 2
+                ).sum()
+                / max(n.sum() - 1, 1)
+            )
+            rows.append(
+                {
+                    "group": group,
+                    "offset": int(offset),
+                    "mean_mood": mean,
+                    "std_mood": np.sqrt(var),
+                    "n": int(n.sum()),
+                }
+            )
+        df_agg = pd.DataFrame(rows)
+        df_agg["se"] = df_agg["std_mood"] / np.sqrt(df_agg["n"])
 
-        # Нормируем: вычитаем значение при offset=0 (день сброса) для каждой группы
-        baseline_at_sunday = (
-            df_agg[df_agg["offset"] == 0]
-            .set_index("group")["mean_mood"]
-        )
-        df_agg["mood_delta"] = df_agg.apply(
-            lambda r: r["mean_mood"] - baseline_at_sunday.get(r["group"], 0),
-            axis=1,
-        )
+        # Предвоскресный базис: взвешенное среднее offset -3..-1.
+        pre = df_agg[df_agg["offset"].between(-3, -1)]
+        baseline_pre = {}
+        for group, sub in pre.groupby("group"):
+            baseline_pre[group] = float(
+                np.average(sub["mean_mood"], weights=sub["n"])
+            )
 
-        # Также нормируем: относительное отклонение от предвоскресного базиса (offset=-1)
-        baseline_pre = (
-            df_agg[df_agg["offset"] == -1]
-            .set_index("group")["mean_mood"]
-        )
         df_agg["mood_from_pre"] = df_agg.apply(
-            lambda r: r["mean_mood"] - baseline_pre.get(r["group"], 0),
+            lambda r: r["mean_mood"] - baseline_pre.get(r["group"], 0.0),
             axis=1,
         )
+        df_agg["mood_delta"] = df_agg["mood_from_pre"]
 
         return df_agg
 
@@ -298,7 +324,7 @@ class SundayResetAnalyzer:
     ) -> dict[str, dict]:
         """
         Для каждой группы фитируем экспоненциальное затухание
-        на пост-воскресные дни (offset 0..+6).
+        на пост-воскресные дни (offset +1..+6; t=0 — воскресенье).
 
         Возвращает словарь с параметрами кривой и t½.
         """
@@ -306,13 +332,13 @@ class SundayResetAnalyzer:
 
         results = {}
         for group in ["negative", "neutral", "positive"]:
-            sub = df_agg[(df_agg["group"] == group) & (df_agg["offset"] >= 0)].copy()
+            # Воскресенье не логируется, поэтому кривая строится по +1..+6.
+            sub = df_agg[(df_agg["group"] == group) & (df_agg["offset"] >= 1)].copy()
             if sub.empty:
                 continue
 
-            # Нормируем: максимальный подъём настроения в день 0
-            peak = sub[sub["offset"] == 0]["mood_from_pre"].values[0]
-            sub["normalized"] = sub["mood_from_pre"] - peak  # убираем пик, смотрим спад
+            # Наблюдаемый пик — понедельник; t=0 в фите — само воскресенье.
+            peak = float(sub[sub["offset"] == 1]["mood_from_pre"].iloc[0])
 
             x = sub["offset"].values.astype(float)
             y = sub["mood_from_pre"].values.astype(float)
@@ -330,7 +356,9 @@ class SundayResetAnalyzer:
                 A, lam, C = popt
                 perr = np.sqrt(np.diag(pcov))
                 t_half = _half_recovery_time(A, lam)
-                r2 = 1 - np.sum((y - _exponential_decay(x, *popt))**2) / np.sum((y - y.mean())**2)
+                ss_res = float(np.sum((y - _exponential_decay(x, *popt)) ** 2))
+                ss_tot = float(np.sum((y - y.mean()) ** 2))
+                r2 = 1 - ss_res / ss_tot if ss_tot > 0 else np.nan
 
                 results[group] = {
                     "A": A, "lambda": lam, "C": C,
@@ -348,37 +376,94 @@ class SundayResetAnalyzer:
 
     # ─────────────────── ШАГ 5: ПОСТОЯНСТВО НЕГАТИВНОГО ФОНА ─────────────────
 
-    def _compute_return_persistence(self, df_windows: pd.DataFrame) -> pd.DataFrame:
+    def _compute_return_persistence(self):
         """
         Проверяет, возвращается ли настроение к базовому уровню
         через 6 дней после сброса.
 
-        Метрика: mood[offset=+6] - mood[offset=-1]
-        Если отрицательное — агент не восстановился полностью.
+        Метрика: mood[+6] - mood[-1]. Для каждого агента она усредняется
+        по неделям, поэтому статтесты и violin сравнивают агентов, а не
+        агент-недели (иначе N завышается из-за псевдоповторностей).
         """
         print("[5/6] Анализ остаточного эффекта через 6 дней…")
 
-        pre = df_windows[df_windows["offset"] == -1][
-            ["run_id", "agent_id", "sunday_day", "group", "mood_composite"]
-        ].rename(columns={"mood_composite": "mood_pre"})
+        axes_sum = " + ".join(f"s.{e}" for e in EMOTION_AXES)
+        axes_avg = " + ".join(f"avg({e})" for e in EMOTION_AXES)
+        sunday_count = max(int(self.max_day / WEEK_LEN) - 1, 0)
 
-        post = df_windows[df_windows["offset"] == 6][
-            ["run_id", "agent_id", "sunday_day", "mood_composite"]
-        ].rename(columns={"mood_composite": "mood_post"})
+        cte = f"""
+            WITH
+            sundays AS (
+                SELECT number * {WEEK_LEN} AS sunday_day
+                FROM numbers(2, {sunday_count})
+            ),
+            windows AS (
+                SELECT
+                    sunday_day,
+                    sunday_day + offset AS target_day,
+                    offset
+                FROM sundays
+                CROSS JOIN (
+                    SELECT number - 3 AS offset
+                    FROM numbers(10)
+                ) offsets
+                WHERE offset != 0
+                  AND sunday_day + offset BETWEEN 1 AND {self.max_day}
+            ),
+            cls AS (
+                SELECT
+                    run_id,
+                    agent_id,
+                    ({axes_avg}) / 7.0 AS baseline_mood
+                FROM agent_states
+                WHERE day_id BETWEEN 1 AND 6
+                GROUP BY run_id, agent_id
+            ),
+            moods AS (
+                SELECT
+                    s.run_id AS run_id,
+                    s.agent_id AS agent_id,
+                    w.sunday_day AS sunday_day,
+                    multiIf(
+                        c.baseline_mood < {CHRONIC_NEGATIVE_THRESHOLD},
+                        'negative',
+                        c.baseline_mood > {CHRONIC_POSITIVE_THRESHOLD},
+                        'positive',
+                        'neutral'
+                    ) AS agent_group,
+                    maxIf(({axes_sum}) / 7.0, w.offset = 6) AS mood_post,
+                    maxIf(({axes_sum}) / 7.0, w.offset = -1) AS mood_pre
+                FROM windows w
+                JOIN agent_states s ON s.day_id = w.target_day
+                JOIN cls c ON c.run_id = s.run_id AND c.agent_id = s.agent_id
+                GROUP BY run_id, agent_id, sunday_day, agent_group
+                HAVING countIf(w.offset = 6) > 0
+                   AND countIf(w.offset = -1) > 0
+            )
+        """
 
-        df_pair = pre.merge(post, on=["run_id", "agent_id", "sunday_day"], how="inner")
-        df_pair["recovery_gap"] = df_pair["mood_post"] - df_pair["mood_pre"]
-        df_pair["fully_recovered"] = df_pair["recovery_gap"] >= 0
+        df_pair = self._q(
+            cte
+            + """
+            SELECT run_id, agent_id, agent_group,
+                   avg(mood_post - mood_pre) AS recovery_gap,
+                   count() AS weeks
+            FROM moods
+            GROUP BY run_id, agent_id, agent_group
+            """
+        ).rename(columns={"agent_group": "group"})
 
-        # Доля полностью восстановившихся по группам и неделям
-        recovery_rate = (
-            df_pair.groupby(["group", "sunday_day"])["fully_recovered"]
-            .mean()
-            .reset_index()
-        )
-        recovery_rate.columns = ["group", "sunday_day", "recovery_rate"]
+        recovery_rate = self._q(
+            cte
+            + """
+            SELECT agent_group, sunday_day,
+                   avg((mood_post - mood_pre) >= 0) AS recovery_rate
+            FROM moods
+            GROUP BY agent_group, sunday_day
+            ORDER BY agent_group, sunday_day
+            """
+        ).rename(columns={"agent_group": "group"})
 
-        # Средний gap по группам
         gap_summary = (
             df_pair.groupby("group")["recovery_gap"]
             .agg(["mean", "std", "median"])
@@ -396,7 +481,6 @@ class SundayResetAnalyzer:
         recovery_rate: pd.DataFrame,
         gap_summary: pd.DataFrame,
         df_pair: pd.DataFrame,
-        df_windows: pd.DataFrame,
         agent_groups: pd.DataFrame,
     ) -> list[str]:
         """Строит 6 графиков."""
@@ -420,7 +504,7 @@ class SundayResetAnalyzer:
             ax.plot(sub["offset"], sub["mean_mood"],
                     "o-", color=color, lw=2.2, ms=5, label=label)
 
-            # Экспоненциальный fit (только offset >= 0)
+            # Экспоненциальный fit (только наблюдаемые offset >= 1)
             if group in fit_results and "lambda" in fit_results[group]:
                 fr = fit_results[group]
                 x_fit = np.linspace(0, 6, 100)
@@ -674,6 +758,12 @@ class SundayResetAnalyzer:
         медленнее**, так как затухание dE = 0.2 · sᵢ тянет их обратно к нулю
         быстрее, чем у нейтральных, и случайный δ лишь ненадолго поднимает их фон.
 
+        *Воскресенье не пишется в `agent_states`: сдвиг применяется в
+        `_handle_sunday`, а состояние логируется только в учебные дни.
+        Поэтому наблюдаемое окно — [-3, -1] ∪ [+1, +6], а кривая
+        восстановления строится по понедельнику–субботе; t=0 в фите
+        соответствует воскресенью.*
+
         ### Классификация агентов
 
         | Группа | Порог baseline_mood |
@@ -683,6 +773,8 @@ class SundayResetAnalyzer:
         | Хронически позитивные | > {CHRONIC_POSITIVE_THRESHOLD} |
 
         *baseline_mood* = среднее по всем 7 осям за дни 1–6 (до первого сброса).
+        Агенты, добавленные после ротации, в анализ не входят: у них нет
+        базового фона за дни 1–6.
 
         ### Результаты аппроксимации (модель: A·e^(−λt) + C)
 
@@ -695,6 +787,9 @@ class SundayResetAnalyzer:
         **Вывод:** {interpretation}
 
         ### Средний разрыв восстановления (recovery gap = mood[+6] − mood[−1])
+
+        Для каждого агента gap усреднён по всем неделям; статтесты ниже
+        сравнивают агентов, а не отдельные недели.
 
         {gap_summary.to_markdown(index=False)}
 
@@ -723,24 +818,30 @@ class SundayResetAnalyzer:
         print("  SundayResetAnalyzer — Гипотеза «Воскресный сброс»")
         print("═" * 60)
 
+        self.max_day = int(
+            self._q("SELECT max(day_id) AS max_day FROM agent_states")
+            .iloc[0]["max_day"]
+        )
+        print(f"   Последний день в данных: {self.max_day}")
+
         # 1. Классифицируем агентов по базовому фону
         agent_groups = self._classify_agents()
 
-        # 2. Извлекаем эмоции в окне [-3, +6] от каждого воскресенья
-        df_windows = self._get_sunday_windows(agent_groups)
+        # 2. Агрегируем эмоции вокруг воскресений (воскресенье не логируется)
+        df_windows = self._get_sunday_windows()
 
-        # 3. Агрегируем по группам
+        # 3. Сводим кривые по группам
         df_agg = self._aggregate_recovery(df_windows)
 
         # 4. Фитируем экспоненциальные кривые и считаем t½
         fit_results = self._fit_recovery_curves(df_agg)
 
         # 5. Анализ остаточного gap через 6 дней
-        recovery_rate, gap_summary, df_pair = self._compute_return_persistence(df_windows)
+        recovery_rate, gap_summary, df_pair = self._compute_return_persistence()
 
         # 6. Строим все графики
         plot_paths = self._plot_all(
-            df_agg, fit_results, recovery_rate, gap_summary, df_pair, df_windows, agent_groups
+            df_agg, fit_results, recovery_rate, gap_summary, df_pair, agent_groups
         )
 
         # 7. Статтесты
