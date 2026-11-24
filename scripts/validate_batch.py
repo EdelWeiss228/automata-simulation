@@ -218,6 +218,31 @@ class BatchValidator:
             n_unknown,
         )
 
+    def check_post_rotation(self) -> None:
+        df = self.q(
+            """
+            SELECT r.scenario_name AS scenario,
+                   count() AS post_ids,
+                   countIf(s.agent_id != 0) AS with_states
+            FROM agent_registry g
+            JOIN simulation_runs r ON g.run_id = r.run_id
+            LEFT JOIN (
+                SELECT DISTINCT run_id, agent_id
+                FROM agent_states
+            ) s ON g.run_id = s.run_id AND g.agent_id = s.agent_id
+            WHERE g.agent_id >= 1620
+            GROUP BY scenario
+            ORDER BY scenario
+            """
+        )
+        bad = df[(df["post_ids"] == 0) | (df["with_states"] != df["post_ids"])]
+        self.check(
+            "post_rotation_agents_have_states",
+            bad.empty,
+            f"{len(df)} runs, post-rotation ids without states={len(bad)}",
+            bad.to_dict("records") if not bad.empty else None,
+        )
+
     def check_id_coverage(self) -> None:
         queries = {
             "states": (
@@ -315,6 +340,7 @@ class BatchValidator:
             self.check_interaction_counts,
             self.check_state_shape,
             self.check_registry,
+            self.check_post_rotation,
             self.check_id_coverage,
             self.check_emotion_range,
             self.check_final_relations,
