@@ -11,7 +11,8 @@ markdown-сводку. Код возврата 1, если хотя бы одн�
   * совпадение `run_timings.interactions` с числом строк `interactions`;
   * постоянные ID: все state/relation/interaction ID есть в registry;
   * отсутствие дублей (run_id, agent_id) в registry;
-  * отсутствие насыщения эмоций на шкале ±30;
+  * отсутствие насыщения эмоций на шкале ±30 после старта
+    (значения ровно ±30 в день 0 — это граница инициализации);
   * непустые отношения на последнем дне.
 """
 
@@ -155,15 +156,21 @@ class BatchValidator:
         )
 
     def check_state_shape(self) -> None:
+        # После ротации в прогоне больше ID, чем активная популяция:
+        # ушедшие и новые люди оставляют строки, но в каждый день
+        # логируется ровно `agents` активных агентов. Поэтому сравниваем
+        # states с agents×logged_days, а не с числом уникальных ID.
         df = self.q(
             """
             SELECT r.scenario_name AS scenario,
                    max(s.day_id) AS max_day,
                    uniqExact(s.day_id) AS logged_days,
                    count() AS states,
+                   any(t.agents) AS population,
                    uniqExact(s.agent_id) AS ids
             FROM agent_states s
             JOIN simulation_runs r ON s.run_id = r.run_id
+            JOIN run_timings t ON t.run_id = s.run_id
             GROUP BY scenario
             ORDER BY scenario
             """
@@ -171,14 +178,15 @@ class BatchValidator:
         expected_max = self.expected_days - 1
         bad = df[
             (df["max_day"] != expected_max)
-            | (df["states"] != df["ids"] * df["logged_days"])
+            | (df["states"] != df["population"] * df["logged_days"])
+            | (df["ids"] < df["population"])
             | (df["logged_days"] <= 0)
         ]
         self.check(
             "state_grid_complete",
             bad.empty,
             f"{len(df)} runs, max_day={expected_max}, "
-            f"states=ids×logged_days",
+            f"states=population×logged_days, ids≥population",
             bad.to_dict("records") if not bad.empty else None,
         )
 
@@ -329,22 +337,26 @@ class BatchValidator:
         )
 
     def check_final_relations(self) -> None:
+        # Фильтруем день до join: иначе запрос сканирует все 2+ млрд
+        # строк agent_relations ради ~50 тыс. строк последнего дня.
         df = self.q(
             """
             SELECT r.scenario_name AS scenario,
-                   countIf(rel.day_id = {max_day}) AS final_rows,
+                   count() AS final_rows,
                    uniqExact(rel.subject_id) AS subjects
             FROM agent_relations rel
             JOIN simulation_runs r ON rel.run_id = r.run_id
+            WHERE rel.day_id = {max_day}
             GROUP BY scenario
             ORDER BY scenario
             """.format(max_day=self.expected_days - 1)
         )
         bad = df[df["final_rows"] == 0]
+        runs = int(self.scalar("SELECT count() FROM simulation_runs"))
         self.check(
             "final_day_relations",
-            bad.empty,
-            f"{len(df)} runs, empty final day={len(bad)}",
+            bad.empty and len(df) == runs,
+            f"{len(df)}/{runs} runs with rows, empty final day={len(bad)}",
             bad.to_dict("records") if not bad.empty else None,
         )
 
