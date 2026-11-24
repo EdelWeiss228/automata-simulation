@@ -38,6 +38,7 @@ class SimulationSession:
         self.first_log_states = True
         self.first_log_interactions = True
         self.simulation_started = False
+        self._logged_registry_epoch = -1
         self.gui_active = False # Флаг для динамического управления синхронизацией
         # Счётчики для performance-лога: сравниваем не только wall time,
         # но и объём реальной работы (дни, контакты).
@@ -156,6 +157,19 @@ class SimulationSession:
             
         print(f"Загрузка состояния: run={run_id}, day={day_id}, slot={slot_id}...", flush=True)
         emotions, relations = self.ch_logger.fetch_state(run_id, day_id, slot_id)
+
+        # В ClickHouse agent_id постоянный, а C++-ядро работает с индексами.
+        # Переводим stable_id -> string_id -> текущий индекс.
+        self.collective._update_id_maps()
+        try:
+            registry = self.ch_logger.fetch_registry(run_id)
+        except Exception:
+            registry = {}
+        stable_to_engine = {}
+        for stable_id, string_id in registry.items():
+            engine_idx = self.collective._id_map.get(string_id)
+            if engine_idx is not None:
+                stable_to_engine[stable_id] = engine_idx
         
         if not self.collective.cpp_engine:
             import emotion_engine
@@ -165,14 +179,20 @@ class SimulationSession:
         
         # Инъекция эмоций
         for row in emotions:
-            agent_id = row[0]
+            agent_id = stable_to_engine.get(int(row[0]))
+            if agent_id is None:
+                continue
             for axis in range(7):
                 engine.set_emotion(agent_id, axis, row[axis + 1])
                 
         # Инъекция отношений
         for row in relations:
             u_id, o_id, util, aff, trust = row
-            engine.set_relation(u_id, o_id, util, aff, trust)
+            u_idx = stable_to_engine.get(int(u_id))
+            o_idx = stable_to_engine.get(int(o_id))
+            if u_idx is None or o_idx is None:
+                continue
+            engine.set_relation(u_idx, o_idx, util, aff, trust)
             
         # Синхронизация Python-объектов
         self.collective._sync_from_cpp(sync_relations=True)
@@ -180,14 +200,37 @@ class SimulationSession:
         print("Состояние успешно восстановлено.", flush=True)
         return True
 
+    def _ensure_registry_current(self):
+        """Дописывает новых людей в registry после ротации."""
+        if not self.ch_logger:
+            return
+        epoch = getattr(self.collective, 'registry_epoch', 0)
+        if epoch != self._logged_registry_epoch:
+            self.ch_logger.log_agent_registry(self.collective)
+            self._logged_registry_epoch = epoch
+
+    def _ensure_engine_ready(self):
+        """После ротации C++-ядро пересоздаётся до первых логов дня.
+
+        Иначе первый день нового учебного года писал взаимодействия в CSV:
+        `log_interactions` проверял наличие `cpp_engine`, хотя список
+        взаимодействий уже посчитан Python-моделью.
+        """
+        if self.collective.cpp_engine is None:
+            self.collective._sync_to_cpp(sync_relations=True)
+
     def run_day(self):
         # Начальный лог состояний перед первым шагом
         if not self.simulation_started:
             self.collective._sync_to_cpp()
-            if self.ch_logger:
-                self.ch_logger.log_agent_registry(self.collective)
+            self._ensure_registry_current()
             self.log_states(slot_id=0)
             self.simulation_started = True
+        else:
+            # Ротация могла произойти на стыке дней: registry должен
+            # получить новых студентов до их первых взаимодействий.
+            self._ensure_registry_current()
+            self._ensure_engine_ready()
 
         all_interactions = []
         is_headless = not hasattr(self, 'gui_active') or not self.gui_active 
@@ -222,7 +265,12 @@ class SimulationSession:
                         self.collective._sync_to_cpp(sync_relations=should_sync_rel)
                     
                     if should_sync_rel and self.ch_logger:
-                        self.ch_logger.log_agent_relations(self.collective.current_step, slot_id, self.collective.cpp_engine)
+                        self.ch_logger.log_agent_relations(
+                            self.collective.current_step,
+                            slot_id,
+                            self.collective.cpp_engine,
+                            collective=self.collective,
+                        )
                         self.ch_logger.flush_day_relations()
                 else:
                     break
@@ -240,7 +288,7 @@ class SimulationSession:
 
         self.total_interactions += sum(
             1 for _, _, result in all_interactions
-            if isinstance(result, str) and result in ("success", "failure", "refusal")
+            if isinstance(result, str) and result in ("success", "fail", "failure", "refusal")
         )
         self.days_simulated += 1
         return all_interactions
@@ -253,7 +301,12 @@ class SimulationSession:
         if self.collective.cpp_engine:
             if self.ch_logger:
                 # В ClickHouse логируем каждое изменение состояния
-                self.ch_logger.log_agent_states(self.collective.current_step, slot_id, self.collective.cpp_engine)
+                self.ch_logger.log_agent_states(
+                    self.collective.current_step,
+                    slot_id,
+                    self.collective.cpp_engine,
+                    collective=self.collective,
+                )
             else:
                 # Фоллбек: пишем в CSV каждый шаг, раз ClickHouse не доступен
                 self.collective.cpp_engine.save_states_csv(
@@ -275,31 +328,33 @@ class SimulationSession:
         """Записывает взаимодействия за день в файл."""
         interactions_file = os.path.join(self.output_dir, "interaction_log.csv")
         date_str = self.collective.current_date.strftime("%Y-%m-%d %H:%M:%S")
-        
-        if self.collective.cpp_engine:
-            if self.ch_logger:
-                # В ClickHouse логируем каждое изменение
-                self.ch_logger.log_interactions(
-                    self.collective.current_step, 
-                    slot_id, 
-                    self.collective.cpp_engine,
-                    interactions_list=interactions,
-                    name_to_id=getattr(self.collective, '_id_map', None)
-                )
-            else:
-                # Фоллбек: пишем в CSV каждый шаг
-                self.collective.cpp_engine.save_interactions_csv(
-                    interactions_file, 
-                    date_str, 
-                    self.first_log_interactions
-                )
-                self.first_log_interactions = False
+
+        if self.ch_logger:
+            # Список взаимодействий уже посчитан Python-моделью; наличие
+            # C++-ядра для этой записи не требуется.
+            self.ch_logger.log_interactions(
+                self.collective.current_step,
+                slot_id,
+                self.collective.cpp_engine,
+                interactions_list=interactions,
+                name_to_id=getattr(self.collective, '_id_map', None),
+                stable_id_map=self.collective.stable_id_map(),
+                collective=self.collective,
+            )
+        elif self.collective.cpp_engine:
+            # Фоллбек: пишем в CSV каждый шаг
+            self.collective.cpp_engine.save_interactions_csv(
+                interactions_file,
+                date_str,
+                self.first_log_interactions,
+            )
+            self.first_log_interactions = False
         else:
             self.logger.log_interactions(
-                interactions_file, 
-                self.collective.current_date, 
-                interactions, 
-                self.first_log_interactions
+                interactions_file,
+                self.collective.current_date,
+                interactions,
+                self.first_log_interactions,
             )
             self.first_log_interactions = False
 
@@ -312,4 +367,5 @@ class SimulationSession:
         self.first_log_states = True
         self.first_log_interactions = True
         self.simulation_started = False
+        self._logged_registry_epoch = -1
         os.makedirs(self.output_dir, exist_ok=True)

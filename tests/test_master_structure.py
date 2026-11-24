@@ -97,6 +97,27 @@ class MasterStructureTest(unittest.TestCase):
         # Когорта ММ-24 осталась ММ-24, а не превратилась в ММ-M2.
         self.assertTrue(any(a.group_id == "ММ-24" for a in old_m1))
 
+    def test_stable_ids_survive_rotation(self):
+        c = build()
+        before = {agent.id: agent.stable_id for agent in c.agents.values()}
+        self.assertEqual(len(set(before.values())), len(before))
+
+        rotate(c, 1)
+        after = {agent.id: agent.stable_id for agent in c.agents.values()}
+        self.assertEqual(len(set(after.values())), len(after))
+
+        survivors = set(before) & set(after)
+        self.assertTrue(survivors)
+        for agent_id in survivors:
+            self.assertEqual(before[agent_id], after[agent_id])
+
+        # Новые люди получают новые ID, старые ID не переиспользуются.
+        newcomers = set(after) - set(before)
+        self.assertTrue(newcomers)
+        old_ids = set(before.values())
+        for agent_id in newcomers:
+            self.assertNotIn(after[agent_id], old_ids)
+
     def test_three_rotations_are_consistent(self):
         c = build()
         rotate(c, 3)

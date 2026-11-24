@@ -156,6 +156,15 @@ class Collective:
         self._cpp_seed_engine = None  # движок, которому уже выдан seed
         self._id_map = {} # Name to index
         self._reverse_id_map = {} # Index to name
+        # Постоянные ID для ClickHouse. Индексы C++ меняются после
+        # академической ротации, а человек должен сохранять один и тот же
+        # agent_id во всех таблицах. Ключ — строковый ID агента (agent.id).
+        self._stable_id_by_key = {}
+        self._next_stable_id = 0
+        self._engine_to_stable = []
+        # Эпоха состава: 0 — исходный набор, +1 после каждой ротации.
+        # Нужна только чтобы вовремя дописать registry для новых людей.
+        self.registry_epoch = 0
         
         if agents_data:
             for agent_name, agent_initial_data in agents_data:
@@ -175,14 +184,25 @@ class Collective:
         for agent in self.agents.values():
             AgentFactory.initialize_agent_relations(agent, list(self.agents.keys()))
 
+    def _ensure_stable_id(self, entity):
+        """Выдаёт сущности постоянный числовой ID, если его ещё нет."""
+        key = getattr(entity, 'id', None) or entity.name
+        if key not in self._stable_id_by_key:
+            self._stable_id_by_key[key] = self._next_stable_id
+            self._next_stable_id += 1
+        entity.stable_id = self._stable_id_by_key[key]
+        return entity.stable_id
+
     def add_agent(self, agent):
         """Добавляет агента в коллектив."""
         agent.group = self
         self.agents[agent.id] = agent
+        self._ensure_stable_id(agent)
         self.agent_count += 1
 
     def add_player(self, player):
         """Добавить игрока и инициализировать его отношения."""
+        self._ensure_stable_id(player)
         self.players.append(player)
         AgentFactory.initialize_player_relations(player, list(self.agents.keys()), self.agents)
 
@@ -244,6 +264,7 @@ class Collective:
             
             self._id_map = {name: i for i, name in enumerate(names)}
             self._reverse_id_map = {i: name for name, i in self._id_map.items()}
+            self._engine_to_stable = []
             
             n = len(names)
             new_matrix = np.zeros((n, n, 3), dtype=np.int8)
@@ -281,6 +302,30 @@ class Collective:
         else:
             self._id_map = {name: i for i, name in enumerate(names)}
             self._reverse_id_map = {i: name for name, i in self._id_map.items()}
+
+    def stable_agent_id(self, engine_idx: int) -> int:
+        """Постоянный ID человека по текущему индексу C++-ядра."""
+        name = self._reverse_id_map.get(int(engine_idx))
+        if name is None:
+            return 0
+        return self._stable_id_by_key.get(name, 0)
+
+    def stable_ids_for_engine(self):
+        """Массив stable_id по индексам текущего C++-ядра."""
+        n = len(self._id_map)
+        if len(self._engine_to_stable) != n:
+            self._engine_to_stable = [
+                self._stable_id_by_key.get(self._reverse_id_map[i], 0)
+                for i in range(n)
+            ]
+        return np.asarray(self._engine_to_stable, dtype=np.uint32)
+
+    def stable_id_map(self) -> dict:
+        """name -> постоянный ID (для Python-логов взаимодействий)."""
+        return {
+            name: self._stable_id_by_key.get(name, 0)
+            for name in self._id_map
+        }
 
     def _sync_archetypes(self):
         """Синхронизирует конфигурации архетипов в C++."""

@@ -39,6 +39,91 @@ class InteractionLoggerTest(unittest.TestCase):
             self.assertIn(row[3], {"success", "fail", "refusal", "unknown"})
 
     @unittest.skipUnless(CLICKHOUSE_LOGGER_AVAILABLE, "clickhouse logger deps not installed")
+    def test_registry_is_append_only_and_uses_stable_ids(self):
+        from model.university_collective import UniversityCollective
+
+        class FakeClient:
+            def __init__(self):
+                self.rows = []
+
+            def insert(self, table, data, column_names=None):
+                self.rows.extend(data)
+
+        collective = UniversityCollective(
+            seed=777,
+            config={
+                "start_year": 2024,
+                "initial_relations_mode": "EMPTY",
+                "total_bac": 1500,
+                "total_mag": 120,
+            },
+        )
+        logger = ClickHouseLogger.__new__(ClickHouseLogger)
+        logger.client = FakeClient()
+        logger.run_id = "run"
+        logger.output_dir = "."
+        logger._logged_registry_ids = set()
+
+        logger.log_agent_registry(collective)
+        first = len(logger.client.rows)
+        self.assertEqual(first, len(collective.agents))
+
+        # Повторный вызов не дублирует уже известных людей.
+        logger.log_agent_registry(collective)
+        self.assertEqual(len(logger.client.rows), first)
+
+        collective._handle_graduation_and_enrollment()
+        logger.log_agent_registry(collective)
+        self.assertGreater(len(logger.client.rows), first)
+
+        ids = [row[1] for row in logger.client.rows]
+        self.assertEqual(len(ids), len(set(ids)))
+        known = {agent.stable_id for agent in collective.agents.values()}
+        self.assertTrue(set(ids) & known)
+
+    @unittest.skipUnless(CLICKHOUSE_LOGGER_AVAILABLE, "clickhouse logger deps not installed")
+    def test_empty_slot_does_not_read_stale_cpp_interactions(self):
+        class FakeClient:
+            def __init__(self):
+                self.rows = []
+
+            def insert(self, table, data, column_names=None):
+                self.rows.extend(data)
+
+        logger = ClickHouseLogger.__new__(ClickHouseLogger)
+        logger.client = FakeClient()
+        logger.run_id = "run"
+
+        # engine=None: пустой слот не должен обращаться к last_day_interactions.
+        logger.log_interactions(
+            1, 1, None, interactions_list=[], stable_id_map={"A": 0}
+        )
+        self.assertEqual(logger.client.rows, [])
+
+    @unittest.skipUnless(CLICKHOUSE_LOGGER_AVAILABLE, "clickhouse logger deps not installed")
+    def test_interaction_list_is_written_with_stable_ids(self):
+        class FakeClient:
+            def __init__(self):
+                self.rows = []
+
+            def insert(self, table, data, column_names=None):
+                self.rows.extend(data)
+
+        logger = ClickHouseLogger.__new__(ClickHouseLogger)
+        logger.client = FakeClient()
+        logger.run_id = "run"
+
+        logger.log_interactions(
+            1, 1, None,
+            interactions_list=[("A", "B", "success"), ("A", "C", "fail")],
+            stable_id_map={"A": 7, "B": 11, "C": 13},
+        )
+        self.assertEqual(
+            [(row[3], row[4], row[5]) for row in logger.client.rows],
+            [(7, 11, 1), (7, 13, -1)],
+        )
+
+    @unittest.skipUnless(CLICKHOUSE_LOGGER_AVAILABLE, "clickhouse logger deps not installed")
     def test_zero_relations_are_not_logged(self):
         engine = emotion_engine.Engine(3)
         engine.set_relation(0, 1, 10, 5, 7)

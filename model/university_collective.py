@@ -730,6 +730,9 @@ class UniversityCollective(Collective):
         )
 
         # Сброс C++ ядра для пересоздания с новыми индексами.
+        # Новый состав получает новую эпоху, чтобы agent_id в ClickHouse
+        # не смешивал выпускников и новых студентов.
+        self.registry_epoch += 1
         self.cpp_engine = None
         self._update_id_maps()
 

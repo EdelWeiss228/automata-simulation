@@ -147,7 +147,7 @@ class ClickHouseLogger:
         except Exception as e:
             print(f"Ошибка при сохранении таймингов прогона: {e}", flush=True)
 
-    def log_agent_states(self, day_id: int, slot_id: int, engine):
+    def log_agent_states(self, day_id: int, slot_id: int, engine, collective=None):
         """
         Извлекает эмоциональные состояния из C++ ядра and сохраняет в agent_states таблицу.
         Векторизованная обработка с использованием библиотеки numpy.
@@ -155,13 +155,25 @@ class ClickHouseLogger:
         state = engine.state
         num_agents = state.num_agents
         emotions = np.array(state.emotions, dtype=np.int8).reshape((num_agents, 7))
+        # Постоянные ID людей: индексы C++ меняются после ротации, а
+        # человек должен оставаться одним и тем же agent_id.
+        if collective is not None:
+            stable_ids = collective.stable_ids_for_engine()
+            if len(stable_ids) != num_agents:
+                raise ValueError(
+                    f"stable_id map has {len(stable_ids)} entries, "
+                    f"engine has {num_agents} agents"
+                )
+            agent_ids = stable_ids.tolist()
+        else:
+            agent_ids = list(range(num_agents))
         
         # Подготовка данных без цикла
         data = list(zip(
             [self.run_id] * num_agents,
             [day_id] * num_agents,
             [slot_id] * num_agents,
-            range(num_agents),
+            agent_ids,
             emotions[:, 0].tolist(),
             emotions[:, 1].tolist(),
             emotions[:, 2].tolist(),
@@ -178,7 +190,7 @@ class ClickHouseLogger:
                 'habit_surprise', 'shame_confidence', 'alienation_openness'
             ])
 
-    def log_agent_relations(self, day_id: int, slot_id: int, engine):
+    def log_agent_relations(self, day_id: int, slot_id: int, engine, collective=None):
         """
         Извлекает отношения из C++ ядра и складывает столбцовый пакет в буфер.
         """
@@ -188,6 +200,15 @@ class ClickHouseLogger:
         state = engine.state
         n = state.num_agents
         relations = np.array(state.relations, dtype=np.int8).reshape((n, n, 3))
+        if collective is not None:
+            stable_ids = collective.stable_ids_for_engine()
+            if len(stable_ids) != n:
+                raise ValueError(
+                    f"stable_id map has {len(stable_ids)} entries, "
+                    f"engine has {n} agents"
+                )
+        else:
+            stable_ids = np.arange(n, dtype=np.uint32)
 
         ii, jj = np.indices((n, n))
         # Нулевая связь — это tabula rasa, а не «нейтральное отношение».
@@ -196,8 +217,8 @@ class ClickHouseLogger:
         # существующие связи; отсутствие строки означает ноль.
         mask = (ii != jj) & np.any(relations != 0, axis=2)
 
-        sub_ids = ii[mask].astype(np.uint32)
-        obj_ids = jj[mask].astype(np.uint32)
+        sub_ids = stable_ids[ii[mask]].astype(np.uint32)
+        obj_ids = stable_ids[jj[mask]].astype(np.uint32)
         rel_values = relations[mask]
         num_rows = len(sub_ids)
 
@@ -253,7 +274,7 @@ class ClickHouseLogger:
             except Exception as e2:
                 print(f"Критическая ошибка ClickHouse (Relations): {e2}", flush=True)
 
-    def log_interactions(self, day_id: int, slot_id: int, engine, interactions_list=None, name_to_id=None):
+    def log_interactions(self, day_id: int, slot_id: int, engine, interactions_list=None, name_to_id=None, id_offset=0, stable_id_map=None, collective=None):
         """
         Logs interactions from the last cycle.
         If interactions_list is provided (Python model), logs it.
@@ -264,18 +285,24 @@ class ClickHouseLogger:
         # C++ уже пишет -1/0/1, как и Python Outcome.
         cpp_type_map = {-1: -1, 0: 0, 1: 1}
         
-        if interactions_list and name_to_id:
+        # Пустой список — это «в этом слоте никто не общался», а не
+        # повод логировать last_day_interactions из C++-ядра.
+        if interactions_list is not None and (
+            stable_id_map is not None or name_to_id is not None
+        ):
+            mapping = stable_id_map if stable_id_map is not None else name_to_id
+            extra = 0 if stable_id_map is not None else id_offset
             for from_name, to_name, status in interactions_list:
                 # В списке могут быть системные сообщения, игнорируем их
-                if from_name not in name_to_id or to_name not in name_to_id:
+                if from_name not in mapping or to_name not in mapping:
                     continue
                     
                 row = [
                     self.run_id,
                     day_id,
                     slot_id,
-                    name_to_id[from_name],
-                    name_to_id[to_name],
+                    mapping[from_name] + extra,
+                    mapping[to_name] + extra,
                     type_map.get(status, 0)
                 ]
                 data.append(row)
@@ -284,13 +311,24 @@ class ClickHouseLogger:
                     data = []
         else:
             # Лог из C++ движка
+            stable_ids = None
+            if collective is not None:
+                stable_ids = collective.stable_ids_for_engine()
             for inter in engine.last_day_interactions:
+                from_id = (
+                    int(stable_ids[inter.from_idx])
+                    if stable_ids is not None else inter.from_idx + id_offset
+                )
+                to_id = (
+                    int(stable_ids[inter.to_idx])
+                    if stable_ids is not None else inter.to_idx + id_offset
+                )
                 row = [
                     self.run_id,
                     day_id,
                     slot_id,
-                    inter.from_idx,
-                    inter.to_idx,
+                    from_id,
+                    to_id,
                     cpp_type_map.get(inter.type, 0)
                 ]
                 data.append(row)
@@ -319,41 +357,51 @@ class ClickHouseLogger:
 
     def log_agent_registry(self, collective):
         """
-        Логирует реестр агентов: связывает числовые ID (из C++ ядра) со строковыми ID and метаданными.
-        Вызывается один раз в начале симуляции.
+        Дописывает реестр агентов. Вызывается в начале прогона и после
+        академической ротации, когда появляются новые люди. Один человек
+        получает одну строку на весь прогон: постоянный stable_id.
         """
-        if not self.client: return
-        
+        if not self.client:
+            return
+        if not hasattr(self, '_logged_registry_ids'):
+            self._logged_registry_ids = set()
+
         data = []
-        n = len(collective.agents)
-        if hasattr(collective, '_reverse_id_map'):
-            for i in range(n):
-                string_id = collective._reverse_id_map.get(i)
-                if not string_id: continue
-                
-                agent = collective.agents.get(string_id)
-                if not agent: continue
-                
-                name = getattr(agent, 'name', string_id)
-                group_id = getattr(agent, 'group_id', 'Unknown')
-                
-                arch_enum = getattr(agent.automaton, 'archetype_enum', None)
-                archetype = arch_enum.localized if arch_enum else getattr(agent.archetype, 'name', 'Harmony')
-                
-                row = [
-                    self.run_id,
-                    i,
-                    str(string_id),
-                    str(name),
-                    str(group_id),
-                    str(archetype)
-                ]
-                data.append(row)
-                
-            if data:
-                self.client.insert('agent_registry', data, column_names=[
-                    'run_id', 'agent_id', 'string_id', 'name', 'group_id', 'archetype'
-                ])
+        for agent in collective.agents.values():
+            stable_id = collective._ensure_stable_id(agent)
+            if stable_id in self._logged_registry_ids:
+                continue
+            name = getattr(agent, 'name', agent.id)
+            group_id = getattr(agent, 'group_id', 'Unknown')
+
+            arch_enum = getattr(agent.automaton, 'archetype_enum', None)
+            archetype = (
+                arch_enum.localized if arch_enum
+                else getattr(agent.archetype, 'name', 'Harmony')
+            )
+
+            data.append([
+                self.run_id,
+                stable_id,
+                str(agent.id),
+                str(name),
+                str(group_id),
+                str(archetype),
+            ])
+            self._logged_registry_ids.add(stable_id)
+
+        if data:
+            self.client.insert('agent_registry', data, column_names=[
+                'run_id', 'agent_id', 'string_id', 'name', 'group_id', 'archetype'
+            ])
+
+    def fetch_registry(self, target_run_id: str):
+        """Возвращает agent_id -> string_id для восстановления снимка."""
+        result = self.client.query(
+            "SELECT agent_id, string_id FROM agent_registry "
+            f"WHERE run_id = '{target_run_id}'"
+        )
+        return {int(row[0]): str(row[1]) for row in result.result_rows}
 
     def fetch_state(self, target_run_id: str, day_id: int, slot_id: int):
         """
