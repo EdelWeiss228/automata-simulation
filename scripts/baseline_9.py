@@ -24,6 +24,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 import clickhouse_connect
 import matplotlib
 import matplotlib.pyplot as plt

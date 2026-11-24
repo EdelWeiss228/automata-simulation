@@ -17,6 +17,7 @@ sunday_reset_analysis.py
 
 from __future__ import annotations
 
+import os
 import textwrap
 from pathlib import Path
 from typing import Optional
@@ -122,13 +123,28 @@ class SundayResetAnalyzer:
 
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 8123,
-        username: str = "default",
-        password: str = "clickhouse_pass",
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
     ) -> None:
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            pass
+
+        host = host or os.getenv("CLICKHOUSE_HOST", "localhost")
+        port = int(port or os.getenv("CLICKHOUSE_PORT", "8123"))
+        username = username or os.getenv("CLICKHOUSE_USER", "default")
+        password = password or os.getenv("CLICKHOUSE_PASSWORD", "clickhouse_pass")
+        secure = os.getenv("CLICKHOUSE_SECURE", "False").lower() in (
+            "true", "1", "yes"
+        )
+
         self.client = clickhouse_connect.get_client(
-            host=host, port=port, username=username, password=password
+            host=host, port=port, username=username, password=password,
+            secure=secure,
         )
         print("✅  Подключение к ClickHouse установлено.")
 
