@@ -296,25 +296,35 @@ class BatchValidator:
     def check_emotion_range(self) -> None:
         expr_max = "greatest(" + ",".join(EMOTION_AXES) + ")"
         expr_min = "least(" + ",".join(EMOTION_AXES) + ")"
+        # День 0 — это начальное состояние до первого воскресного сдвига.
+        # Архетипные веса могут дать ровно ±30 уже там; это граница
+        # допустимого диапазона, а не насыщение динамики. Проверяем, что
+        # после старта эмоции не залипают на границе.
         df = self.q(
             f"""
-            SELECT min({expr_min}) AS min_value,
-                   max({expr_max}) AS max_value,
-                   countIf({expr_max} >= 30 OR {expr_min} <= -30) AS saturated
+            SELECT minIf({expr_min}, day_id > 0) AS min_value,
+                   maxIf({expr_max}, day_id > 0) AS max_value,
+                   countIf(day_id > 0 AND ({expr_max} >= 30 OR {expr_min} <= -30))
+                       AS saturated,
+                   countIf(day_id = 0 AND ({expr_max} >= 30 OR {expr_min} <= -30))
+                       AS day0_boundary
             FROM agent_states
             """
         )
         min_value = float(df["min_value"].iloc[0])
         max_value = float(df["max_value"].iloc[0])
         saturated = int(df["saturated"].iloc[0])
+        day0_boundary = int(df["day0_boundary"].iloc[0])
         self.check(
-            "emotions_not_saturated",
+            "emotions_not_saturated_after_init",
             saturated == 0 and min_value >= -30 and max_value <= 30,
-            f"range=[{min_value:.0f}, {max_value:.0f}], saturated={saturated}",
+            f"range after day 0=[{min_value:.0f}, {max_value:.0f}], "
+            f"saturated={saturated}, day0 boundary rows={day0_boundary}",
             {
                 "min": min_value,
                 "max": max_value,
                 "saturated_rows": saturated,
+                "day0_boundary_rows": day0_boundary,
             },
         )
 
