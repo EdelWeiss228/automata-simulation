@@ -89,11 +89,15 @@ class Hypotheses9:
         password = os.getenv("CLICKHOUSE_PASSWORD", "clickhouse_pass")
         secure   = os.getenv("CLICKHOUSE_SECURE", "True").lower() in ("true", "1", "yes")
 
+        # На публичном endpoint Cloudflare режет запросы дольше ~100 с;
+        # на локальном ClickHouse такого ограничения нет.
+        read_timeout = 95 if secure else 600
+
         print("🔌  Подключение к ClickHouse…", flush=True)
         self.db = clickhouse_connect.get_client(
             host=host, port=port, username=user, password=password,
             secure=secure, autogenerate_session_id=False,
-            connect_timeout=120, send_receive_timeout=95,  # < Cloudflare 100s
+            connect_timeout=120, send_receive_timeout=read_timeout,
         )
         self._parts: List[str] = []
         self._ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
