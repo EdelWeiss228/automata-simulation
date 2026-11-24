@@ -703,7 +703,7 @@ class Baseline9:
                                max(day_id) AS last_day
                         FROM interactions WHERE run_id = '{rid}'
                         GROUP BY a, b
-                        HAVING last_day < 1165 AND last_day > 200
+                        HAVING last_day < {self.max_day - 200} AND last_day > 200
                     )
                     SELECT ar.archetype,
                            sum(rel.trust)    AS sum_trust,

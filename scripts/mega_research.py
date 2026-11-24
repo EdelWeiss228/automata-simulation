@@ -653,7 +653,7 @@ class MegaResearch:
             SELECT run_id, object_id AS agent_id,
                    countIf(trust>=80 AND affinity>=80) AS fans
             FROM agent_relations
-            WHERE day_id IN (145,290,435,580,725,870,1015,1160,1305)
+            WHERE day_id IN (145,290,435,580,725,870,1015,1160,{self.max_day})
             GROUP BY run_id, object_id ORDER BY fans DESC
         """)
         emo_sql = ", ".join([f"avg({e}) AS {e}" for e in ["anger_humility","fear_calm","sadness_joy"]])
@@ -826,7 +826,7 @@ class MegaResearch:
                     FROM interactions
                     WHERE run_id = '{rid}'
                     GROUP BY a, b
-                    HAVING last_day<1165 AND last_day>200
+                    HAVING last_day<{self.max_day - 200} AND last_day>200
                 )
                 SELECT ar.archetype,
                        sum(rel.trust)    AS sum_trust,
@@ -1500,7 +1500,7 @@ class MegaResearch:
                    1                         AS broken
             FROM interactions
             GROUP BY run_id,a,b
-            HAVING last_day<1165 AND last_day>200
+            HAVING last_day<{self.max_day - 200} AND last_day>200
             LIMIT 50000
         """)
 
@@ -1513,7 +1513,7 @@ class MegaResearch:
                    0                         AS broken
             FROM interactions
             GROUP BY run_id,a,b
-            HAVING last_day>=1165
+            HAVING last_day>={self.max_day - 200}
             LIMIT 50000
         """)
 

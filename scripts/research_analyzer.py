@@ -1054,8 +1054,10 @@ class ResearchAnalyzer:
         print("📊  [9/9] Скорость полураспада отношений…")
         report = _section("9. Скорость полураспада отношений (Relational Half-Life by Archetype)")
 
-        # Находим пары, которые в последние 200 дней больше не встречались
-        # (последний совместный день < 1165), и смотрим угасание trust/affinity
+        # Находим пары, которые в последние 200 дней больше не встречались,
+        # и смотрим угасание trust/affinity.
+        max_day = int(self._scalar("SELECT max(day_id) FROM agent_states"))
+        stable_cutoff = max_day - 200
         df_last_contact = self._q(
             f"""
             SELECT
@@ -1066,7 +1068,7 @@ class ResearchAnalyzer:
             FROM interactions
             WHERE run_id = '{rep_run_id}'
             GROUP BY run_id, a, b
-            HAVING last_day < 1165 AND last_day > 200
+            HAVING last_day < {stable_cutoff} AND last_day > 200
             LIMIT 20000
             """
         )
@@ -1156,7 +1158,7 @@ class ResearchAnalyzer:
                 FROM interactions
                 WHERE run_id IN ({sampled_runs_str})
                 GROUP BY run_id, a, b
-                HAVING last_day < 1165 AND last_day > 200
+                HAVING last_day < {stable_cutoff} AND last_day > 200
                 LIMIT 50000
             """)
             

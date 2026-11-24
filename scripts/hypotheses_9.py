@@ -628,7 +628,7 @@ class Hypotheses9:
                 df_b = self.q(f"""
                     SELECT greatest(from_id,to_id) AS a, least(from_id,to_id) AS b,
                            max(day_id) AS last_day,
-                           if(max(day_id) < 1165 AND max(day_id) > 200, 1, 0) AS broken
+                           if(max(day_id) < {self.max_day - 200} AND max(day_id) > 200, 1, 0) AS broken
                     FROM interactions WHERE run_id = '{rid}'
                     GROUP BY a, b
                     HAVING last_day > 200
