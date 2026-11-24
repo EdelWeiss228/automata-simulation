@@ -268,13 +268,19 @@ class BatchValidator:
         }
         results = {}
         for label, (table, column) in queries.items():
+            # Сначала схлопываем до уникальных (run_id, id): в relations и
+            # interactions миллиарды строк, но ID людей всего ~150 тысяч.
+            # Anti-join по полному потоку строк раньше упирался в память.
             n = int(
                 self.scalar(
                     f"""
                     SELECT count()
-                    FROM {table} x
+                    FROM (
+                        SELECT DISTINCT run_id, {column} AS agent_id
+                        FROM {table}
+                    ) x
                     LEFT ANTI JOIN agent_registry r
-                        ON x.run_id = r.run_id AND x.{column} = r.agent_id
+                        ON x.run_id = r.run_id AND x.agent_id = r.agent_id
                     """
                 )
             )
