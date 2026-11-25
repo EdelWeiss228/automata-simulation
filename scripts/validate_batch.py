@@ -30,6 +30,11 @@ try:
 except ImportError:  # локальная машина без клиента
     clickhouse_connect = None
 
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
 
 EMOTION_AXES = [
     "sadness_joy",
@@ -418,6 +423,9 @@ def render_markdown(report: dict[str, Any]) -> str:
 
 
 def main() -> int:
+    if load_dotenv is not None:
+        load_dotenv()
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default=os.getenv("CLICKHOUSE_HOST", "localhost"))
     parser.add_argument("--port", type=int, default=int(os.getenv("CLICKHOUSE_PORT", "8123")))
