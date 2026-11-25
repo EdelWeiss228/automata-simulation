@@ -68,8 +68,29 @@ C3          = ["#2196F3", "#FF9800", "#4CAF50"]   # EMPTY / RANDOM / MIXED
 SEMESTER_LEN = 152   # дней в семестре ≈ 1213/8
 N_SEMESTERS  = 8
 
-# Архетипы с нелинейным log() в формуле приоритета
-LOG_ARCHETYPES = ["Erudition", "Trailblaze"]
+# Архетипы с log() в priority_score. Сравнение «нелинейные vs линейные»
+# имеет смысл только на гомогенных прогонах: в гетерогенных смешаны оба
+# типа, и разница отражала бы состав, а не форму функции выбора.
+LOG_ARCHETYPES = {"Erudition", "Nihility", "Trailblaze"}
+HOMOGENEOUS_ARCHETYPE = {
+    "Run01": "Erudition",
+    "Run02": "Enigmata",
+    "Run03": "Harmony",
+    "Run04": "Hunt",
+    "Run05": "Elation",
+    "Run06": "Preservation",
+    "Run07": "Nihility",
+    "Run15": "Trailblaze",
+    "Run16": "Remembrance",
+}
+
+
+def scenario_nonlinearity(name: str):
+    """True/False для гомогенного сценария, None для гетерогенного."""
+    arch = HOMOGENEOUS_ARCHETYPE.get(name.split("_")[0])
+    if arch is None:
+        return None
+    return arch in LOG_ARCHETYPES
 
 # ══════════════════════════════════════════════════════════════════
 #  УТИЛИТЫ
@@ -211,12 +232,9 @@ class MegaResearch:
                 return "Гомогенные" if prefix in homogeneous else "Гетерогенные"
             except Exception:
                 return "Неизвестно"
-        def _nonlinear(n):
-            u = n.upper()
-            return "NL" in u or "NONLINEAR" in u or "NON_LINEAR" in u
         df["init_type"]  = df["scenario_name"].apply(_init)
         df["group"]      = df["run_name"].apply(_group)
-        df["nonlinear"]  = df["scenario_name"].apply(_nonlinear)
+        df["nonlinear"]  = df["scenario_name"].apply(scenario_nonlinearity)
         return df
 
     def _get_log_archetypes(self) -> list:
@@ -285,10 +303,11 @@ class MegaResearch:
         rep += img_md(p1b, "Мин/Среднее/Макс по группам и типу инициализации")
         rep += "\n" + grp.to_markdown(index=False) + "\n"
 
-        # 1c — нелинейность
-        nl_grp = df.groupby("nonlinear")["total"].agg(["mean","std","count"]).reset_index()
-        nl_grp["label"] = nl_grp["nonlinear"].map({True: "Нелинейные\n(NL)", False: "Линейные"})
-        if len(nl_grp) >= 2:
+        # 1c — нелинейность только по гомогенным сценариям.
+        nl_data = df.dropna(subset=["nonlinear"])
+        if nl_data["nonlinear"].nunique() >= 2:
+            nl_grp = nl_data.groupby("nonlinear")["total"].agg(["mean","std","count"]).reset_index()
+            nl_grp["label"] = nl_grp["nonlinear"].map({True: "Нелинейные\n(log)", False: "Линейные"})
             fig, ax = plt.subplots(figsize=(6, 5))
             ax.bar(nl_grp["label"], nl_grp["mean"]/1e6,
                    yerr=nl_grp["std"]/1e6, capsize=10,
@@ -303,14 +322,17 @@ class MegaResearch:
             rep += h3("1c. Нелинейность и активность")
             rep += img_md(p1c, "Нелинейные vs линейные сценарии: число контактов")
             # t-test
-            nl_vals  = df[df["nonlinear"]==True]["total"].values
-            lin_vals = df[df["nonlinear"]==False]["total"].values
+            nl_vals  = nl_data[nl_data["nonlinear"]==True]["total"].values
+            lin_vals = nl_data[nl_data["nonlinear"]==False]["total"].values
             if len(nl_vals)>1 and len(lin_vals)>1:
                 t, p_val = stats.ttest_ind(nl_vals, lin_vals)
                 rep += (f"\n- t-критерий: t={t:.3f}, p={p_val:.4f}\n"
                         f"- {'✅ Нелинейность значимо влияет на активность' if p_val<.05 else '❌ Значимого влияния нет'}\n")
+            rep += ("\n*Сравнение только по гомогенным сценариям: "
+                    "Run01/Run07/Run15 (log) против остальных шести. "
+                    "Гетерогенные исключены.*\n")
         else:
-            rep += "\n*Нелинейных сценариев не обнаружено (в именах нет NL/NONLINEAR).*\n"
+            rep += "\n*Недостаточно гомогенных сценариев для сравнения.*\n"
         return rep
 
     # ══════════════════════════════════════════════════════════════

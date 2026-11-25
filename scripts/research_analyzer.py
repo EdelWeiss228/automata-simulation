@@ -68,6 +68,31 @@ HETEROGENEOUS_RUNS = [
     f"Run{i:02d}" for i in range(8, 15)
 ] + ["Run17", "Run18"]
 
+# Архетипы, у которых в priority_score есть log(). Сравнение
+# «нелинейные vs линейные» имеет смысл только на гомогенных прогонах:
+# в гетерогенных смешаны оба типа, и разница отражала бы состав, а не
+# форму функции выбора.
+LOG_ARCHETYPES = {"Erudition", "Nihility", "Trailblaze"}
+HOMOGENEOUS_ARCHETYPE = {
+    "Run01": "Erudition",
+    "Run02": "Enigmata",
+    "Run03": "Harmony",
+    "Run04": "Hunt",
+    "Run05": "Elation",
+    "Run06": "Preservation",
+    "Run07": "Nihility",
+    "Run15": "Trailblaze",
+    "Run16": "Remembrance",
+}
+
+
+def scenario_nonlinearity(name: str):
+    """True/False для гомогенного сценария, None для гетерогенного."""
+    arch = HOMOGENEOUS_ARCHETYPE.get(name.split("_")[0])
+    if arch is None:
+        return None
+    return arch in LOG_ARCHETYPES
+
 
 def run_group(name: str) -> str:
     prefix = name.split("_")[0]
@@ -183,12 +208,9 @@ class ResearchAnalyzer:
             # run_name вида RunXX_...
             return run_group(name)
 
-        def _nonlinear(name: str) -> bool:
-            return "Run08" not in name
-
         df["init_type"] = df["scenario_name"].apply(_init_type)
         df["group"] = df["run_name"].apply(_group)
-        df["nonlinear"] = df["scenario_name"].apply(_nonlinear)
+        df["nonlinear"] = df["scenario_name"].apply(scenario_nonlinearity)
         return df
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -262,17 +284,10 @@ class ResearchAnalyzer:
         fig.tight_layout()
         p1b = _savefig(fig, "1b_interactions_group_comparison")
 
-        # 1c. Нелинейность
-        nl_df = df_counts.groupby("nonlinear")["total_interactions"].agg(["mean", "std"]).reset_index()
-        nl_df["label"] = nl_df["nonlinear"].map({True: "Нелинейные", False: "Линейные"})
-        fig, ax = plt.subplots(figsize=(6, 5))
-        ax.bar(nl_df["label"], nl_df["mean"] / 1e6,
-               yerr=nl_df["std"] / 1e6, capsize=8, color=["#EF5350", "#42A5F5"],
-               edgecolor="white")
-        ax.set_title("Влияние нелинейности на активность системы", fontsize=13, fontweight="bold")
-        ax.set_ylabel("Среднее число контактов (млн)")
-        fig.tight_layout()
-        p1c = _savefig(fig, "1c_nonlinearity_effect")
+        # 1c. Нелинейность — только гомогенные сценарии, где различается
+        # ровно один архетип. Гетерогенные исключены: в них смешаны
+        # log- и не-log-архетипы, и сравнение было бы смещено составом.
+        nl_data = df_counts.dropna(subset=["nonlinear"]).copy()
 
         report += _subsection("1a. Суммарные контакты по сценариям")
         report += _img(p1a, "Суммарные контакты по сценариям")
@@ -280,7 +295,41 @@ class ResearchAnalyzer:
         report += _img(p1b, "Сравнение контактов по группам и типу инициализации")
         report += "\n" + summary.to_markdown(index=False) + "\n"
         report += _subsection("1c. Нелинейность и активность")
-        report += _img(p1c, "Влияние нелинейности на общую активность")
+
+        if nl_data["nonlinear"].nunique() >= 2:
+            nl_df = (
+                nl_data.groupby("nonlinear")["total_interactions"]
+                .agg(["mean", "std", "count"])
+                .reset_index()
+            )
+            nl_df["label"] = nl_df["nonlinear"].map(
+                {True: "Нелинейные (log)", False: "Линейные"}
+            )
+            fig, ax = plt.subplots(figsize=(6, 5))
+            bars = ax.bar(
+                nl_df["label"], nl_df["mean"] / 1e6,
+                yerr=nl_df["std"] / 1e6, capsize=8,
+                color=["#EF5350", "#42A5F5"], edgecolor="white",
+            )
+            for bar, (_, row) in zip(bars, nl_df.iterrows()):
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + (row["std"] or 0) / 1e6 + 0.03,
+                    f"n={int(row['count'])}", ha="center", fontsize=10,
+                )
+            ax.set_title("Влияние нелинейности на активность системы",
+                         fontsize=13, fontweight="bold")
+            ax.set_ylabel("Среднее число контактов (млн)")
+            fig.tight_layout()
+            p1c = _savefig(fig, "1c_nonlinearity_effect")
+            report += _img(p1c, "Влияние нелинейности на общую активность")
+            report += (
+                "\n*Сравнение только по гомогенным сценариям: "
+                "Run01/Run07/Run15 (log) против остальных шести архетипов. "
+                "Гетерогенные сценарии исключены.*\n"
+            )
+        else:
+            report += "\n*Недостаточно гомогенных сценариев для сравнения.*\n"
         return report
 
     # ──────────────── 2. ГЛУБОКИЙ АНАЛИЗ ОТКАЗОВ ─────────────────────────────
