@@ -123,34 +123,47 @@ class Hypotheses9:
         self.destructor_name = arch_ref["archetype"].iloc[0]  if not arch_ref.empty else "Nihility"
         self.mediator_name   = arch_ref["archetype"].iloc[-1] if not arch_ref.empty else "Harmony"
 
-        # Представительная выборка: по 3 run_id от каждого init_type (макс 9)
-        self.sample_runs = self._pick_sample(per_type=3)
+        # Представительная выборка: по одному прогону из каждой серии
+        self.sample_runs = self._pick_sample(per_family=1)
 
         print(f"✅  Подключение. Runs={self.n_runs}, max_day={self.max_day}", flush=True)
         print(f"   Архетипы: {self.archetypes}", flush=True)
         print(f"   Деструктор={self.destructor_name}, Медиатор={self.mediator_name}", flush=True)
         print(f"   Выборка для тяжёлых запросов: {len(self.sample_runs)} runs\n", flush=True)
 
-    def q(self, sql): return self.db.query_df(sql)
+    def q(self, sql):
+        df = self.db.query_df(sql)
+        if "run_id" in df.columns:
+            df["run_id"] = df["run_id"].astype(str)
+        return df
+
     def s(self, sql): return self.db.query_df(sql).iloc[0, 0]
 
     def _load_meta(self):
         df = self.q("SELECT run_id, scenario_name, run_name FROM simulation_runs ORDER BY scenario_name")
         def _init(n):
+            upper = n.upper()
             for t in INIT_TYPES:
-                if ("_" + t) in n.upper(): return t
+                if upper.endswith("_" + t): return t
+            for t in INIT_TYPES:
+                if ("_" + t) in upper: return t
             return "OTHER"
         df["init_type"] = df["scenario_name"].apply(_init)
         return df
 
-    def _pick_sample(self, per_type=3):
-        """Выбрать по per_type run_id от каждого init_type."""
+    def _pick_sample(self, per_family=1):
+        """Один прогон на каждую серию Run01–Run18, тип инициализации чередуется."""
         sample = []
-        for it in INIT_TYPES:
-            sub = self.runs_df[self.runs_df["init_type"] == it]["run_id"].tolist()
-            sample.extend(sub[:per_type])
+        families = list(dict.fromkeys(self.runs_df["run_name"].tolist()))
+        for i, family in enumerate(families):
+            sub = self.runs_df[self.runs_df["run_name"] == family]
+            wanted = INIT_TYPES[i % len(INIT_TYPES)]
+            pick = sub[sub["init_type"] == wanted]
+            if pick.empty:
+                pick = sub
+            sample.extend(pick["run_id"].tolist()[:per_family])
         if not sample:
-            sample = self.runs_df["run_id"].tolist()[:per_type * 3]
+            sample = self.runs_df["run_id"].tolist()
         return sample
 
     def _iter_relations(self, sql_template: str, run_ids=None, label=""):
@@ -180,33 +193,37 @@ class Hypotheses9:
         rep += ("\n**Гипотеза:** Хронически депрессивные агенты восстанавливаются "
                 "после воскресного δ-сдвига медленнее нейтральных.\n")
 
-        safe_end = 140
+        baseline_end = 6     # классификация до первого воскресного сдвига
+        profile_end = 140    # профиль по неделям в пределах 1-го семестра
         NEG_THR, POS_THR = -5.0, 5.0
+        axes_sum = " + ".join(EMOTION_AXES)
 
+        # Классификация как в отдельном анализе воскресного сброса:
+        # среднее по всем 7 осям за дни 1–6, до первого сброса.
         agent_bl = self.q(f"""
-            SELECT run_id, agent_id, avg(sadness_joy) AS bl_joy
-            FROM agent_states WHERE day_id BETWEEN 1 AND {safe_end}
+            SELECT run_id, agent_id, avg(({axes_sum}) / 7.0) AS bl_mood
+            FROM agent_states WHERE day_id BETWEEN 1 AND {baseline_end}
             GROUP BY run_id, agent_id
         """)
 
-        n_neg = (agent_bl["bl_joy"] <= NEG_THR).sum()
-        n_pos = (agent_bl["bl_joy"] >= POS_THR).sum()
+        n_neg = int((agent_bl["bl_mood"] < NEG_THR).sum())
+        n_pos = int((agent_bl["bl_mood"] > POS_THR).sum())
         n_neu = len(agent_bl) - n_neg - n_pos
 
         df_week = self.q(f"""
             WITH baseline AS (
-                SELECT run_id, agent_id, avg(sadness_joy) AS bj
-                FROM agent_states WHERE day_id BETWEEN 1 AND {safe_end}
+                SELECT run_id, agent_id, avg(({axes_sum}) / 7.0) AS bm
+                FROM agent_states WHERE day_id BETWEEN 1 AND {baseline_end}
                 GROUP BY run_id, agent_id
             )
-            SELECT (s.day_id - 1) % 6 AS dow,
-                   avgIf(s.sadness_joy, b.bj <= {NEG_THR})  AS neg_joy,
-                   avgIf(s.sadness_joy, b.bj >= {POS_THR})  AS pos_joy,
-                   avgIf(s.sadness_joy, b.bj > {NEG_THR} AND b.bj < {POS_THR}) AS neu_joy,
+            SELECT s.day_id % 7 AS dow,
+                   avgIf(s.sadness_joy, b.bm < {NEG_THR})  AS neg_joy,
+                   avgIf(s.sadness_joy, b.bm > {POS_THR})  AS pos_joy,
+                   avgIf(s.sadness_joy, b.bm >= {NEG_THR} AND b.bm <= {POS_THR}) AS neu_joy,
                    count() AS n
             FROM agent_states s
             JOIN baseline b ON s.run_id=b.run_id AND s.agent_id=b.agent_id
-            WHERE s.day_id BETWEEN 1 AND {safe_end}
+            WHERE s.day_id BETWEEN 1 AND {profile_end}
             GROUP BY dow ORDER BY dow
         """)
 
@@ -214,32 +231,33 @@ class Hypotheses9:
         fig, axes = plt.subplots(1, 2, figsize=(15, 5))
 
         ax = axes[0]
-        ax.hist(agent_bl["bl_joy"], bins=60, color="#1565C0", edgecolor="white", alpha=.8)
+        ax.hist(agent_bl["bl_mood"], bins=60, color="#1565C0", edgecolor="white", alpha=.8)
         ax.axvline(NEG_THR, color="red", lw=2, ls="--", label=f"Порог ({NEG_THR})")
         ax.axvline(POS_THR, color="green", lw=2, ls="--", label=f"Порог ({POS_THR})")
-        ax.set_title(f"Базовый уровень Радости (дни 1–{safe_end})\n"
+        ax.set_title(f"Базовый уровень настроения (дни 1–{baseline_end})\n"
                      f"Негат: {n_neg:,} | Нейтр: {n_neu:,} | Позит: {n_pos:,}",
                      fontsize=10, fontweight="bold")
-        ax.set_xlabel("sadness_joy"); ax.set_ylabel("Кол-во"); ax.legend(fontsize=8)
+        ax.set_xlabel("среднее по 7 осям"); ax.set_ylabel("Кол-во"); ax.legend(fontsize=8)
 
         ax = axes[1]
         if not df_week.empty:
             x = df_week["dow"].values
             ax.plot(x, df_week["neg_joy"], "o-", color="#EF5350", lw=2, ms=7,
-                    label=f"Депрессивные (≤{NEG_THR})")
+                    label=f"Депрессивные (<{NEG_THR})")
             ax.plot(x, df_week["pos_joy"], "s-", color="#4CAF50", lw=2, ms=7,
-                    label=f"Позитивные (≥{POS_THR})")
+                    label=f"Позитивные (>{POS_THR})")
             ax.plot(x, df_week["neu_joy"], "^-", color="#FF9800", lw=2, ms=7,
                     label="Нейтральные")
             ax.axhline(0, color="grey", lw=.8, ls=":")
-            ax.set_xticks(range(6)); ax.set_xticklabels(day_labels)
-            ax.set_title("sadness_joy по дням недели (1-й семестр)", fontsize=10, fontweight="bold")
+            ax.set_xticks(range(1, 7)); ax.set_xticklabels(day_labels)
+            ax.set_title(f"sadness_joy по дням недели (дни 1–{profile_end})",
+                         fontsize=10, fontweight="bold")
             ax.set_xlabel("День недели"); ax.set_ylabel("Среднее"); ax.legend(fontsize=8)
         fig.tight_layout(); p10 = savefig(fig, "10_sunday_reset")
 
         rep += img_md(p10, "Воскресный сброс: базовый уровень и профиль по дням")
-        rep += (f"\n- Негативные (≤{NEG_THR}): {n_neg:,}\n"
-                f"- Позитивные (≥{POS_THR}): {n_pos:,}\n- Нейтральные: {n_neu:,}\n")
+        rep += (f"\n- Негативные (<{NEG_THR}): {n_neg:,}\n"
+                f"- Позитивные (>{POS_THR}): {n_pos:,}\n- Нейтральные: {n_neu:,}\n")
         if not df_week.empty:
             for col, name in [("neg_joy","Депр."),("pos_joy","Позит."),("neu_joy","Нейтр.")]:
                 v = df_week[col].dropna()
@@ -319,6 +337,7 @@ class Hypotheses9:
                 "эмоциональный ранг после семестрового сброса.\n")
 
         rank_data = []
+        day_notes = []
         for sem in range(2, N_SEMESTERS + 1):
             ss  = sem_start(sem)
             spe = ss - 1
@@ -330,7 +349,7 @@ class Hypotheses9:
                 FROM agent_relations
                 WHERE run_id = '{{rid}}' AND day_id BETWEEN {spe-4} AND {spe}
                 GROUP BY subject_id
-            """, label=f"S{sem}-trust", run_ids=self.sample_runs[:5])
+            """, label=f"S{sem}-trust", run_ids=self.sample_runs)
             if df_trust.empty: continue
 
             df_before = self.q(f"""
@@ -347,7 +366,20 @@ class Hypotheses9:
                     SELECT run_id, agent_id, sadness_joy AS joy_after
                     FROM agent_states WHERE day_id = {tday}
                 """)
-                if df_after.empty: continue
+                if df_after.empty:
+                    # Воскресенья и каникулы не пишутся в agent_states.
+                    # Если целевой день пропущен, берём ближайший следующий.
+                    nxt = self.q(
+                        f"SELECT min(day_id) AS d FROM agent_states WHERE day_id > {tday}"
+                    )
+                    if nxt.empty or pd.isna(nxt["d"].iloc[0]): continue
+                    actual = int(nxt["d"].iloc[0])
+                    df_after = self.q(f"""
+                        SELECT run_id, agent_id, sadness_joy AS joy_after
+                        FROM agent_states WHERE day_id = {actual}
+                    """)
+                    if df_after.empty: continue
+                    day_notes.append((sem, offset, actual))
 
                 merged = (df_trust.merge(df_before, on=["run_id","agent_id"], how="inner")
                                   .merge(df_after, on=["run_id","agent_id"], how="inner"))
@@ -383,6 +415,10 @@ class Hypotheses9:
 
         rep += img_md(p12, "Ранговая корреляция до/после сброса")
         rep += "\n" + df_r.to_markdown(index=False) + "\n"
+        if day_notes:
+            notes = ", ".join(f"С{s} +{o} → день {d}" for s, o, d in day_notes)
+            rep += (f"\n*Воскресенья и каникулы не пишутся в `agent_states`. "
+                    f"Где целевой день пропущен, взят ближайший следующий: {notes}.*\n")
         return rep
 
     # ════════════════════════════════════════════════════════
@@ -395,7 +431,7 @@ class Hypotheses9:
         rep += ("\n**Гипотеза:** Архетипы с log(U) в формуле приоритета "
                 "создают бимодальную структуру utility.\n")
 
-        keywords = ["erudition", "trailblaz"]
+        keywords = ["erudition", "trailblaz", "nihility"]
         log_archs = [a for a in self.archetypes if any(k in a.lower() for k in keywords)]
         if not log_archs: log_archs = self.archetypes[:2]
         log_list = ",".join([f"'{a}'" for a in log_archs])
@@ -413,7 +449,7 @@ class Hypotheses9:
                AND rel.slot_id = 9 AND rel.subject_id = i.from_id AND rel.object_id = i.to_id
             WHERE i.run_id = '{{rid}}' AND i.day_id % 10 = 0
             LIMIT 200000
-        """, label="H13", run_ids=self.sample_runs[:5])
+        """, label="H13", run_ids=self.sample_runs)
 
         if df.empty:
             return rep + "\n*Нет данных.*\n"
@@ -632,8 +668,8 @@ class Hypotheses9:
 
         # Per-run запросы (GROUP BY greatest/least по 148M таймаутит)
         pair_parts = []
-        for i, rid in enumerate(self.sample_runs[:5]):
-            print(f"     [H17] run {i+1}/5…", flush=True, end="\r")
+        for i, rid in enumerate(self.sample_runs):
+            print(f"     [H17] run {i+1}/{len(self.sample_runs)}…", flush=True, end="\r")
             try:
                 df_b = self.q(f"""
                     SELECT greatest(from_id,to_id) AS a, least(from_id,to_id) AS b,

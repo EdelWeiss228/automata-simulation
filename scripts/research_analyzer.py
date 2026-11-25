@@ -175,7 +175,10 @@ class ResearchAnalyzer:
 
     def _q(self, sql: str) -> pd.DataFrame:
         """Выполнить SQL и вернуть DataFrame."""
-        return self.client.query_df(sql)
+        df = self.client.query_df(sql)
+        if "run_id" in df.columns:
+            df["run_id"] = df["run_id"].astype(str)
+        return df
 
     def _scalar(self, sql: str):
         """Вернуть первое значение первой строки."""
@@ -590,85 +593,87 @@ class ResearchAnalyzer:
         }
         n_semesters = 8
 
-        results = {}
-        for threshold in STABILITY_THRESHOLDS:
-            thr_label = f"{threshold*100:.1f}%"
-            # Считаем по семестрам: для каждой пары агентов — доля взаимных встреч
-            # За каждый семестр находим пары, где взаимная доля >= threshold
-            rows = []
-            for sem in range(1, n_semesters + 1):
-                day_from, day_to = sem_ranges[sem]
+        results = {f"{t*100:.1f}%": [] for t in STABILITY_THRESHOLDS}
+        stats_rows = []
+        for sem in range(1, n_semesters + 1):
+            day_from, day_to = sem_ranges[sem]
 
-                df_sem = self._q(
-                    f"""
+            df_sem = self._q(
+                f"""
+                WITH pairs AS (
                     SELECT
                         greatest(from_id, to_id) AS a,
                         least(from_id, to_id)    AS b,
-                        count()                  AS total_contacts
+                        count()                  AS pair_contacts
                     FROM interactions
                     WHERE run_id = '{rep_run_id}'
                       AND day_id BETWEEN {day_from} AND {day_to}
                     GROUP BY a, b
-                    HAVING count() >= 3
-                    """
-                )
-                if df_sem.empty:
-                    rows.append({"semester": sem, "stable_pairs": 0})
-                    continue
-
-                df_sem2 = self._q(
-                    f"""
-                    WITH pairs AS (
-                        SELECT
-                            greatest(from_id, to_id) AS a,
-                            least(from_id, to_id)    AS b,
-                            count()                  AS pair_contacts
-                        FROM interactions
-                        WHERE run_id = '{rep_run_id}'
-                          AND day_id BETWEEN {day_from} AND {day_to}
-                        GROUP BY a, b
-                    ),
-                    agent_contacts AS (
-                        SELECT from_id AS agent, count() AS total
-                        FROM interactions
-                        WHERE run_id = '{rep_run_id}'
-                          AND day_id BETWEEN {day_from} AND {day_to}
-                        GROUP BY from_id
-                    ),
-                    agent_contacts2 AS (
-                        SELECT to_id AS agent, count() AS total
-                        FROM interactions
-                        WHERE run_id = '{rep_run_id}'
-                          AND day_id BETWEEN {day_from} AND {day_to}
-                        GROUP BY to_id
-                    ),
-                    agent_total AS (
-                        SELECT agent, sum(total) AS total
-                        FROM (
-                            SELECT * FROM agent_contacts
-                            UNION ALL
-                            SELECT * FROM agent_contacts2
-                        )
-                        GROUP BY agent
+                ),
+                agent_contacts AS (
+                    SELECT from_id AS agent, count() AS total
+                    FROM interactions
+                    WHERE run_id = '{rep_run_id}'
+                      AND day_id BETWEEN {day_from} AND {day_to}
+                    GROUP BY from_id
+                ),
+                agent_contacts2 AS (
+                    SELECT to_id AS agent, count() AS total
+                    FROM interactions
+                    WHERE run_id = '{rep_run_id}'
+                      AND day_id BETWEEN {day_from} AND {day_to}
+                    GROUP BY to_id
+                ),
+                agent_total AS (
+                    SELECT agent, sum(total) AS total
+                    FROM (
+                        SELECT * FROM agent_contacts
+                        UNION ALL
+                        SELECT * FROM agent_contacts2
                     )
-                    SELECT
-                        p.a, p.b,
-                        p.pair_contacts,
-                        at_a.total AS total_a,
-                        at_b.total AS total_b,
-                        greatest(p.pair_contacts / at_a.total, p.pair_contacts / at_b.total) AS max_fraction
+                    GROUP BY agent
+                ),
+                scored AS (
+                    SELECT greatest(
+                               p.pair_contacts / at_a.total,
+                               p.pair_contacts / at_b.total
+                           ) AS share
                     FROM pairs p
                     JOIN agent_total at_a ON p.a = at_a.agent
                     JOIN agent_total at_b ON p.b = at_b.agent
-                    WHERE greatest(p.pair_contacts / at_a.total, p.pair_contacts / at_b.total) >= {threshold}
-                    """
                 )
-                rows.append({"semester": sem, "stable_pairs": len(df_sem2)})
-            results[thr_label] = pd.DataFrame(rows)
+                SELECT
+                    countIf(share >= 0.90)  AS c90,
+                    countIf(share >= 0.95)  AS c95,
+                    countIf(share >= 0.995) AS c995,
+                    countIf(share >= 1.00)  AS c100,
+                    count()                 AS total_pairs,
+                    max(share)              AS max_share,
+                    avg(share)              AS avg_share
+                FROM scored
+                """
+            )
+            if df_sem.empty or int(df_sem["total_pairs"].iloc[0]) == 0:
+                for t in STABILITY_THRESHOLDS:
+                    results[f"{t*100:.1f}%"].append({"semester": sem, "stable_pairs": 0})
+                stats_rows.append({"semester": sem, "max_share_pct": 0.0, "avg_share_pct": 0.0})
+                continue
+
+            row = df_sem.iloc[0]
+            for t, key in zip(STABILITY_THRESHOLDS, ["c90", "c95", "c995", "c100"]):
+                results[f"{t*100:.1f}%"].append(
+                    {"semester": sem, "stable_pairs": int(row[key])}
+                )
+            stats_rows.append({
+                "semester": sem,
+                "max_share_pct": round(float(row["max_share"]) * 100, 1),
+                "avg_share_pct": round(float(row["avg_share"]) * 100, 2),
+            })
 
         fig, ax = plt.subplots(figsize=(10, 6))
         colors_thr = ["#1565C0", "#2E7D32", "#E65100", "#6A1B9A"]
-        for (label, df_r), color in zip(results.items(), colors_thr):
+        for (label, rows), color in zip(results.items(), colors_thr):
+            df_r = pd.DataFrame(rows)
             ax.plot(df_r["semester"], df_r["stable_pairs"],
                     marker="o", label=f"Порог {label}", color=color, lw=2)
         ax.set_title("Динамика стабильных пар по семестрам", fontsize=13, fontweight="bold")
@@ -682,9 +687,13 @@ class ResearchAnalyzer:
         p4 = _savefig(fig, "4_stable_pairs_dynamics")
 
         report += _img(p4, "Динамика стабильных пар по семестрам")
-        for label, df_r in results.items():
+        for label, rows in results.items():
             report += f"\n**Порог {label}:**\n"
-            report += df_r.to_markdown(index=False) + "\n"
+            report += pd.DataFrame(rows).to_markdown(index=False) + "\n"
+        report += ("\n**Наблюдённая концентрация пар.** Максимальная доля "
+                   "пары за семестр показывает, насколько близко модель "
+                   "подходит к порогу 90%.\n\n")
+        report += pd.DataFrame(stats_rows).to_markdown(index=False) + "\n"
         return report
 
     # ──────────────── 5. ЭМОЦИОНАЛЬНЫЙ ФОН ──────────────────────────────────

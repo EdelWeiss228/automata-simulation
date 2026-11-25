@@ -141,7 +141,7 @@ class Baseline9:
         self.archetypes = sorted(self.q("SELECT DISTINCT archetype FROM agent_registry")["archetype"].tolist())
 
         # Представительная выборка для тяжёлых запросов
-        self.sample_runs = self._pick_sample(per_type=3)
+        self.sample_runs = self._pick_sample(per_family=1)
 
         print(f"✅  Подключение установлено.", flush=True)
         print(f"   Сценариев: {self.n_runs}, max_day: {self.max_day}", flush=True)
@@ -150,7 +150,12 @@ class Baseline9:
         print()
 
     def q(self, sql: str) -> pd.DataFrame:
-        return self.db.query_df(sql)
+        df = self.db.query_df(sql)
+        # ClickHouse отдаёт UUID-объекты, а per-run выборки хранят run_id
+        # строкой. Приводим к строке, чтобы merge по run_id не терял строки.
+        if "run_id" in df.columns:
+            df["run_id"] = df["run_id"].astype(str)
+        return df
 
     def s(self, sql: str):
         return self.db.query_df(sql).iloc[0, 0]
@@ -158,8 +163,11 @@ class Baseline9:
     def _load_meta(self) -> pd.DataFrame:
         df = self.q("SELECT run_id, scenario_name, run_name, start_time FROM simulation_runs ORDER BY scenario_name")
         def _init(n):
+            upper = n.upper()
             for t in INIT_TYPES:
-                if ("_" + t) in n.upper(): return t
+                if upper.endswith("_" + t): return t
+            for t in INIT_TYPES:
+                if ("_" + t) in upper: return t
             return "OTHER"
         def _group(n):
             try:
@@ -173,13 +181,25 @@ class Baseline9:
         df["group"]     = df["run_name"].apply(_group)
         return df
 
-    def _pick_sample(self, per_type=3):
+    def _pick_sample(self, per_family=1):
+        """Один прогон на каждую серию сценариев.
+
+        Первые три сценария подряд — это Run01–Run03, то есть только
+        Erudition/Enigmata/Harmony. Для анализа по архетипам нужен
+        представительный набор: по одному прогону из каждой серии
+        Run01–Run18, тип инициализации чередуется.
+        """
         sample = []
-        for it in INIT_TYPES:
-            sub = self.runs_df[self.runs_df["init_type"] == it]["run_id"].tolist()
-            sample.extend(sub[:per_type])
+        families = list(dict.fromkeys(self.runs_df["run_name"].tolist()))
+        for i, family in enumerate(families):
+            sub = self.runs_df[self.runs_df["run_name"] == family]
+            wanted = INIT_TYPES[i % len(INIT_TYPES)]
+            pick = sub[sub["init_type"] == wanted]
+            if pick.empty:
+                pick = sub
+            sample.extend(pick["run_id"].tolist()[:per_family])
         if not sample:
-            sample = self.runs_df["run_id"].tolist()[:per_type * 3]
+            sample = self.runs_df["run_id"].tolist()
         return sample
 
     def _iter_relations(self, sql_template: str, run_ids=None, label=""):
@@ -406,11 +426,15 @@ class Baseline9:
     def b04_stable_pairs(self) -> str:
         print("[04/09] Стабильные пары…", flush=True)
         rep = h2("4. Стабильные пары")
-        rep += ("\n**Логика:** Для пары (A→B) считается доля контактов A с B от всех контактов A "
-                "за семестр: `n_AB / N_A`. Пара стабильна, если доля ≥ порогу.\n")
+        rep += ("\n**Логика:** Пара (A,B) неупорядочена: считаются все контакты "
+                "между A и B за семестр. Доля пары — это `n_AB / N_A` или "
+                "`n_AB / N_B`, где `N_A` — все контакты A (как инициатора и как "
+                "адресата). Пара стабильна, если хотя бы у одного из партнёров "
+                "доля ≥ порога.\n")
 
         thresholds = [0.90, 0.95, 0.995, 1.00]
         results = {f"{t*100:.1f}%": [] for t in thresholds}
+        stats_rows = []
 
         for sem in range(1, N_SEMESTERS + 1):
             d1, d2 = SEM_RANGES[sem]
@@ -419,9 +443,12 @@ class Baseline9:
             df_s = self.q(f"""
                 WITH
                 pair_cnt AS (
-                    SELECT run_id, from_id AS a, to_id AS b, count() AS n_ab
+                    SELECT run_id,
+                           greatest(from_id, to_id) AS a,
+                           least(from_id, to_id)    AS b,
+                           count() AS n_ab
                     FROM interactions WHERE day_id BETWEEN {d1} AND {d2}
-                    GROUP BY run_id, from_id, to_id
+                    GROUP BY run_id, a, b
                 ),
                 agent_total AS (
                     SELECT run_id, agent_id, sum(cnt) AS n_a FROM (
@@ -435,29 +462,41 @@ class Baseline9:
                     ) GROUP BY run_id, agent_id
                 ),
                 stability AS (
-                    SELECT p.n_ab / at.n_a AS share
+                    SELECT greatest(
+                               p.n_ab / at_a.n_a,
+                               p.n_ab / at_b.n_a
+                           ) AS share
                     FROM pair_cnt p
-                    JOIN agent_total at ON p.run_id=at.run_id AND p.a=at.agent_id
-                    WHERE at.n_a > 0
+                    JOIN agent_total at_a ON p.run_id=at_a.run_id AND p.a=at_a.agent_id
+                    JOIN agent_total at_b ON p.run_id=at_b.run_id AND p.b=at_b.agent_id
+                    WHERE at_a.n_a > 0 AND at_b.n_a > 0
                 )
                 SELECT
                     countIf(share >= 0.90)  AS cnt_90,
                     countIf(share >= 0.95)  AS cnt_95,
                     countIf(share >= 0.995) AS cnt_995,
                     countIf(share >= 1.00)  AS cnt_100,
-                    count()                 AS total_pairs
+                    count()                 AS total_pairs,
+                    max(share)              AS max_share,
+                    avg(share)              AS avg_share
                 FROM stability
             """)
 
             if df_s.empty or df_s["total_pairs"].iloc[0] == 0:
                 for t in thresholds:
                     results[f"{t*100:.1f}%"].append({"Семестр": sem, "Стаб.пар": 0})
+                stats_rows.append({"Семестр": sem, "Макс. доля": 0.0, "Средняя доля": 0.0})
             else:
                 nr = max(self.n_runs, 1)
                 results["90.0%"].append({"Семестр": sem, "Стаб.пар": int(df_s["cnt_90"].iloc[0]) // nr})
                 results["95.0%"].append({"Семестр": sem, "Стаб.пар": int(df_s["cnt_95"].iloc[0]) // nr})
                 results["99.5%"].append({"Семестр": sem, "Стаб.пар": int(df_s["cnt_995"].iloc[0]) // nr})
                 results["100.0%"].append({"Семестр": sem, "Стаб.пар": int(df_s["cnt_100"].iloc[0]) // nr})
+                stats_rows.append({
+                    "Семестр": sem,
+                    "Макс. доля": round(float(df_s["max_share"].iloc[0]) * 100, 1),
+                    "Средняя доля": round(float(df_s["avg_share"].iloc[0]) * 100, 2),
+                })
 
         colors_t = ["#1565C0", "#2E7D32", "#E65100", "#6A1B9A"]
         fig, ax = plt.subplots(figsize=(11, 6))
@@ -474,6 +513,10 @@ class Baseline9:
         rep += img_md(p4, "Динамика стабильных пар")
         for lbl, rows in results.items():
             rep += f"\n**Порог {lbl}:**\n" + pd.DataFrame(rows).to_markdown(index=False) + "\n"
+        rep += ("\n**Наблюдённая концентрация пар.** Даже максимальная доля "
+                "пары за семестр далека от 90%: контакты распределены по "
+                "сотням партнёров.\n\n")
+        rep += pd.DataFrame(stats_rows).to_markdown(index=False) + "\n"
         return rep
 
     # ══════════════════════════════════════════════════════════
@@ -648,7 +691,7 @@ class Baseline9:
             WHERE run_id = '{{rid}}' AND day_id = {self.max_day}
             GROUP BY subject_id, object_id
             ORDER BY subject_id, aff DESC
-        """, label="B08-friends", run_ids=self.sample_runs[:5])
+        """, label="B08-friends", run_ids=self.sample_runs)
 
         if friends.empty:
             return rep + "\n*Нет данных.*\n"
@@ -706,8 +749,8 @@ class Baseline9:
         rep = h2("9. Скорость полураспада отношений")
 
         df_list = []
-        for i, rid in enumerate(self.sample_runs[:5]):
-            print(f"     [B09-half] run {i+1}/5…", flush=True, end="\r")
+        for i, rid in enumerate(self.sample_runs):
+            print(f"     [B09-half] run {i+1}/{len(self.sample_runs)}…", flush=True, end="\r")
             try:
                 sub = self.q(f"""
                     WITH bp AS (

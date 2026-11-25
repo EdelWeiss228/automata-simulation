@@ -205,7 +205,10 @@ class MegaResearch:
     # ── Запросы ──────────────────────────────────────────────────
 
     def q(self, sql: str) -> pd.DataFrame:
-        return self.db.query_df(sql)
+        df = self.db.query_df(sql)
+        if "run_id" in df.columns:
+            df["run_id"] = df["run_id"].astype(str)
+        return df
 
     def s(self, sql: str):
         df = self.db.query_df(sql)
@@ -219,9 +222,14 @@ class MegaResearch:
             FROM simulation_runs ORDER BY scenario_name
         """)
         def _init(n):
-            # Ищем суффикс через "_" — scenario_name вида RunXX_..._EMPTY|RANDOM|MIXED
+            # Сначала проверяем суффикс: в имени может встречаться
+            # "Random" (Run08_Uniform_Random_MIXED), и поиск подстроки
+            # ошибочно относил такие прогоны к RANDOM.
+            upper = n.upper()
             for t in INIT_TYPES:
-                if ("_" + t) in n.upper(): return t
+                if upper.endswith("_" + t): return t
+            for t in INIT_TYPES:
+                if ("_" + t) in upper: return t
             return "OTHER"
         def _group(n):
             # Run15/Run16 — недостающие гомогенные архетипы.
@@ -246,7 +254,7 @@ class MegaResearch:
             return []
         names = archs["archetype"].tolist()
         # Ключевые слова из диплома: аналитик, инноватор и их английские варианты
-        keywords = ["аналит", "иннова", "analyst", "innovat", "erudition", "trailblaz"]
+        keywords = ["аналит", "иннова", "analyst", "innovat", "erudition", "trailblaz", "nihility"]
         log_archs = [a for a in names if any(k in a.lower() for k in keywords)]
         if not log_archs:
             # Фоллбэк: берём все имена — просто покажем все как одну группу
@@ -504,29 +512,31 @@ class MegaResearch:
     def b04_stable_pairs(self) -> str:
         print("[Progress]  [04/18] Стабильные пары…", flush=True)
         rep = h2("4. Стабильные пары")
-        rep += ("\n**Логика:** Для упорядоченной пары (A→B) вычисляется доля контактов агента A "
-                "с агентом B от всех контактов A за семестр: `n_AB / N_A`. "
-                "Пара считается стабильной, если эта доля ≥ порогу.\n")
+        rep += ("\n**Логика:** Пара (A,B) неупорядочена: считаются все контакты "
+                "между A и B за семестр. Доля пары — `n_AB / N_A` или "
+                "`n_AB / N_B`, где `N_A` — все контакты A (инициатор + адресат). "
+                "Пара стабильна, если хотя бы у одного из партнёров доля ≥ порога.\n")
 
         thresholds = [0.90, 0.95, 0.995, 1.00]
         results = {f"{t*100:.1f}%": [] for t in thresholds}
+        stats_rows = []
 
         for sem in range(1, N_SEMESTERS + 1):
             d1, d2 = sem_range(sem)
             print(f"[Progress]     - Семестр {sem}/{N_SEMESTERS} (дни {d1}–{d2})", flush=True)
 
-            # n_AB — число контактов пары (направленно: from_id=A, to_id=B)
+            # n_AB — все контакты пары (в обе стороны)
             # N_A  — все контакты агента A как инициатора + как адресата
             df_s = self.q(f"""
                 WITH
                 pair_cnt AS (
                     SELECT run_id,
-                           from_id AS a,
-                           to_id   AS b,
+                           greatest(from_id, to_id) AS a,
+                           least(from_id, to_id)    AS b,
                            count() AS n_ab
                     FROM interactions
                     WHERE day_id BETWEEN {d1} AND {d2}
-                    GROUP BY run_id, from_id, to_id
+                    GROUP BY run_id, a, b
                 ),
                 agent_total AS (
                     SELECT run_id, agent_id, sum(cnt) AS n_a FROM (
@@ -544,30 +554,41 @@ class MegaResearch:
                            p.a,
                            p.b,
                            p.n_ab,
-                           at.n_a,
-                           p.n_ab / at.n_a AS share
+                           at_a.n_a AS n_a,
+                           at_b.n_a AS n_b,
+                           greatest(p.n_ab / at_a.n_a,
+                                    p.n_ab / at_b.n_a) AS share
                     FROM pair_cnt p
-                    JOIN agent_total at ON p.run_id=at.run_id AND p.a=at.agent_id
-                    WHERE at.n_a > 0
+                    JOIN agent_total at_a ON p.run_id=at_a.run_id AND p.a=at_a.agent_id
+                    JOIN agent_total at_b ON p.run_id=at_b.run_id AND p.b=at_b.agent_id
+                    WHERE at_a.n_a > 0 AND at_b.n_a > 0
                 )
                 SELECT
                     countIf(share >= 0.90)  AS cnt_90,
                     countIf(share >= 0.95)  AS cnt_95,
                     countIf(share >= 0.995) AS cnt_995,
                     countIf(share >= 1.00)  AS cnt_100,
-                    count()                 AS total_pairs
+                    count()                 AS total_pairs,
+                    max(share)              AS max_share,
+                    avg(share)              AS avg_share
                 FROM stability
             """)
 
             if df_s.empty or df_s["total_pairs"].iloc[0] == 0:
                 for t in thresholds:
                     results[f"{t*100:.1f}%"].append({"Семестр": sem, "Стаб.пар": 0})
+                stats_rows.append({"Семестр": sem, "Макс. доля": 0.0, "Средняя доля": 0.0})
             else:
                 n_runs = max(1, self.n_runs)  # нормируем на число университетов
                 results["90.0%"].append({"Семестр": sem, "Стаб.пар": int(df_s["cnt_90"].iloc[0]) // n_runs})
                 results["95.0%"].append({"Семестр": sem, "Стаб.пар": int(df_s["cnt_95"].iloc[0]) // n_runs})
                 results["99.5%"].append({"Семестр": sem, "Стаб.пар": int(df_s["cnt_995"].iloc[0]) // n_runs})
                 results["100.0%"].append({"Семестр": sem, "Стаб.пар": int(df_s["cnt_100"].iloc[0]) // n_runs})
+                stats_rows.append({
+                    "Семестр": sem,
+                    "Макс. доля": round(float(df_s["max_share"].iloc[0]) * 100, 1),
+                    "Средняя доля": round(float(df_s["avg_share"].iloc[0]) * 100, 2),
+                })
 
         colors_t = ["#1565C0", "#2E7D32", "#E65100", "#6A1B9A"]
         fig, ax = plt.subplots(figsize=(11, 6))
@@ -586,6 +607,10 @@ class MegaResearch:
         rep += img_md(p, "Динамика стабильных пар по семестрам (n_AB/N_A)")
         for lbl, rows in results.items():
             rep += f"\n**Порог {lbl}:**\n" + pd.DataFrame(rows).to_markdown(index=False) + "\n"
+        rep += ("\n**Наблюдённая концентрация пар.** Максимальная доля пары "
+                "за семестр показывает, насколько близко модель подходит к "
+                "порогу 90%.\n\n")
+        rep += pd.DataFrame(stats_rows).to_markdown(index=False) + "\n"
         return rep
 
     # ══════════════════════════════════════════════════════════════
@@ -907,10 +932,9 @@ class MegaResearch:
 
         import datetime as dt
 
-        # Воскресенья — каждые 7 календарных дней в учебной неделе (6 дней/неделя).
-        # В модели: 6-дневная рабочая неделя, воскресенье = каникулы, не входит в day_id.
-        # «Воскресный сброс» происходит перед каждым понедельником, т.е. перед day_id кратным 6+1.
-        # Реально day_id 1=Пн, 2=Вт, …, 6=Сб, 7=Пн (следующей недели) → воскресный сброс перед day 7,13,19...
+        # day_id — календарный индекс: 0 = воскресенье 01.09.2024.
+        # Воскресенья кратны 7 (7, 14, 21, …) и не пишутся в agent_states:
+        # сдвиг применяется в _handle_sunday, логируются только учебные дни.
         # Базовый уровень = первые 140 дней (не захватываем семестровый сброс ~154-й день)
         d1_s, d1_e = sem_range(1)
         safe_end = min(d1_e - 14, 140)  # не заходим в зону сброса
@@ -932,7 +956,9 @@ class MegaResearch:
         """)
         sem_starts = [sem_start_day(s) for s in range(1, N_SEMESTERS + 1)]
         # Воскресенья в 6-дневной неделе: перед каждым 7-м, 13-м, 19-м... днём
-        sunday_markers = [d for d in range(6, int(all_days["day_id"].max()), 6)]
+        # day_id — календарный индекс: 0 = воскресенье 01.09.2024,
+        # поэтому воскресенья идут с шагом 7, а не 6.
+        sunday_markers = [d for d in range(7, int(all_days["day_id"].max()), 7)]
 
         fig, axes = plt.subplots(2, 1, figsize=(16, 10))
         ax = axes[0]
@@ -980,7 +1006,7 @@ class MegaResearch:
                 tagged AS (
                     SELECT s.run_id, s.agent_id, s.day_id, s.sadness_joy,
                            b.bj,
-                           (s.day_id - 1) % 6 AS day_of_week   -- 0=Пн … 5=Сб
+                           s.day_id % 7 AS day_of_week   -- 0=Вс, 1=Пн … 6=Сб
                     FROM agent_states s
                     JOIN baseline b ON s.run_id=b.run_id AND s.agent_id=b.agent_id
                     WHERE s.day_id BETWEEN 1 AND {safe_end}
@@ -1002,7 +1028,7 @@ class MegaResearch:
                 ax.plot(x, df_rec["hap_joy"], "s-", color="#4CAF50", lw=2, ms=7,
                         label=f"Счастливые (baseline ≥ Q75={q75:.1f})")
                 ax.axhline(0, color="grey", lw=.8, ls=":")
-                ax.set_xticks(range(6)); ax.set_xticklabels(day_labels)
+                ax.set_xticks(range(1, 7)); ax.set_xticklabels(day_labels)
                 ax.set_title("Средний уровень sadness_joy по дням недели\n(1-й семестр, без семестровых сбросов)",
                              fontsize=11, fontweight="bold")
                 ax.set_xlabel("День недели (Пн–Сб)"); ax.set_ylabel("Среднее sadness_joy")
@@ -1100,6 +1126,7 @@ class MegaResearch:
                 "для двух групп: высокий trust (топ-25%) vs низкий trust (нижние 25%).\n")
 
         rank_data = []
+        day_notes = []
         for sem in range(2, N_SEMESTERS + 1):
             ss  = sem_start_day(sem)
             spe = ss - 1          # последний день предыдущего семестра
@@ -1129,7 +1156,21 @@ class MegaResearch:
                     FROM agent_states WHERE day_id = {tday}
                     GROUP BY run_id, agent_id
                 """)
-                if df_after.empty: continue
+                if df_after.empty:
+                    # Воскресенья и каникулы не пишутся в agent_states.
+                    # Если целевой день пропущен, берём ближайший следующий.
+                    nxt = self.q(
+                        f"SELECT min(day_id) AS d FROM agent_states WHERE day_id > {tday}"
+                    )
+                    if nxt.empty or pd.isna(nxt["d"].iloc[0]): continue
+                    actual = int(nxt["d"].iloc[0])
+                    df_after = self.q(f"""
+                        SELECT run_id, agent_id, avg(sadness_joy) AS joy_after
+                        FROM agent_states WHERE day_id = {actual}
+                        GROUP BY run_id, agent_id
+                    """)
+                    if df_after.empty: continue
+                    day_notes.append((sem, offset, actual))
 
                 merged = (df_trust
                           .merge(df_before, on=["run_id","agent_id"], how="inner")
@@ -1180,6 +1221,10 @@ class MegaResearch:
 
         rep += img_md(p12, "Ранговая корреляция эмоций до/после сброса: высокий vs низкий trust")
         rep += "\n" + df_rank.to_markdown(index=False) + "\n"
+        if day_notes:
+            notes = ", ".join(f"С{s} +{o} → день {d}" for s, o, d in day_notes)
+            rep += (f"\n*Воскресенья и каникулы не пишутся в `agent_states`. "
+                    f"Где целевой день пропущен, взят ближайший следующий: {notes}.*\n")
         rep += ("\n**Интерпретация:** Если ρ у «Высокий trust» > ρ у «Низкий trust» — "
                 "накопленные отношения действительно служат эмоциональной памятью.\n")
         return rep

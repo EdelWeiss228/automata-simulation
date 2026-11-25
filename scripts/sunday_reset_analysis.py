@@ -149,7 +149,10 @@ class SundayResetAnalyzer:
         print("✅  Подключение к ClickHouse установлено.")
 
     def _q(self, sql: str) -> pd.DataFrame:
-        return self.client.query_df(sql)
+        df = self.client.query_df(sql)
+        if "run_id" in df.columns:
+            df["run_id"] = df["run_id"].astype(str)
+        return df
 
     # ─────────────────── ШАГ 1: КЛАССИФИКАЦИЯ АГЕНТОВ ────────────────────────
 
@@ -180,11 +183,17 @@ class SundayResetAnalyzer:
         """
         df = self._q(sql)
 
-        df["group"] = pd.cut(
-            df["baseline_mood"],
-            bins=[-30, CHRONIC_NEGATIVE_THRESHOLD, CHRONIC_POSITIVE_THRESHOLD, 30],
-            labels=["negative", "neutral", "positive"],
-        ).astype(str)
+        # Строгие неравенства, как в тексте гипотезы: ровно ±5.0 —
+        # это ещё нейтральная зона (pd.cut по умолчанию включал бы
+        # границы в соседние группы).
+        df["group"] = np.select(
+            [
+                df["baseline_mood"] < CHRONIC_NEGATIVE_THRESHOLD,
+                df["baseline_mood"] > CHRONIC_POSITIVE_THRESHOLD,
+            ],
+            ["negative", "positive"],
+            default="neutral",
+        )
 
         counts = df["group"].value_counts()
         print(f"   Хронически негативные : {counts.get('negative', 0):>6} агентов")
@@ -355,7 +364,11 @@ class SundayResetAnalyzer:
                 )
                 A, lam, C = popt
                 perr = np.sqrt(np.diag(pcov))
-                t_half = _half_recovery_time(A, lam)
+                # λ на нижней границе означает, что экспонента не
+                # идентифицируется: кривая внутри недели немонотонна
+                # (максимум на +2..+3), а не экспоненциально затухает.
+                identifiable = bool(lam > 0.0105 and A > 0)
+                t_half = _half_recovery_time(A, lam) if identifiable else float("nan")
                 ss_res = float(np.sum((y - _exponential_decay(x, *popt)) ** 2))
                 ss_tot = float(np.sum((y - y.mean()) ** 2))
                 r2 = 1 - ss_res / ss_tot if ss_tot > 0 else np.nan
@@ -364,10 +377,12 @@ class SundayResetAnalyzer:
                     "A": A, "lambda": lam, "C": C,
                     "A_err": perr[0], "lambda_err": perr[1],
                     "t_half": t_half,
+                    "identifiable": identifiable,
                     "r2": r2,
                     "peak_delta": peak,
                 }
-                print(f"   {LABEL[group]:30s}  λ={lam:.3f}  t½={t_half:.2f} дней  R²={r2:.3f}")
+                t_half_txt = f"{t_half:.2f}" if identifiable else "—"
+                print(f"   {LABEL[group]:30s}  λ={lam:.3f}  t½={t_half_txt} дней  R²={r2:.3f}")
             except Exception as e:
                 print(f"   ⚠️  Ошибка fit для {group}: {e}")
                 results[group] = {"t_half": np.nan, "r2": np.nan, "peak_delta": peak if peak else 0}
@@ -732,19 +747,34 @@ class SundayResetAnalyzer:
             return f"\n![{caption}]({rel})\n*{caption}*\n"
 
         # Интерпретация результатов
-        neg_t = fit_results.get("negative", {}).get("t_half", float("nan"))
-        neu_t = fit_results.get("neutral",  {}).get("t_half", float("nan"))
-        pos_t = fit_results.get("positive", {}).get("t_half", float("nan"))
+        def _fmt_t(group: str) -> str:
+            fr = fit_results.get(group, {})
+            if fr.get("identifiable") and np.isfinite(fr.get("t_half", float("nan"))):
+                return f"{fr['t_half']:.2f}"
+            return "—"
 
-        if np.isfinite(neg_t) and np.isfinite(neu_t):
-            ratio = neg_t / neu_t if neu_t > 0 else float("nan")
+        def _fmt_lam(group: str) -> str:
+            fr = fit_results.get(group, {})
+            lam = fr.get("lambda", float("nan"))
+            if not np.isfinite(lam):
+                return "—"
+            suffix = "" if fr.get("identifiable") else " (граница)"
+            return f"{lam:.3f}{suffix}"
+
+        gap_means = gap_summary.set_index("group")["mean"].to_dict()
+        neg_gap = float(gap_means.get("negative", float("nan")))
+        neu_gap = float(gap_means.get("neutral", float("nan")))
+        pos_gap = float(gap_means.get("positive", float("nan")))
+        if np.isfinite(neg_gap) and np.isfinite(neu_gap):
+            diff = neg_gap - neu_gap
             interpretation = (
-                f"Хронически негативные агенты восстанавливаются в **{ratio:.2f}×** "
-                f"{'медленнее' if ratio > 1 else 'быстрее'}, чем нейтральные "
-                f"(t½ = {neg_t:.2f} vs {neu_t:.2f} дней)."
+                f"Остаточный разрыв после недели: негативные {neg_gap:+.4f}, "
+                f"нейтральные {neu_gap:+.4f}, позитивные {pos_gap:+.4f}. "
+                f"Разница «негативные − нейтральные» = {diff:+.4f}; "
+                "значимость — в таблице статтестов ниже."
             )
         else:
-            interpretation = "Данных недостаточно для однозначного вывода о t½."
+            interpretation = "Данных недостаточно для сравнения групп."
 
         section = textwrap.dedent(f"""
 
@@ -780,9 +810,14 @@ class SundayResetAnalyzer:
 
         | Группа | t½ (дней) | λ | R² |
         |--------|-----------|---|-----|
-        | Хронически негативные | {neg_t:.2f} | {fit_results.get('negative', {}).get('lambda', float('nan')):.3f} | {fit_results.get('negative', {}).get('r2', float('nan')):.3f} |
-        | Нейтральные           | {neu_t:.2f} | {fit_results.get('neutral',  {}).get('lambda', float('nan')):.3f} | {fit_results.get('neutral',  {}).get('r2', float('nan')):.3f} |
-        | Хронически позитивные | {pos_t:.2f} | {fit_results.get('positive', {}).get('lambda', float('nan')):.3f} | {fit_results.get('positive', {}).get('r2', float('nan')):.3f} |
+        | Хронически негативные | {_fmt_t('negative')} | {_fmt_lam('negative')} | {fit_results.get('negative', {}).get('r2', float('nan')):.3f} |
+        | Нейтральные           | {_fmt_t('neutral')}  | {_fmt_lam('neutral')}  | {fit_results.get('neutral',  {}).get('r2', float('nan')):.3f} |
+        | Хронически позитивные | {_fmt_t('positive')} | {_fmt_lam('positive')} | {fit_results.get('positive', {}).get('r2', float('nan')):.3f} |
+
+        *Кривая внутри недели немонотонна: максимум приходится на +2…+3,
+        поэтому экспоненциальный t½ не идентифицируется — λ упирается в
+        нижнюю границу 0.01. Для таких групп в таблице стоит «—»;
+        основной метрикой служит остаточный разрыв `mood[+6] − mood[−1]`.*
 
         **Вывод:** {interpretation}
 
@@ -807,7 +842,14 @@ class SundayResetAnalyzer:
         {img(plot_paths[5], 'SR-6: Тепловая карта базового эмоционального профиля')}
         """)
 
-        with open(report_path, "a", encoding="utf-8") as f:
+        # Многострочные вставки (to_markdown, img) начинаются с нулевой
+        # колонки и ломают textwrap.dedent. Снимаем отступ шаблона вручную.
+        section = "\n".join(
+            line[8:] if line.startswith("        ") else line
+            for line in section.splitlines()
+        )
+
+        with open(report_path, "w", encoding="utf-8") as f:
             f.write(section)
         print(f"\n📝  Отчёт сохранён: {report_path}")
 
