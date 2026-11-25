@@ -724,8 +724,8 @@ class SundayResetAnalyzer:
         stat_table: str,
         plot_paths: list[str],
     ) -> None:
-        """Дописывает раздел в research_report.md."""
-        report_path = OUTPUT_DIR / "research_report.md"
+        """Пишет отдельный отчёт по воскресному сбросу."""
+        report_path = OUTPUT_DIR / "sunday_reset_report.md"
 
         def img(path: str, caption: str) -> str:
             rel = Path(path).relative_to(OUTPUT_DIR.parent)
@@ -809,7 +809,7 @@ class SundayResetAnalyzer:
 
         with open(report_path, "a", encoding="utf-8") as f:
             f.write(section)
-        print(f"\n📝  Раздел дописан в {report_path}")
+        print(f"\n📝  Отчёт сохранён: {report_path}")
 
     # ─────────────────── ПУБЛИЧНАЯ ТОЧКА ВХОДА ───────────────────────────────
 
@@ -852,7 +852,7 @@ class SundayResetAnalyzer:
 
         print("\n✅  Анализ завершён.")
         print(f"   Графики: {PLOTS_DIR}")
-        print(f"   Отчёт:   {OUTPUT_DIR / 'research_report.md'}")
+        print(f"   Отчёт:   {OUTPUT_DIR / 'sunday_reset_report.md'}")
         print("═" * 60)
 
 
