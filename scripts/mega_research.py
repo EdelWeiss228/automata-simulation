@@ -1424,17 +1424,33 @@ class MegaResearch:
                 ba = pair_rate(b, a)
                 if np.isfinite(ab) and np.isfinite(ba):
                     asym_rows.append({
-                        "Пара": f"{a} ↔ {b}",
-                        f"{a} → {b}": ab,
-                        f"{b} → {a}": ba,
-                        "|Δ|, п.п.": abs(ab - ba),
+                        "pair": f"{a} ↔ {b}",
+                        "a": a,
+                        "b": b,
+                        "ab": ab,
+                        "ba": ba,
+                        "delta": abs(ab - ba),
                     })
         if asym_rows:
             asym = (pd.DataFrame(asym_rows)
-                    .sort_values("|Δ|, п.п.", ascending=False)
+                    .sort_values("delta", ascending=False)
                     .head(8))
+            long_rows = []
+            for _, row in asym.iterrows():
+                long_rows.append({
+                    "Пара": row["pair"],
+                    "Инициатор": row["a"],
+                    "Цель": row["b"],
+                    "Отказов, %": row["ab"],
+                })
+                long_rows.append({
+                    "Пара": row["pair"],
+                    "Инициатор": row["b"],
+                    "Цель": row["a"],
+                    "Отказов, %": row["ba"],
+                })
             rep += h3("Самые асимметричные пары отказов")
-            rep += asym.round(2).to_markdown(index=False)
+            rep += pd.DataFrame(long_rows).round(2).to_markdown(index=False)
 
         # Trust между парами архетипов — берём диапазон последних 50 дней, не точный день
         rel_filter = " AND rel.run_id IN (" + ", ".join(f"'{rid}'" for rid in hetero_ids) + ")"
@@ -1468,7 +1484,7 @@ class MegaResearch:
         nih_mean = float(df_trust.loc[df_trust["subj"] == "Nihility", "avg_trust"].mean())
         if np.isfinite(h_to_n) and np.isfinite(n_to_h):
             rep += (
-                f"\n**Trust в той же паре:** Медиатор → Нонконформист "
+                f"\n\n**Trust в той же паре:** Медиатор → Нонконформист "
                 f"**{h_to_n:.1f}** (средний trust Медиатора ко всем — "
                 f"{harm_mean:.1f}); Нонконформист → Медиатор "
                 f"**{n_to_h:.1f}** (средний trust Нонконформиста ко всем — "
