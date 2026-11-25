@@ -1137,6 +1137,7 @@ class ResearchAnalyzer:
             WHERE run_id = '{rep_run_id}'
             GROUP BY run_id, a, b
             HAVING last_day < {stable_cutoff} AND last_day > 200
+            ORDER BY cityHash64(a, b)
             LIMIT 20000
             """
         )
@@ -1227,6 +1228,7 @@ class ResearchAnalyzer:
                 WHERE run_id IN ({sampled_runs_str})
                 GROUP BY run_id, a, b
                 HAVING last_day < {stable_cutoff} AND last_day > 200
+                ORDER BY cityHash64(run_id, a, b)
                 LIMIT 50000
             """)
             

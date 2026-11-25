@@ -172,7 +172,7 @@ class MegaResearch:
             JOIN agent_registry a ON r.run_id = a.run_id
             WHERE r.scenario_name LIKE '%MIXED%'
             GROUP BY r.run_id
-            ORDER BY count(DISTINCT a.archetype) DESC
+            ORDER BY count(DISTINCT a.archetype) DESC, r.run_id
             LIMIT 1
         """)
         if not best_run_df.empty:
@@ -183,7 +183,7 @@ class MegaResearch:
                 FROM simulation_runs r
                 JOIN agent_registry a ON r.run_id = a.run_id
                 GROUP BY r.run_id
-                ORDER BY count(DISTINCT a.archetype) DESC
+                ORDER BY count(DISTINCT a.archetype) DESC, r.run_id
                 LIMIT 1
             """)
             if not best_run_df.empty:
@@ -740,6 +740,11 @@ class MegaResearch:
     def b07_attractor(self, meta: pd.DataFrame) -> str:
         print("[Progress]  [07/18] Аттракторная сходимость…", flush=True)
         rep = h2("7. «Аттракторная сходимость» сетей")
+        rep += ("\n**Метрика:** сравниваются финальные trust-матрицы прогонов "
+                "одной серии (один набор архетипов, разные начальные условия). "
+                "Высокая корреляция означает, что начальное состояние почти "
+                "не влияет на финальную структуру; это не сравнение разных "
+                "сценариев.\n")
 
         matrices = {}
         for _, row in meta.iterrows():
@@ -810,6 +815,9 @@ class MegaResearch:
     def b08_emotional_bubbles(self) -> str:
         print("[Progress]  [08/18] Эмоциональные пузыри…", flush=True)
         rep = h2("8. Эмоциональные пузыри (Emotional Contagion)")
+        rep += ("\n**Ограничение:** это описательная ассортативность, а не "
+                "оценка заражения: сходство создают и взаимное влияние, и "
+                "выбор похожих партнёров.\n")
 
         friends = self.q(f"""
             SELECT run_id, subject_id AS agent_id, object_id AS friend_id,
@@ -862,7 +870,11 @@ class MegaResearch:
 
     def b09_halflife(self) -> str:
         print("[Progress]  [09/18] Период полураспада…", flush=True)
-        rep = h2("9. Скорость полураспада отношений")
+        rep = h2("9. Уровень отношений при распаде пары")
+        rep += ("\n**Метрика:** для пар, прекративших контакты до конца "
+                "симуляции, берутся trust и affinity в день последнего "
+                "контакта. Это остаточный уровень связи, а не буквальный "
+                "период полураспада.\n")
 
         # Получаем все run_id
         runs = self.meta()["run_id"].tolist()
@@ -916,6 +928,16 @@ class MegaResearch:
             p9 = savefig(fig, "09_halflife_archetype")
             rep += img_md(p9, "Уровень отношений при «распаде» пары")
             rep += "\n" + arch_decay.to_markdown(index=False) + "\n"
+            low = arch_decay.iloc[0]
+            high = arch_decay.iloc[-1]
+            ratio = high["trust_at_end"] / max(low["trust_at_end"], 1e-9)
+            rep += (
+                f"\n**Вывод:** остаточный trust различается в **{ratio:.1f} раза** "
+                f"({low['archetype']} — {low['trust_at_end']:.1f}, "
+                f"{high['archetype']} — {high['trust_at_end']:.1f}). "
+                "Это описательная дифференциация архетипов, а не оценка "
+                "скорости распада.\n"
+            )
         return rep
 
     # ══════════════════════════════════════════════════════════════
@@ -1264,6 +1286,7 @@ class MegaResearch:
                 WHERE i.run_id = '{rid}'
                   AND i.day_id % 3 = 0
                   AND rel.utility BETWEEN -100 AND 100
+                ORDER BY i.day_id, i.from_id, i.to_id
                 LIMIT {limit_per_run}
             """)
             if not sub_df.empty:
@@ -1334,6 +1357,16 @@ class MegaResearch:
         print("[Progress]  [14/18] Нонконформист × Медиатор…", flush=True)
         rep = h2("14. «Нонконформист × Медиатор» — взрывная асимметрия")
         rep += "\n**Гипотеза:** Нонконформист часто отказывает Медиатору, но Медиатор накапливает высокий trust через редкие успешные контакты.\n"
+        rep += ("\n**Как читать матрицу:** строка — инициатор, столбец — цель. "
+                "Процент — доля контактов, в которых цель отказала инициатору. "
+                "Поэтому «Нонконформист отказывает Медиатору» — это ячейка "
+                "«Медиатор → Нонконформист», а не наоборот.\n")
+
+        meta = self.meta()
+        hetero_ids = meta.loc[meta["group"] == "Гетерогенные", "run_id"].astype(str).tolist()
+        if not hetero_ids:
+            hetero_ids = meta["run_id"].astype(str).tolist()
+        run_filter = " AND i.run_id IN (" + ", ".join(f"'{rid}'" for rid in hetero_ids) + ")"
 
         df = self.q(f"""
             SELECT ar1.archetype AS arch_initiator,
@@ -1346,6 +1379,7 @@ class MegaResearch:
             FROM interactions i
             JOIN agent_registry ar1 ON i.run_id=ar1.run_id AND i.from_id=ar1.agent_id
             JOIN agent_registry ar2 ON i.run_id=ar2.run_id AND i.to_id=ar2.agent_id
+            WHERE 1=1{run_filter}
             GROUP BY arch_initiator, arch_target
             ORDER BY refusal_pct DESC
         """)
@@ -1361,7 +1395,49 @@ class MegaResearch:
         ax.set_xlabel("Цель взаимодействия"); ax.set_ylabel("Инициатор")
         fig.tight_layout(); p14a = savefig(fig, "14a_archetype_refusal_matrix")
 
+        rate = df.set_index(["arch_initiator", "arch_target"])["refusal_pct"]
+
+        def pair_rate(a: str, b: str) -> float:
+            try:
+                return float(rate.loc[(a, b)])
+            except KeyError:
+                return float("nan")
+
+        nih_to_harm = pair_rate("Nihility", "Harmony")
+        harm_to_nih = pair_rate("Harmony", "Nihility")
+        rep += "\n**Ключевая пара архетипов (гетерогенные прогоны):**\n"
+        if np.isfinite(nih_to_harm) and np.isfinite(harm_to_nih):
+            rep += (
+                f"- Нонконформист → Медиатор: **{nih_to_harm:.2f}%** отказов "
+                f"(Медиатор отказывает Нонконформисту)\n"
+                f"- Медиатор → Нонконформист: **{harm_to_nih:.2f}%** отказов "
+                f"(Нонконформист отказывает Медиатору)\n"
+            )
+        else:
+            rep += "- Пара Nihility/Harmony не найдена в гетерогенных прогонах.\n"
+
+        archs = sorted(set(df["arch_initiator"]) | set(df["arch_target"]))
+        asym_rows = []
+        for i, a in enumerate(archs):
+            for b in archs[i + 1:]:
+                ab = pair_rate(a, b)
+                ba = pair_rate(b, a)
+                if np.isfinite(ab) and np.isfinite(ba):
+                    asym_rows.append({
+                        "Пара": f"{a} ↔ {b}",
+                        f"{a} → {b}": ab,
+                        f"{b} → {a}": ba,
+                        "|Δ|, п.п.": abs(ab - ba),
+                    })
+        if asym_rows:
+            asym = (pd.DataFrame(asym_rows)
+                    .sort_values("|Δ|, п.п.", ascending=False)
+                    .head(8))
+            rep += h3("Самые асимметричные пары отказов")
+            rep += asym.round(2).to_markdown(index=False)
+
         # Trust между парами архетипов — берём диапазон последних 50 дней, не точный день
+        rel_filter = " AND rel.run_id IN (" + ", ".join(f"'{rid}'" for rid in hetero_ids) + ")"
         max_rel_day = self.q("SELECT max(day_id) FROM agent_relations").iloc[0, 0]
         df_trust = self.q(f"""
             SELECT ar1.archetype AS subj, ar2.archetype AS obj,
@@ -1371,12 +1447,55 @@ class MegaResearch:
             FROM agent_relations rel
             JOIN agent_registry ar1 ON rel.run_id=ar1.run_id AND rel.subject_id=ar1.agent_id
             JOIN agent_registry ar2 ON rel.run_id=ar2.run_id AND rel.object_id=ar2.agent_id
-            WHERE rel.day_id >= {max_rel_day} - 50
+            WHERE rel.day_id >= {max_rel_day} - 50{rel_filter}
             GROUP BY subj, obj
             HAVING count() >= 10
         """)
         pivot_trust = df_trust.pivot_table(index="subj", columns="obj",
                                            values="avg_trust", aggfunc="mean").fillna(0)
+
+        trust_map = df_trust.set_index(["subj", "obj"])["avg_trust"]
+
+        def pair_trust(a: str, b: str) -> float:
+            try:
+                return float(trust_map.loc[(a, b)])
+            except KeyError:
+                return float("nan")
+
+        h_to_n = pair_trust("Harmony", "Nihility")
+        n_to_h = pair_trust("Nihility", "Harmony")
+        harm_mean = float(df_trust.loc[df_trust["subj"] == "Harmony", "avg_trust"].mean())
+        nih_mean = float(df_trust.loc[df_trust["subj"] == "Nihility", "avg_trust"].mean())
+        if np.isfinite(h_to_n) and np.isfinite(n_to_h):
+            rep += (
+                f"\n**Trust в той же паре:** Медиатор → Нонконформист "
+                f"**{h_to_n:.1f}** (средний trust Медиатора ко всем — "
+                f"{harm_mean:.1f}); Нонконформист → Медиатор "
+                f"**{n_to_h:.1f}** (средний trust Нонконформиста ко всем — "
+                f"{nih_mean:.1f}).\n"
+            )
+
+        refusal_asym = (
+            np.isfinite(harm_to_nih) and np.isfinite(nih_to_harm)
+            and harm_to_nih > 2 * max(nih_to_harm, 1e-9)
+        )
+        trust_asym = (
+            np.isfinite(h_to_n) and np.isfinite(harm_mean)
+            and h_to_n > harm_mean
+        )
+        rep += (
+            "\n**Вывод:** "
+            + ("асимметрия отказов подтверждается — Нонконформист действительно "
+               "чаще отказывает Медиатору. "
+               if refusal_asym else
+               "асимметрия отказов выражена слабо. ")
+            + ("Накопление trust у Медиатора по отношению к Нонконформисту "
+               "подтверждается." if trust_asym else
+               "Накопления trust у Медиатора именно к Нонконформисту нет: "
+               "его trust к этой группе не выше среднего.")
+            + "\n"
+        )
+
         fig, ax = plt.subplots(figsize=(12, 9))
         sns.heatmap(pivot_trust, ax=ax, cmap="RdYlGn", center=0, annot=True, fmt=".1f",
                     linewidths=.5, cbar_kws={"label":"Средний Trust"})
@@ -1427,9 +1546,11 @@ class MegaResearch:
             sub = df_gym[(df_gym["arch1"]==arch) | (df_gym["arch2"]==arch)]
             run_coefficients = []
             for rid, group in sub.groupby("run_id"):
-                G = nx.Graph()
-                for _, row in group.iterrows():
-                    G.add_edge(row["a"], row["b"], weight=row["weight"])
+                # from_pandas_edgelist вместо iterrows: на 54 прогонах
+                # Python-цикл по миллионам рёбер занимал десятки минут.
+                G = nx.from_pandas_edgelist(
+                    group, source="a", target="b", edge_attr="weight"
+                )
                 if len(G.nodes) < 5: continue
                 clust = nx.average_clustering(G)
                 deg   = np.mean([d for _, d in G.degree()])
@@ -1474,6 +1595,14 @@ class MegaResearch:
         except ImportError:
             return rep + "\n*networkx не установлен.*\n"
 
+        # Гомогенные прогоны дают тривиальный «остров» из одного архетипа,
+        # поэтому проверяем гипотезу только на гетерогенных сценариях.
+        meta = self.meta()
+        hetero_ids = meta.loc[meta["group"] == "Гетерогенные", "run_id"].astype(str).tolist()
+        if not hetero_ids:
+            hetero_ids = meta["run_id"].astype(str).tolist()
+        run_filter = " AND rel.run_id IN (" + ", ".join(f"'{rid}'" for rid in hetero_ids) + ")"
+
         # Финальный граф trust≥70 с архетипами
         df_edges = self.q(f"""
             SELECT rel.run_id, rel.subject_id, rel.object_id,
@@ -1481,7 +1610,7 @@ class MegaResearch:
                    ar.archetype
             FROM agent_relations rel
             JOIN agent_registry ar ON rel.run_id=ar.run_id AND rel.subject_id=ar.agent_id
-            WHERE rel.day_id = {self.max_day} AND rel.trust>=70
+            WHERE rel.day_id = {self.max_day} AND rel.trust>=70{run_filter}
             GROUP BY rel.run_id, rel.subject_id, rel.object_id, ar.archetype
         """)
         if df_edges.empty:
@@ -1516,9 +1645,24 @@ class MegaResearch:
                     "Все архетипы": str(arch_counts)
                 })
 
-        df_comp = pd.DataFrame(comp_stats)
-        if not df_comp.empty:
-            df_comp = df_comp.sort_values("Размер кластера", ascending=False).head(20)
+        df_comp_all = pd.DataFrame(comp_stats)
+        if not df_comp_all.empty:
+            n_clusters = len(df_comp_all)
+            med_size = float(df_comp_all["Размер кластера"].median())
+            max_size = int(df_comp_all["Размер кластера"].max())
+            mono_share = float((df_comp_all["Доля доминанта (%)"] >= 80).mean() * 100)
+            large_mixed = df_comp_all[
+                (df_comp_all["Размер кластера"] >= 20)
+                & (df_comp_all["Доля доминанта (%)"] < 80)
+            ]
+            df_comp = df_comp_all.sort_values("Размер кластера", ascending=False).head(20)
+        else:
+            n_clusters = 0
+            med_size = 0.0
+            max_size = 0
+            mono_share = 0.0
+            large_mixed = pd.DataFrame()
+            df_comp = df_comp_all
 
         # Распределение размеров компонент
         sizes = [len(c) for c in components]
@@ -1540,7 +1684,23 @@ class MegaResearch:
         fig.tight_layout(); p16 = savefig(fig, "16_warm_islands")
 
         rep += img_md(p16, "Тёплые острова: распределение и доминирующие архетипы")
-        rep += f"\n**Всего кластеров (≥3 агентов): {len(components)}**\n\n"
+        rep += (
+            f"\n**Гетерогенных прогонов:** {len(hetero_ids)}. "
+            f"**Всего кластеров (≥3 агентов): {n_clusters}**; "
+            f"медиана размера — {med_size:.1f}, максимум — {max_size}; "
+            f"доля кластеров с доминантом ≥80% — **{mono_share:.1f}%**.\n\n"
+        )
+        if mono_share >= 50:
+            verdict = ("закрытые моноархетипные кластеры преобладают — "
+                       "гипотеза подтверждается.")
+        elif len(large_mixed) > 0:
+            verdict = ("крупные кластеры смешанные; закрытых моноархетипных "
+                       "«островов» в гетерогенных прогонах нет — гипотеза "
+                       "не подтверждается.")
+        else:
+            verdict = ("выраженных закрытых кластеров нет — гипотеза "
+                       "не подтверждается.")
+        rep += f"**Вывод:** {verdict}\n\n"
         if not df_comp.empty:
             rep += df_comp.head(15).to_markdown(index=False) + "\n"
         return rep
@@ -1570,6 +1730,7 @@ class MegaResearch:
             FROM interactions
             GROUP BY run_id,a,b
             HAVING last_day<{self.max_day - 200} AND last_day>200
+            ORDER BY cityHash64(run_id, a, b)
             LIMIT 50000
         """)
 
@@ -1583,6 +1744,7 @@ class MegaResearch:
             FROM interactions
             GROUP BY run_id,a,b
             HAVING last_day>={self.max_day - 200}
+            ORDER BY cityHash64(run_id, a, b)
             LIMIT 50000
         """)
 

@@ -15,6 +15,7 @@
     TELEGRAM_CHAT_ID=...
 """
 
+import glob
 import html
 import json
 import os
@@ -38,6 +39,19 @@ LOGS_DIR = os.path.join(OUTPUT_ROOT, "logs")
 EXTERNAL_DISK = "/run/media/georgiy/home_external"
 SERVICE = "automata-batch.service"
 
+# Логи анализаторов лежат рядом с batch.log, но называются по-разному:
+# analysis_*.out, mega_*.out, hypotheses_*.out, sunday_*.out и т.п.
+ANALYZER_LOG_GLOBS = (
+    "analysis*.out", "mega_*.out", "hypotheses_*.out",
+    "sunday_*.out", "baseline_*.out", "research_*.out",
+    "advanced_*.out",
+)
+ANALYZER_SCRIPTS = (
+    "mega_research.py", "hypotheses_9.py", "baseline_9.py",
+    "research_analyzer.py", "sunday_reset_analysis.py",
+    "advanced_research.py", "run_v2_analysis.py",
+)
+
 TOTAL_SCENARIOS = 54
 # 1213 = 4 учебных года: 153 дня осенью + 150 весной (весна 2028 — 151
 # из-за 29 февраля). Июль и август не симулируются. В ClickHouse
@@ -52,8 +66,10 @@ RUNNING.set()
 
 WELCOME = (
     "<b>Бот мониторинга v2-corrected</b>\n"
-    "Кнопки: статус, прогресс, ресурсы, логи, перезапуск.\n"
-    "Команды: /status /progress /resources /logs /restart /stop /clean_restart"
+    "Кнопки: статус, прогресс, ресурсы, логи воркеров, логи анализаторов,\n"
+    "перезапуск и остановка (с подтверждением).\n"
+    "Команды: /status /progress /resources /logs /analysis_logs "
+    "/restart /stop /clean_restart"
 )
 
 
@@ -166,6 +182,7 @@ def main_keyboard():
         "keyboard": [
             [{"text": "📊 Статус"}, {"text": "📈 Прогресс"}],
             [{"text": "🖥 Ресурсы"}, {"text": "📜 Логи"}],
+            [{"text": "🧪 Логи анализа"}],
             [{"text": "🚀 Перезапустить"}, {"text": "⏹ Остановить"}],
         ],
         "resize_keyboard": True,
@@ -178,6 +195,16 @@ def confirm_clean_keyboard():
         "inline_keyboard": [[
             {"text": "Да, сбросить всё", "callback_data": "clean:yes"},
             {"text": "Отмена", "callback_data": "clean:no"},
+        ]]
+    }
+
+
+def confirm_action_keyboard(action):
+    """Подтверждение опасного действия: restart или stop."""
+    return {
+        "inline_keyboard": [[
+            {"text": "Да, подтверждаю", "callback_data": f"confirm:{action}:yes"},
+            {"text": "Отмена", "callback_data": f"confirm:{action}:no"},
         ]]
     }
 
@@ -560,7 +587,24 @@ def status_text():
     if disk:
         lines.append(disk)
 
+    analyzers = analyzer_processes()
+    if analyzers:
+        lines.append(f"Анализаторы: 🟢 {len(analyzers)} процесс(ов)")
+    else:
+        lines.append("Анализаторы: ⚪ не запущены")
+    latest_log = latest_analyzer_log()
+    if latest_log:
+        stamp = datetime.fromtimestamp(
+            os.path.getmtime(latest_log)).strftime("%d.%m %H:%M")
+        lines.append(
+            f"Лог анализа: <code>{html.escape(os.path.basename(latest_log))}</code>"
+            f" ({stamp})")
+
     lines.append(f"Ошибок в логе: {len(failures)}")
+    analyzer_failures = analyzer_failure_lines()
+    if analyzer_failures:
+        lines.append(
+            f"⚠️ Traceback в логе анализа: {len(analyzer_failures)}")
     if failures:
         lines.append("Последние ошибки:")
         for failure in failures[-5:]:
@@ -661,6 +705,63 @@ def watcher_logs_text():
     if not content:
         return "Файл tg-watcher.log не найден или пуст."
     return content[-3500:]
+
+
+def latest_analyzer_log():
+    """Самый свежий лог анализатора в data/v2-corrected."""
+    candidates = []
+    for pattern in ANALYZER_LOG_GLOBS:
+        for path in glob.glob(os.path.join(OUTPUT_ROOT, pattern)):
+            if os.path.isfile(path):
+                try:
+                    candidates.append((os.path.getmtime(path), path))
+                except OSError:
+                    pass
+    if not candidates:
+        return None
+    return max(candidates)[1]
+
+
+def analyzer_logs_text():
+    path = latest_analyzer_log()
+    if not path:
+        return "Логи анализаторов не найдены в data/v2-corrected."
+    content = tail_file(path, max_bytes=40000)
+    if not content:
+        return f"Файл {os.path.basename(path)} пуст."
+    return f"Файл: {os.path.basename(path)}\n{content[-3500:]}"
+
+
+def analyzer_processes():
+    """Запущенные процессы анализаторов (без воркеров симуляции)."""
+    try:
+        result = subprocess.run(
+            ["ps", "-eo", "pid,etime,cmd"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        log(f"[analyzers] ps: {type(exc).__name__}: {exc}")
+        return []
+    found = []
+    for line in result.stdout.splitlines():
+        if any(name in line for name in ANALYZER_SCRIPTS):
+            if "tg_batch_watcher.py" in line or "ps -eo" in line:
+                continue
+            found.append(line.strip())
+    return found
+
+
+def analyzer_failure_lines():
+    """Traceback/падения в самом свежем логе анализатора."""
+    path = latest_analyzer_log()
+    if not path:
+        return []
+    content = tail_file(path, max_bytes=200000)
+    markers = ("Traceback (most recent call last)", "MemoryError", "Killed")
+    return [
+        line.rstrip() for line in content.splitlines()
+        if any(marker in line for marker in markers)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -795,16 +896,31 @@ def send_watcher_logs(token, chat_id):
         watcher_logs_text())
 
 
-def send_restart(token, chat_id):
-    send_message(
-        token, chat_id, restart_batch(),
-        reply_markup=main_keyboard(), parse_mode="HTML")
+def send_analyzer_logs(token, chat_id):
+    send_preformatted(
+        token, chat_id, "🧪 Последние строки лога анализатора:",
+        analyzer_logs_text())
 
 
-def send_stop(token, chat_id):
+def ask_restart(token, chat_id):
     send_message(
-        token, chat_id, stop_batch(),
-        reply_markup=main_keyboard(), parse_mode="HTML")
+        token, chat_id,
+        "⚠️ <b>Перезапуск прогона</b>\n"
+        "Сервис симуляции будет остановлен и запущен заново. "
+        "Незавершённый сценарий начнётся с последней контрольной точки, "
+        "поэтому его текущие данные могут быть потеряны.\n"
+        "Подтвердить перезапуск?",
+        reply_markup=confirm_action_keyboard("restart"), parse_mode="HTML")
+
+
+def ask_stop(token, chat_id):
+    send_message(
+        token, chat_id,
+        "⚠️ <b>Остановка прогона</b>\n"
+        "Сервис симуляции будет остановлен. Уже записанные данные "
+        "сохранятся, но новые сценарии перестанут запускаться.\n"
+        "Подтвердить остановку?",
+        reply_markup=confirm_action_keyboard("stop"), parse_mode="HTML")
 
 
 def ask_clean_restart(token, chat_id):
@@ -838,12 +954,14 @@ def handle_message(token, allowed_chat_id, message):
             send_resources(token, chat_id)
         elif command == "/logs":
             send_logs(token, chat_id)
+        elif command in ("/analysis_logs", "/analyzers"):
+            send_analyzer_logs(token, chat_id)
         elif command == "/watcher_log":
             send_watcher_logs(token, chat_id)
         elif command == "/restart":
-            send_restart(token, chat_id)
+            ask_restart(token, chat_id)
         elif command == "/stop":
-            send_stop(token, chat_id)
+            ask_stop(token, chat_id)
         elif command == "/clean_restart":
             ask_clean_restart(token, chat_id)
         else:
@@ -860,10 +978,12 @@ def handle_message(token, allowed_chat_id, message):
         send_resources(token, chat_id)
     elif text == "📜 Логи":
         send_logs(token, chat_id)
+    elif text == "🧪 Логи анализа":
+        send_analyzer_logs(token, chat_id)
     elif text == "🚀 Перезапустить":
-        send_restart(token, chat_id)
+        ask_restart(token, chat_id)
     elif text == "⏹ Остановить":
-        send_stop(token, chat_id)
+        ask_stop(token, chat_id)
     elif text:
         send_message(
             token, chat_id, "Выбери кнопку ниже.",
@@ -881,6 +1001,48 @@ def handle_callback(token, allowed_chat_id, callback):
         return
 
     data = callback.get("data", "")
+    if data.startswith("confirm:"):
+        parts = data.split(":", 2)
+        if len(parts) != 3:
+            api_call(token, "answerCallbackQuery", {
+                "callback_query_id": callback_id,
+            })
+            return
+        _, action, answer = parts
+        if answer == "no":
+            api_call(token, "answerCallbackQuery", {
+                "callback_query_id": callback_id,
+                "text": "Отменено",
+            })
+            send_message(
+                token, chat_id, "Действие отменено.",
+                reply_markup=main_keyboard())
+            return
+        if action == "restart":
+            api_call(token, "answerCallbackQuery", {
+                "callback_query_id": callback_id,
+                "text": "Перезапускаю...",
+            })
+            send_message(token, chat_id, "⏳ Перезапускаю сервис...")
+            send_message(
+                token, chat_id, restart_batch(),
+                reply_markup=main_keyboard(), parse_mode="HTML")
+        elif action == "stop":
+            api_call(token, "answerCallbackQuery", {
+                "callback_query_id": callback_id,
+                "text": "Останавливаю...",
+            })
+            send_message(token, chat_id, "⏳ Останавливаю сервис...")
+            send_message(
+                token, chat_id, stop_batch(),
+                reply_markup=main_keyboard(), parse_mode="HTML")
+        else:
+            api_call(token, "answerCallbackQuery", {
+                "callback_query_id": callback_id,
+                "text": "Неизвестное действие",
+            })
+        return
+
     if data == "clean:yes":
         api_call(token, "answerCallbackQuery", {
             "callback_query_id": callback_id,
@@ -951,6 +1113,7 @@ def watcher_loop(token, chat_id, stop_event):
     last_alive = None
     last_done = done_count()
     last_fail_count = len(failure_lines())
+    last_analyzer_fail_count = len(analyzer_failure_lines())
     last_update = datetime.min
 
     while not stop_event.is_set():
@@ -988,6 +1151,15 @@ def watcher_loop(token, chat_id, stop_event):
                 token, chat_id,
                 "⚠️ Новые ошибки:\n" + "\n".join(new_failures[-5:]))
             last_fail_count = len(failures)
+
+        analyzer_failures = analyzer_failure_lines()
+        if len(analyzer_failures) > last_analyzer_fail_count:
+            new_analyzer = analyzer_failures[last_analyzer_fail_count:]
+            send_message(
+                token, chat_id,
+                "⚠️ Новые ошибки анализатора:\n"
+                + "\n".join(new_analyzer[-5:]))
+        last_analyzer_fail_count = len(analyzer_failures)
 
         if alive and (now - last_update >= UPDATE_EVERY or done != last_done):
             send_message(

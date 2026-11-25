@@ -448,6 +448,7 @@ class Hypotheses9:
                 ON rel.run_id = '{{rid}}' AND rel.day_id = i.day_id
                AND rel.slot_id = 9 AND rel.subject_id = i.from_id AND rel.object_id = i.to_id
             WHERE i.run_id = '{{rid}}' AND i.day_id % 10 = 0
+            ORDER BY i.day_id, i.from_id, i.to_id
             LIMIT 200000
         """, label="H13", run_ids=self.sample_runs)
 
@@ -678,6 +679,7 @@ class Hypotheses9:
                     FROM interactions WHERE run_id = '{rid}'
                     GROUP BY a, b
                     HAVING last_day > 200
+                    ORDER BY cityHash64(a, b)
                     LIMIT 20000
                 """)
                 if not df_b.empty:
