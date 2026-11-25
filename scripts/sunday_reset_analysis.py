@@ -588,6 +588,10 @@ class SundayResetAnalyzer:
                 ax.text(bar.get_x() + bar.get_width() / 2,
                         bar.get_height() + 0.05,
                         f"{t:.2f} д.", ha="center", fontsize=12, fontweight="bold")
+        else:
+            ax.text(0.5, 0.5,
+                    "t½ не идентифицируется:\nкривая внутри недели\nнемонотонна (максимум на +2…+3)",
+                    transform=ax.transAxes, ha="center", va="center", fontsize=12)
         ax.set_title("Период полувосстановления (t½) после воскресного δ-сброса",
                      fontsize=13, fontweight="bold")
         ax.set_ylabel("Дней до полувосстановления")
