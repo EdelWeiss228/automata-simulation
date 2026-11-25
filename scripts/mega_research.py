@@ -1907,14 +1907,11 @@ class MegaResearch:
         print("  MEGA RESEARCH — 18 блоков анализа")
         print("═"*62 + "\n")
 
-        import shutil
         import os
         plots_dir = "data/plots"
-        if os.path.exists(plots_dir):
-            try:
-                shutil.rmtree(plots_dir)
-            except Exception as e:
-                print(f"Предупреждение при очистке {plots_dir}: {e}", flush=True)
+        # Не удаляем каталог целиком: в нём лежат графики других
+        # анализаторов (baseline, hypotheses, sunday, research, advanced).
+        # savefig перезаписывает только свои файлы.
         os.makedirs(plots_dir, exist_ok=True)
 
         meta = self.meta()
