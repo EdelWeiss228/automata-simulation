@@ -196,12 +196,12 @@ class Hypotheses9:
         baseline_end = 6     # классификация до первого воскресного сдвига
         profile_end = 140    # профиль по неделям в пределах 1-го семестра
         NEG_THR, POS_THR = -5.0, 5.0
-        axes_sum = " + ".join(EMOTION_AXES)
+        axes_avg = " + ".join(f"avg({e})" for e in EMOTION_AXES)
 
         # Классификация как в отдельном анализе воскресного сброса:
         # среднее по всем 7 осям за дни 1–6, до первого сброса.
         agent_bl = self.q(f"""
-            SELECT run_id, agent_id, avg(({axes_sum}) / 7.0) AS bl_mood
+            SELECT run_id, agent_id, ({axes_avg}) / 7.0 AS bl_mood
             FROM agent_states WHERE day_id BETWEEN 1 AND {baseline_end}
             GROUP BY run_id, agent_id
         """)
@@ -212,7 +212,7 @@ class Hypotheses9:
 
         df_week = self.q(f"""
             WITH baseline AS (
-                SELECT run_id, agent_id, avg(({axes_sum}) / 7.0) AS bm
+                SELECT run_id, agent_id, ({axes_avg}) / 7.0 AS bm
                 FROM agent_states WHERE day_id BETWEEN 1 AND {baseline_end}
                 GROUP BY run_id, agent_id
             )
