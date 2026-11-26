@@ -1,0 +1,8 @@
+[package]
+name = "automata-core"
+version = "0.1.0"
+edition = "2024"
+description = "Deterministic simulation core for the v3 social automata model"
+license = "MIT OR Apache-2.0"
+
+[dependencies]

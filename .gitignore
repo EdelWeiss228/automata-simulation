@@ -25,6 +25,9 @@ data/
 diplom.pdf
 scripts/*.json
 
+# Rust
+rust/target/
+
 # IDEs & System
 .DS_Store
 .vscode/
