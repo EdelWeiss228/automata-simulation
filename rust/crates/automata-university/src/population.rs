@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use automata_core::{AgentSpec, ArchetypeKind, Degree, DeterministicRng};
+use automata_core::{AgentSpec, ArchetypeKind, Degree, DeterministicRng, EmotionVector};
 
 pub const BACHELOR_FACULTIES: [&str; 5] = ["П", "Ф", "Р", "М", "Эк"];
 pub const MASTER_DIRECTIONS: [&str; 6] = ["ММ", "ПМ", "ПО", "ЭкМ", "РМ", "ГП"];
@@ -90,6 +90,11 @@ pub struct Student {
     pub archetype: ArchetypeKind,
     pub sensitivity: f32,
     pub sportiness: f32,
+    pub skip_tendency: f32,
+    /// Initial emotional profile.  v2's `EmotionPair` starts at
+    /// `randint(-15, 15)` per axis; the semester reset uses the wider
+    /// `[-30, 30]` range instead.
+    pub emotions: EmotionVector,
     pub group: String,
     /// Dense group index used by `automata_core::AgentSpec`.
     pub group_id: u32,
@@ -111,6 +116,7 @@ impl Student {
             self.degree,
         );
         spec.name = self.name.clone();
+        spec.emotions = Some(self.emotions);
         spec
     }
 }
@@ -133,6 +139,11 @@ pub struct Population {
     pub current_year: i32,
     config: PopulationConfig,
     rng: DeterministicRng,
+    /// Empirical archetype distribution of the initial bachelors/masters.
+    /// v2 freezes these after the first population and reuses them for every
+    /// later cohort, so new students preserve the original mix.
+    bachelor_rotation_weights: [u32; 9],
+    master_rotation_weights: [u32; 9],
 }
 
 impl Population {
@@ -144,7 +155,12 @@ impl Population {
             current_year: config.start_year,
             config,
             rng: DeterministicRng::new(seed),
+            bachelor_rotation_weights: [0; 9],
+            master_rotation_weights: [0; 9],
         };
+
+        let bachelor_weights = population.config.bachelor_weights;
+        let master_weights = population.config.master_weights;
 
         // Same nesting as `UniversityManager.create_university_agents`:
         // faculty -> enrollment year -> group -> student.
@@ -152,19 +168,47 @@ impl Population {
             for stream in 0..BACHELOR_STREAMS {
                 let enrollment_year = population.current_year - i32::from(stream);
                 let course_year = stream + 1;
-                population.add_bachelor_cohort_for_faculty(faculty, enrollment_year, course_year);
+                population.add_bachelor_cohort_for_faculty(
+                    faculty,
+                    enrollment_year,
+                    course_year,
+                    bachelor_weights,
+                );
             }
         }
 
         for direction in MASTER_DIRECTIONS {
             for course_year in 1..=MASTER_YEARS {
                 let enrollment_year = population.current_year - i32::from(course_year - 1);
-                population.add_master_cohort(direction, enrollment_year, course_year, 0);
+                population.add_master_cohort(
+                    direction,
+                    enrollment_year,
+                    course_year,
+                    0,
+                    master_weights,
+                );
             }
         }
 
+        population.bachelor_rotation_weights = count_archetypes(
+            population
+                .students
+                .iter()
+                .filter(|s| s.degree == Degree::Bachelor),
+        );
+        population.master_rotation_weights = count_archetypes(
+            population
+                .students
+                .iter()
+                .filter(|s| s.degree == Degree::Master),
+        );
+
         debug_assert_eq!(population.students.len(), INITIAL_TOTAL as usize);
         population
+    }
+
+    pub fn rng_state(&self) -> u64 {
+        self.rng.state()
     }
 
     pub fn total(&self) -> usize {
@@ -297,8 +341,11 @@ impl Population {
             }
         }
 
+        let bachelor_weights = self.bachelor_rotation_weights;
+        let master_weights = self.master_rotation_weights;
+
         for faculty in BACHELOR_FACULTIES {
-            self.add_bachelor_cohort_for_faculty(faculty, next_year, 1);
+            self.add_bachelor_cohort_for_faculty(faculty, next_year, 1, bachelor_weights);
             report.new_bachelors += BACHELOR_GROUPS_PER_STREAM as u32 * BACHELOR_GROUP_SIZE;
         }
 
@@ -308,7 +355,7 @@ impl Population {
             let filled = master_counts[direction];
             let to_add = MASTER_GROUP_SIZE - filled;
             if to_add > 0 {
-                self.add_master_cohort(direction, next_year, 1, filled);
+                self.add_master_cohort(direction, next_year, 1, filled, master_weights);
                 report.new_external_masters += to_add;
             }
         }
@@ -324,6 +371,7 @@ impl Population {
         faculty: &str,
         enrollment_year: i32,
         course_year: u8,
+        weights: [u32; 9],
     ) {
         let year_suffix = year_suffix(enrollment_year);
         for group_number in 1..=BACHELOR_GROUPS_PER_STREAM {
@@ -332,7 +380,7 @@ impl Population {
 
             for student_number in 1..=BACHELOR_GROUP_SIZE {
                 let string_id = format!("S-{group}-{student_number:02}");
-                let archetype = self.pick_archetype(self.config.bachelor_weights);
+                let archetype = self.pick_archetype(weights);
                 let student = self.make_student(
                     string_id,
                     archetype,
@@ -355,6 +403,7 @@ impl Population {
         enrollment_year: i32,
         course_year: u8,
         already_filled: u32,
+        weights: [u32; 9],
     ) {
         let group = master_group_id(direction, enrollment_year);
         let group_id = self.groups.intern(&group);
@@ -364,7 +413,7 @@ impl Population {
         for offset in 0..to_add {
             let student_number = already_filled + offset + 1;
             let string_id = format!("M-{group}-{student_number:02}");
-            let archetype = self.pick_archetype(self.config.master_weights);
+            let archetype = self.pick_archetype(weights);
             let student = self.make_student(
                 string_id,
                 archetype,
@@ -395,7 +444,9 @@ impl Population {
     ) -> Student {
         let sensitivity = self.config.sensitivity_min
             + (self.config.sensitivity_max - self.config.sensitivity_min) * self.rng.next_f32();
+        let emotions = EmotionVector::random(&mut self.rng, -15, 15);
         let sportiness = self.rng.next_f32();
+        let skip_tendency = 0.3 * self.rng.next_f32();
 
         Student {
             name: string_id.clone(),
@@ -403,6 +454,8 @@ impl Population {
             archetype,
             sensitivity,
             sportiness,
+            skip_tendency,
+            emotions,
             group,
             group_id,
             faculty,
@@ -463,6 +516,14 @@ pub fn all_group_ids(population: &Population) -> BTreeSet<String> {
         .iter()
         .map(|student| student.group.clone())
         .collect()
+}
+
+fn count_archetypes<'a>(students: impl Iterator<Item = &'a Student>) -> [u32; 9] {
+    let mut counts = [0u32; 9];
+    for student in students {
+        counts[student.archetype as usize] += 1;
+    }
+    counts
 }
 
 fn shuffle<T>(values: &mut [T], rng: &mut DeterministicRng) {

@@ -2,8 +2,15 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 use automata_core::{
-    AgentSpec, ArchetypeKind, Context, Degree, InitMode, RunReport, World, WorldConfig,
+    AgentSpec, ArchetypeKind, Context, Degree, InitMode, Outcome, RunReport, World, WorldConfig,
 };
+use automata_university::{University, UniversityConfig};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WorldKind {
+    Core,
+    University,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum OutputFormat {
@@ -13,6 +20,7 @@ enum OutputFormat {
 
 #[derive(Debug)]
 struct Options {
+    world: WorldKind,
     agents: usize,
     days: u32,
     seed: u64,
@@ -21,11 +29,14 @@ struct Options {
     archetype: Option<ArchetypeKind>,
     context: Context,
     format: OutputFormat,
+    start_year: i32,
+    master_chance: f32,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
+            world: WorldKind::Core,
             agents: 100,
             days: 30,
             seed: 42,
@@ -34,6 +45,8 @@ impl Default for Options {
             archetype: None,
             context: Context::Study,
             format: OutputFormat::KeyValue,
+            start_year: 2024,
+            master_chance: 0.3,
         }
     }
 }
@@ -53,6 +66,13 @@ fn main() -> ExitCode {
 fn run() -> Result<(), String> {
     let options = parse_args()?;
 
+    match options.world {
+        WorldKind::Core => run_core(&options),
+        WorldKind::University => run_university(&options),
+    }
+}
+
+fn run_core(options: &Options) -> Result<(), String> {
     let bachelor_count = options.agents.saturating_mul(1500) / 1620;
     let mut specs = Vec::with_capacity(options.agents);
     for index in 0..options.agents {
@@ -144,9 +164,131 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Default)]
+struct UniversitySummary {
+    days: u32,
+    sundays: u32,
+    rotations: u32,
+    interactions: u64,
+    successes: u64,
+    failures: u64,
+    refusals: u64,
+}
+
+fn run_university(options: &Options) -> Result<(), String> {
+    let config = UniversityConfig {
+        seed: options.seed,
+        start_year: options.start_year,
+        parallelism: options.threads,
+        init_mode: options.init,
+        master_chance: options.master_chance,
+        ..UniversityConfig::default()
+    };
+
+    let init_start = Instant::now();
+    let mut university = University::new(config);
+    let init_elapsed = init_start.elapsed();
+
+    let run_start = Instant::now();
+    let mut summary = UniversitySummary::default();
+    while summary.days < options.days {
+        let Some(day) = university.step_day() else {
+            break;
+        };
+        summary.days += 1;
+        summary.sundays += u32::from(day.is_sunday);
+        summary.rotations += u32::from(day.rotation.is_some());
+        summary.interactions += day.interactions.len() as u64;
+        for event in &day.interactions {
+            match event.outcome {
+                Outcome::Success => summary.successes += 1,
+                Outcome::Failure => summary.failures += 1,
+                Outcome::Refusal => summary.refusals += 1,
+            }
+        }
+    }
+    let run_elapsed = run_start.elapsed();
+
+    let init_ms = init_elapsed.as_secs_f64() * 1000.0;
+    let sim_ms = run_elapsed.as_secs_f64() * 1000.0;
+    let final_hash = university.state_hash();
+    let final_rng_state = university.rng.state();
+
+    match options.format {
+        OutputFormat::KeyValue => {
+            println!("model=automata-university/0.1.0");
+            println!("seed={}", options.seed);
+            println!("year={}", options.start_year);
+            println!("agents={}", university.len());
+            println!("bachelors={}", university.population.bachelors());
+            println!("masters={}", university.population.masters());
+            println!("days={}", summary.days);
+            println!("sundays={}", summary.sundays);
+            println!("rotations={}", summary.rotations);
+            println!("threads={}", options.threads);
+            println!("init={:?}", options.init);
+            println!("master_chance={:.4}", options.master_chance);
+            println!("init_ms={init_ms:.3}");
+            println!("sim_ms={sim_ms:.3}");
+            println!("interactions={}", summary.interactions);
+            println!("success={}", summary.successes);
+            println!("failure={}", summary.failures);
+            println!("refusal={}", summary.refusals);
+            println!("final_hash=0x{final_hash:016x}");
+            println!("final_rng_state=0x{final_rng_state:016x}");
+        }
+        OutputFormat::Csv => {
+            println!(
+                "model,seed,year,agents,bachelors,masters,days,sundays,rotations,threads,init,master_chance,init_ms,sim_ms,interactions,success,failure,refusal,final_hash,final_rng_state"
+            );
+            println!(
+                "automata-university/0.1.0,{},{},{},{},{},{},{},{},{},{:?},{:.4},{:.3},{:.3},{},{},{},{},0x{:016x},0x{:016x}",
+                options.seed,
+                options.start_year,
+                university.len(),
+                university.population.bachelors(),
+                university.population.masters(),
+                summary.days,
+                summary.sundays,
+                summary.rotations,
+                options.threads,
+                options.init,
+                options.master_chance,
+                init_ms,
+                sim_ms,
+                summary.interactions,
+                summary.successes,
+                summary.failures,
+                summary.refusals,
+                final_hash,
+                final_rng_state
+            );
+        }
+    }
+
+    Ok(())
+}
+
 fn parse_args() -> Result<Options, String> {
     let mut options = Options::default();
-    let mut args = std::env::args().skip(1);
+    let mut raw: Vec<String> = std::env::args().skip(1).collect();
+
+    if let Some(first) = raw.first() {
+        match first.to_lowercase().as_str() {
+            "core" | "prototype" => {
+                options.world = WorldKind::Core;
+                raw.remove(0);
+            }
+            "university" | "uni" => {
+                options.world = WorldKind::University;
+                raw.remove(0);
+            }
+            _ => {}
+        }
+    }
+
+    let mut args = raw.into_iter();
+    let mut init_set = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -168,6 +310,7 @@ fn parse_args() -> Result<Options, String> {
             }
             "--init" => {
                 options.init = parse_init(args.next())?;
+                init_set = true;
             }
             "--archetype" => {
                 options.archetype = parse_archetype(args.next())?;
@@ -178,8 +321,18 @@ fn parse_args() -> Result<Options, String> {
             "--format" => {
                 options.format = parse_format(args.next())?;
             }
+            "--year" => {
+                options.start_year = parse_i32(args.next(), "--year")?;
+            }
+            "--master-chance" => {
+                options.master_chance = parse_f32(args.next(), "--master-chance")?;
+            }
             other => return Err(format!("unknown argument: {other}")),
         }
+    }
+
+    if options.world == WorldKind::University && !init_set {
+        options.init = InitMode::Mixed;
     }
 
     if options.agents == 0 {
@@ -188,8 +341,25 @@ fn parse_args() -> Result<Options, String> {
     if options.days == 0 {
         return Err("--days must be positive".to_string());
     }
+    if !(0.0..=1.0).contains(&options.master_chance) {
+        return Err("--master-chance must be in [0, 1]".to_string());
+    }
 
     Ok(options)
+}
+
+fn parse_i32(value: Option<String>, name: &str) -> Result<i32, String> {
+    value
+        .ok_or_else(|| format!("{name} requires a value"))?
+        .parse()
+        .map_err(|_| format!("{name} must be an integer"))
+}
+
+fn parse_f32(value: Option<String>, name: &str) -> Result<f32, String> {
+    value
+        .ok_or_else(|| format!("{name} requires a value"))?
+        .parse()
+        .map_err(|_| format!("{name} must be a number"))
 }
 
 fn parse_usize(value: Option<String>, name: &str) -> Result<usize, String> {
@@ -258,21 +428,23 @@ fn parse_archetype(value: Option<String>) -> Result<Option<ArchetypeKind>, Strin
 
 fn print_usage() {
     println!(
-        "automata-cli — deterministic v3 core prototype\n\
+        "automata-cli — deterministic v3 runner\n\
          \n\
          Usage:\n\
-           cargo run --release -p automata-cli -- [options]\n\
+           cargo run --release -p automata-cli -- [core|university] [options]\n\
          \n\
          Options:\n\
-           --agents <n>       number of agents (default 100)\n\
-           --days <n>         simulated days (default 30)\n\
-           --seed <n>         RNG seed (default 42)\n\
-           --threads <n>      worker threads for independent phases (default 1)\n\
-           --init <mode>      empty | random | mixed (default empty)\n\
-           --archetype <name> homogeneous archetype, or mixed (default mixed)\n\
-           --context <name>   study | break | gym (default study)\n\
-           --format <name>    keyvalue | csv (default keyvalue)\n\
-           --help             print this help\n\
+           --agents <n>          number of prototype agents (default 100)\n\
+           --days <n>            simulated days (default 30; university horizon 1213)\n\
+           --seed <n>            RNG seed (default 42)\n\
+           --threads <n>         worker threads for independent phases (default 1)\n\
+           --init <mode>         empty | random | mixed (default empty; university: mixed)\n\
+           --archetype <name>    prototype archetype, or mixed (default mixed)\n\
+           --context <name>      prototype context: study | break | gym (default study)\n\
+           --year <yyyy>         university start year (default 2024)\n\
+           --master-chance <p>   share of bachelors continuing to a master (default 0.3)\n\
+           --format <name>       keyvalue | csv (default keyvalue)\n\
+           --help                print this help\n\
          \n\
          Key-value output is stable text suitable for a benchmark script.\n\
          CSV output is directly appendable to a machine-readable timings table."

@@ -188,9 +188,17 @@ impl World {
 
     /// Priority of `target` for `actor`, matching v2
     /// `InteractionStrategy.priority_score`.
+    ///
+    /// A zero relation means "no relation yet" in the dense v3 matrix.  v2
+    /// Python returns a neutral `0.5` in that case, *before* applying the
+    /// archetype transformations; leaving it at zero would give a non-neutral
+    /// `exp(0)`-based score to first-year students with an `Exp` transform.
     pub fn priority_score(&self, actor: usize, target: usize, context: Context) -> f32 {
         let config = self.agents[actor].archetype.config();
         let relation = self.relation(actor, target);
+        if relation.is_zero() {
+            return 0.5;
+        }
 
         let affinity = config.scoring[RelationAxis::Affinity.index()]
             .apply(f32::from(relation.get(RelationAxis::Affinity)) / 10.0);
@@ -498,6 +506,42 @@ impl World {
         }
     }
 
+    /// End-of-day maintenance in the exact v2 order.
+    ///
+    /// The university world has nine schedule slots and performs the phase
+    /// sequence once, after the last slot; the generic world calls the same
+    /// method from `step`.
+    pub fn daily_maintenance(&mut self) {
+        self.apply_relation_decay();
+        self.react_to_relations();
+        self.apply_emotion_decay();
+        self.react_to_emotions();
+        self.influence_emotions();
+    }
+
+    /// A Sunday in the university world: one random shift shared by all seven
+    /// axes of an agent, followed by the ordinary emotional decay.
+    ///
+    /// v2 draws one `randint(-30, 30)` per agent and adds it to every axis.
+    /// The shift is clamped to the legal emotional range by
+    /// `EmotionVector::set`.
+    pub fn sunday_shift(&mut self, min: i16, max: i16) {
+        for agent in &mut self.agents {
+            let delta = self.rng.next_i16_inclusive(min, max);
+            for axis in EmotionAxis::ALL {
+                let value = i32::from(agent.emotions.get(axis).get()) + i32::from(delta);
+                agent.emotions.set(
+                    axis,
+                    value.clamp(
+                        i32::from(crate::emotion::EMOTION_MIN),
+                        i32::from(crate::emotion::EMOTION_MAX),
+                    ) as i16,
+                );
+            }
+        }
+        self.apply_emotion_decay();
+    }
+
     /// One simulated day: daily decay/reactions, emotional influence, then one
     /// sequential interaction round.
     ///
@@ -505,11 +549,7 @@ impl World {
     /// neighbours of the current room/section, but the phase order stays the
     /// same.
     pub fn step(&mut self, context: Context) -> DayReport {
-        self.apply_relation_decay();
-        self.react_to_relations();
-        self.apply_emotion_decay();
-        self.react_to_emotions();
-        self.influence_emotions();
+        self.daily_maintenance();
 
         let mut interactions = Vec::new();
         let mut scores = Vec::with_capacity(self.agents.len().saturating_sub(1));
@@ -974,6 +1014,38 @@ mod tests {
         let from_harmony_to_nihility = world.refusal_chance(0, 1, Context::Study);
         let from_harmony_to_harmony = world.refusal_chance(0, 2, Context::Study);
         assert!(from_harmony_to_nihility > from_harmony_to_harmony);
+    }
+
+    #[test]
+    fn absent_relation_has_the_neutral_priority_of_python_v2() {
+        let specs = vec![
+            AgentSpec::new("A-1", ArchetypeKind::Harmony, 1.0, 0, 1, Degree::Bachelor),
+            AgentSpec::new("A-2", ArchetypeKind::Harmony, 1.0, 0, 1, Degree::Bachelor),
+        ];
+        let world = World::from_specs(specs, WorldConfig::default());
+        assert_eq!(world.priority_score(0, 1, Context::Study), 0.5);
+    }
+
+    #[test]
+    fn sunday_shift_is_deterministic_and_leaves_relations_alone() {
+        let config = WorldConfig {
+            seed: 2024,
+            ..WorldConfig::default()
+        };
+        let mut left = World::from_specs(specs(30, None), config.clone());
+        let mut right = World::from_specs(specs(30, None), config);
+        let relations_before = left.relations.clone();
+
+        left.sunday_shift(-30, 30);
+        right.sunday_shift(-30, 30);
+
+        assert_eq!(left.state_hash(), right.state_hash());
+        assert_eq!(left.relations, relations_before);
+        assert!(left.agents.iter().any(|agent| {
+            EmotionAxis::ALL
+                .iter()
+                .any(|&axis| agent.emotions.get(axis).get() != 0)
+        }));
     }
 
     #[test]

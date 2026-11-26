@@ -18,12 +18,20 @@ parallel phases.
 - `std::thread::scope` data parallelism over disjoint agent/relation chunks;
 - a deterministic FNV-1a state hash and a machine-readable CLI.
 
-`rust/crates/automata-university` now contains the academic calendar
-(1213 simulated days, 8 semesters, explicit weekdays) and the population
-structure (1620 people, 60 bachelor groups, 12 master cohorts, yearly
-rotation).  Seating, gym sections and the runtime bridge to `automata-core`
-are the next migration step, described in
-`../docs/v3-rust-migration.md`.
+`rust/crates/automata-university` now contains the full university world:
+
+- the academic calendar (1213 simulated days, 8 semesters, explicit weekdays);
+- the population structure (1620 people, 60 bachelor groups, 12 master cohorts,
+  yearly rotation with relation-preserving world rebuild);
+- the campus (25 lecture halls, 75 seminar rooms, corridor, gym with three
+  isolated sections);
+- six-day, four-pair schedules, including post-rotation cohorts;
+- softmax seating with at most 15 candidates and free-seat pools instead of
+  quadratic rescans;
+- the nine-slot day (`pair`, `break`, `pair`, `break`, `pair`, `break`,
+  `pair`, `gym`, `cleanup`), attendance/skip logic and Sunday rules;
+- room-level interaction topology (four-way neighbourhood, archetype
+  temperature, STOP weight) and a runtime bridge to `automata-core`.
 
 The web frontend will be a static SPA served by `automata-web`; the API
 contract and stack are also described in the migration document.
@@ -33,25 +41,34 @@ contract and stack are also described in the migration document.
 ```sh
 cargo test --workspace
 cargo test --release -p automata-core --test determinism -- --ignored
+cargo test --release -p automata-university full_horizon_matches -- --ignored
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-Run the prototype:
+Run the core prototype:
 
 ```sh
-cargo run --release -p automata-cli -- \
+cargo run --release -p automata-cli -- core \
   --agents 1620 --days 5 --seed 2024 --threads 8 --init empty
+```
+
+Run the university world (the full horizon is 1213 days):
+
+```sh
+cargo run --release -p automata-cli -- university \
+  --days 1213 --seed 42 --threads 8
 ```
 
 CSV output for a timing table:
 
 ```sh
-cargo run --release -p automata-cli -- \
-  --agents 1620 --days 5 --seed 2024 --threads 8 --init empty --format csv
+cargo run --release -p automata-cli -- university \
+  --days 1213 --seed 42 --threads 8 --format csv
 ```
 
-Benchmark harness (writes `bench-results.csv` by default):
+Benchmark harness for the core prototype (writes `bench-results.csv` by
+default):
 
 ```sh
 REPS=3 ./bench.sh
