@@ -18,9 +18,15 @@ parallel phases.
 - `std::thread::scope` data parallelism over disjoint agent/relation chunks;
 - a deterministic FNV-1a state hash and a machine-readable CLI.
 
-The university layer (calendar, groups, seating, gym, academic rotation,
-ClickHouse export) is the next migration step and is described in
+`rust/crates/automata-university` now contains the academic calendar
+(1213 simulated days, 8 semesters, explicit weekdays) and the population
+structure (1620 people, 60 bachelor groups, 12 master cohorts, yearly
+rotation).  Seating, gym sections and the runtime bridge to `automata-core`
+are the next migration step, described in
 `../docs/v3-rust-migration.md`.
+
+The web frontend will be a static SPA served by `automata-web`; the API
+contract and stack are also described in the migration document.
 
 ## Commands
 

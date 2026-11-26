@@ -2,5 +2,6 @@
 resolver = "2"
 members = [
     "crates/automata-core",
+    "crates/automata-university",
     "crates/automata-cli",
 ]
