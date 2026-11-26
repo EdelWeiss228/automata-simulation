@@ -131,7 +131,8 @@ python/
 
 Тесты: 25 unit + 3 integration; отдельный release-тест на 1620 агентов и
 2 дня. `cargo clippy --workspace --all-targets -- -D warnings` и
-`cargo fmt --check` проходят.
+`cargo fmt --check` проходят. Набор проверен на Rust 1.99.1 (версия сервера)
+и 1.100.0; ядро не имеет внешних зависимостей.
 
 ## 6. Семантика, которую фиксирует v3
 

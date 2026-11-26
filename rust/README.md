@@ -72,7 +72,8 @@ cargo test --release -p automata-core --test determinism -- --ignored
 
 ## Toolchain note
 
-The local prototype was built with Rust 1.100.0 (stable).  The server has Rust
-1.99.1.  The core crate has no external dependencies, so it builds even when
-crates.io is unavailable.  This is deliberate: the v2 server could not reach
-crates.io, and the kernel must not depend on network access.
+The local prototype was built with Rust 1.100.0 (stable) and the test suite was
+also run with Rust 1.99.1, which matches the server toolchain.  The core crate
+has no external dependencies, so it builds even when crates.io is unavailable.
+This is deliberate: the v2 server could not reach crates.io, and the kernel
+must not depend on network access.
