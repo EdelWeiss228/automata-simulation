@@ -250,7 +250,12 @@ pub fn run(options: &RunOptions) -> Result<RunOutcome, RunError> {
     };
     validate_manifest(&mut manifest, options)?;
 
-    if manifest.status()? == RunStatus::Completed {
+    let requested_days = if options.days == 0 {
+        manifest.days_total()?
+    } else {
+        options.days
+    };
+    if manifest.status()? == RunStatus::Completed && manifest.days_completed()? >= requested_days {
         let wall_seconds =
             manifest.f64_field("wall_seconds").unwrap_or(0.0) + started.elapsed().as_secs_f64();
         return Ok(outcome_from_manifest(&manifest, wall_seconds, true, true));
@@ -1251,6 +1256,37 @@ mod tests {
                 fs::read_to_string(baseline_directory.join(file)).expect("baseline");
             let resumed_text = fs::read_to_string(directory.join(file)).expect("resumed");
             assert_eq!(baseline_text, resumed_text, "{file} differs");
+        }
+
+        fs::remove_dir_all(&baseline_directory).unwrap();
+        fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[test]
+    fn completed_run_can_be_extended_to_a_longer_horizon() {
+        let baseline_directory = temporary_directory("extend-baseline");
+        let baseline = run(&short_options(&baseline_directory, 4)).expect("baseline");
+
+        let directory = temporary_directory("extend");
+        let short = run(&short_options(&directory, 2)).expect("short run");
+        assert!(short.completed);
+        assert_eq!(short.days_completed, 2);
+
+        let extended = run(&short_options(&directory, 4)).expect("extended run");
+        assert!(extended.completed);
+        assert_eq!(extended.days_completed, 4);
+        assert_eq!(extended.final_hash, baseline.final_hash);
+
+        for file in [
+            INTERACTIONS_FILE,
+            STATES_FILE,
+            RELATIONS_FILE,
+            REGISTRY_FILE,
+        ] {
+            let baseline_text =
+                fs::read_to_string(baseline_directory.join(file)).expect("baseline");
+            let extended_text = fs::read_to_string(directory.join(file)).expect("extended");
+            assert_eq!(baseline_text, extended_text, "{file} differs");
         }
 
         fs::remove_dir_all(&baseline_directory).unwrap();

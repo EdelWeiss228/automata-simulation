@@ -7,6 +7,7 @@
 //! `CLEANUP`, so the next day starts from the same state as an uninterrupted
 //! run.
 
+use std::collections::BTreeSet;
 use std::fmt;
 
 use automata_core::{
@@ -163,12 +164,18 @@ impl University {
             let id = reader.u32()?;
             groups.push((name, id));
         }
+        validate_group_entries(&groups)?;
+        let mut group_names = vec![None; group_count];
+        for (name, id) in &groups {
+            group_names[*id as usize] = Some(name.as_str());
+        }
 
         let student_count = reader.count(1_000_000)?;
         let mut students = Vec::with_capacity(student_count);
         for _ in 0..student_count {
             students.push(read_student(&mut reader)?);
         }
+        validate_student_groups(&students, &group_names)?;
 
         let world_config = read_world_config(&mut reader)?;
         let world_rng = reader.u64()?;
@@ -195,6 +202,7 @@ impl University {
             emotions.push(vector);
         }
 
+        let campus = Campus::new(config.start_year);
         let schedule_count = reader.count(1_000_000)?;
         let mut schedules = ScheduleBook::new();
         for _ in 0..schedule_count {
@@ -211,6 +219,13 @@ impl University {
                             )));
                         }
                     };
+                    if let Some(room) = &room
+                        && campus.room(room).is_none()
+                    {
+                        return Err(SnapshotError::InvalidData(format!(
+                            "schedule for {group} references unknown room {room}"
+                        )));
+                    }
                     schedule.set_pair(weekday, pair, room);
                 }
             }
@@ -287,7 +302,7 @@ impl University {
         let mut university = Self {
             world,
             population,
-            campus: Campus::new(config.start_year),
+            campus,
             schedules,
             calendar,
             config,
@@ -433,6 +448,53 @@ fn write_student(writer: &mut Writer, student: &Student) {
     writer.i32(student.enrollment_year);
     writer.u8(student.course_year);
     writer.u8(degree_id(student.degree));
+}
+
+fn validate_group_entries(groups: &[(String, u32)]) -> Result<(), SnapshotError> {
+    let mut names = BTreeSet::new();
+    let mut ids = BTreeSet::new();
+    for (name, id) in groups {
+        if !names.insert(name.as_str()) {
+            return Err(SnapshotError::InvalidData(format!(
+                "duplicate group name {name}"
+            )));
+        }
+        if !ids.insert(*id) {
+            return Err(SnapshotError::InvalidData(format!(
+                "duplicate group id {id}"
+            )));
+        }
+    }
+    if ids.iter().copied().ne(0..groups.len() as u32) {
+        return Err(SnapshotError::InvalidData(
+            "group ids must be dense starting at 0".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_student_groups(
+    students: &[Student],
+    group_names: &[Option<&str>],
+) -> Result<(), SnapshotError> {
+    for student in students {
+        match group_names.get(student.group_id as usize) {
+            Some(Some(name)) if *name == student.group.as_str() => {}
+            Some(Some(name)) => {
+                return Err(SnapshotError::InvalidData(format!(
+                    "student {} has group {} but group id {} is {name}",
+                    student.string_id, student.group, student.group_id
+                )));
+            }
+            _ => {
+                return Err(SnapshotError::InvalidData(format!(
+                    "student {} references unknown group id {}",
+                    student.string_id, student.group_id
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn read_student(reader: &mut Reader<'_>) -> Result<Student, SnapshotError> {
@@ -787,5 +849,36 @@ mod tests {
             University::from_snapshot(&bytes[..bytes.len() - 1]),
             Err(SnapshotError::UnexpectedEof { .. })
         ));
+    }
+
+    #[test]
+    fn group_validation_rejects_gaps_and_duplicates() {
+        assert!(validate_group_entries(&[("a".into(), 0), ("b".into(), 1)]).is_ok());
+        assert!(validate_group_entries(&[("a".into(), 0), ("b".into(), 2)]).is_err());
+        assert!(validate_group_entries(&[("a".into(), 0), ("a".into(), 1)]).is_err());
+        assert!(validate_group_entries(&[("a".into(), 0), ("b".into(), 0)]).is_err());
+    }
+
+    #[test]
+    fn student_group_validation_rejects_unknown_ids() {
+        let student = Student {
+            string_id: "S-1".to_string(),
+            name: "test".to_string(),
+            archetype: ArchetypeKind::Erudition,
+            sensitivity: 0.5,
+            sportiness: 0.5,
+            skip_tendency: 0.1,
+            emotions: EmotionVector::default(),
+            group: "G".to_string(),
+            group_id: 0,
+            faculty: "П".to_string(),
+            direction: None,
+            enrollment_year: 2024,
+            course_year: 1,
+            degree: Degree::Bachelor,
+        };
+        assert!(validate_student_groups(std::slice::from_ref(&student), &[Some("G")]).is_ok());
+        assert!(validate_student_groups(std::slice::from_ref(&student), &[Some("H")]).is_err());
+        assert!(validate_student_groups(std::slice::from_ref(&student), &[]).is_err());
     }
 }
