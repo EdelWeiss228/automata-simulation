@@ -124,6 +124,12 @@ impl ScheduleBook {
         self.schedules.keys().map(String::as_str)
     }
 
+    pub(crate) fn entries(&self) -> impl Iterator<Item = (&str, &WeekSchedule)> {
+        self.schedules
+            .iter()
+            .map(|(group, schedule)| (group.as_str(), schedule))
+    }
+
     /// Generates the schedules that exist on 1 September of the first year.
     ///
     /// Bachelors are built stream by stream: the four groups of a stream share

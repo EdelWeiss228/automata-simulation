@@ -7,4 +7,5 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 automata-core = { path = "../automata-core" }
+automata-io = { path = "../automata-io" }
 automata-university = { path = "../automata-university" }

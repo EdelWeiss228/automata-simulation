@@ -1,9 +1,9 @@
-# automata-core (v3 Rust prototype)
+# automata v3 Rust backend
 
-A dependency-free vertical slice of the v3 simulation kernel.  It is not a
-replacement for the frozen v2 batch yet; it exists to test the properties that
-matter for v3: typed state, deterministic execution, and thread-count-independent
-parallel phases.
+The Rust backend for v3: a dependency-free simulation kernel, the university
+world, and the I/O layer that writes resumable CSV/ClickHouse runs.  Python
+stays responsible for analytics and Telegram; the web frontend is still a
+separate stage.
 
 ## What is implemented
 
@@ -33,6 +33,20 @@ parallel phases.
 - room-level interaction topology (four-way neighbourhood, archetype
   temperature, STOP weight) and a runtime bridge to `automata-core`.
 
+`rust/crates/automata-io` contains the production I/O layer:
+
+- the 54-run v3 matrix with reserved ClickHouse numbers 55–108 and
+  deterministic UUIDv5 `run_id`s;
+- a durable `key=value` manifest with status, counters and checkpoint offsets;
+- streaming CSV writers with byte-offset truncation;
+- a std-only ClickHouse HTTP client (`INSERT ... FORMAT CSV`,
+  `SELECT ... FORMAT TSV`, idempotent `ALTER TABLE ... DELETE`);
+- a resumable single-scenario runner: snapshot every N days, rollback to the
+  last checkpoint, registry rebuild after a resume, `CLEANUP` states/relations
+  and per-slot interactions;
+- a sequential batch runner that skips completed scenarios, resumes failed or
+  interrupted ones, and writes a `batch.txt` summary.
+
 The web frontend will be a static SPA served by `automata-web`; the API
 contract and stack are also described in the migration document.
 
@@ -53,11 +67,19 @@ cargo run --release -p automata-cli -- core \
   --agents 1620 --days 5 --seed 2024 --threads 8 --init empty
 ```
 
-Run the university world (the full horizon is 1213 days):
+Run the university world in memory (the full horizon is 1213 days):
 
 ```sh
 cargo run --release -p automata-cli -- university \
   --days 1213 --seed 42 --threads 8
+```
+
+Continue a university snapshot, or write one after the run:
+
+```sh
+cargo run --release -p automata-cli -- university \
+  --snapshot-in snapshot.bin --days 100 --threads 8 \
+  --snapshot-out snapshot.bin
 ```
 
 CSV output for a timing table:
@@ -66,6 +88,35 @@ CSV output for a timing table:
 cargo run --release -p automata-cli -- university \
   --days 1213 --seed 42 --threads 8 --format csv
 ```
+
+Run one reserved v3 scenario with CSV/ClickHouse logging and resumable
+checkpoints:
+
+```sh
+cargo run --release -p automata-cli -- run \
+  --run-number 77 --output-dir data/v3/Run77_Uniform_Random_MIXED \
+  --days 1213 --threads 8 --checkpoint-every 30 --clickhouse
+```
+
+Run the whole 54-run matrix sequentially (completed runs are skipped on
+restart):
+
+```sh
+cargo run --release -p automata-cli -- batch \
+  --output-dir data/v3 --days 1213 --threads 8 \
+  --checkpoint-every 30 --clickhouse
+```
+
+`--clickhouse` reads `CLICKHOUSE_HOST`, `CLICKHOUSE_PORT`,
+`CLICKHOUSE_DATABASE`, `CLICKHOUSE_USER`, `CLICKHOUSE_PASSWORD` and
+`CLICKHOUSE_TIMEOUT_MS`; the password is never printed.  Without a reachable
+server the runner keeps writing CSV and warns, unless
+`--clickhouse-required` is set.  Use `--no-interactions`, `--no-states` or
+`--no-relations` for a state-only verification run.
+
+The full 1213-day runner was verified locally with `Run77_Uniform_Random_MIXED`
+and no detail logs: 4,294,325 contacts, 3 rotations, hash
+`0x79f5809385358043`, ~58 s including 30-day snapshots.
 
 Benchmark harness for the core prototype (writes `bench-results.csv` by
 default):

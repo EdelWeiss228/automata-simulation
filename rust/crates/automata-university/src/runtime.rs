@@ -12,6 +12,9 @@ use automata_core::{
     Outcome, Relation, World, WorldConfig,
 };
 
+mod snapshot;
+pub use snapshot::{SNAPSHOT_MAGIC, SNAPSHOT_VERSION, SnapshotError};
+
 use crate::calendar::{Calendar, CalendarDay, Date, TOTAL_DAYS, Weekday};
 use crate::campus::{CORRIDOR_ID, Campus, GYM_ID, GymSection, Room};
 use crate::interaction::{UniversityInteraction, interact_in_room};

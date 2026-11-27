@@ -1,0 +1,10 @@
+[package]
+name = "automata-io"
+version = "0.1.0"
+edition = "2024"
+description = "Run manifests, CSV and ClickHouse I/O for the v3 simulation"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+automata-core = { path = "../automata-core" }
+automata-university = { path = "../automata-university" }

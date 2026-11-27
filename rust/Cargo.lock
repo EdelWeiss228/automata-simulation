@@ -7,12 +7,21 @@ name = "automata-cli"
 version = "0.1.0"
 dependencies = [
  "automata-core",
+ "automata-io",
  "automata-university",
 ]
 
 [[package]]
 name = "automata-core"
 version = "0.1.0"
+
+[[package]]
+name = "automata-io"
+version = "0.1.0"
+dependencies = [
+ "automata-core",
+ "automata-university",
+]
 
 [[package]]
 name = "automata-university"

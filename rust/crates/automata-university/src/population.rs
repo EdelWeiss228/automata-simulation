@@ -53,6 +53,12 @@ impl GroupRegistry {
     pub fn iter(&self) -> impl Iterator<Item = (&str, u32)> {
         self.ids.iter().map(|(name, id)| (name.as_str(), *id))
     }
+
+    pub(crate) fn from_entries(entries: impl IntoIterator<Item = (String, u32)>) -> Self {
+        Self {
+            ids: entries.into_iter().collect(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -209,6 +215,34 @@ impl Population {
 
     pub fn rng_state(&self) -> u64 {
         self.rng.state()
+    }
+
+    pub(crate) fn config(&self) -> &PopulationConfig {
+        &self.config
+    }
+
+    pub(crate) fn rotation_weights(&self) -> ([u32; 9], [u32; 9]) {
+        (self.bachelor_rotation_weights, self.master_rotation_weights)
+    }
+
+    pub(crate) fn from_snapshot_parts(
+        students: Vec<Student>,
+        groups: GroupRegistry,
+        current_year: i32,
+        config: PopulationConfig,
+        rng_state: u64,
+        bachelor_rotation_weights: [u32; 9],
+        master_rotation_weights: [u32; 9],
+    ) -> Self {
+        Self {
+            students,
+            groups,
+            current_year,
+            config,
+            rng: DeterministicRng::new(rng_state),
+            bachelor_rotation_weights,
+            master_rotation_weights,
+        }
     }
 
     pub fn total(&self) -> usize {
