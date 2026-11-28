@@ -4,5 +4,6 @@ members = [
     "crates/automata-core",
     "crates/automata-university",
     "crates/automata-io",
+    "crates/automata-web",
     "crates/automata-cli",
 ]

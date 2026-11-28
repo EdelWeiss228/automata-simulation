@@ -118,6 +118,20 @@ The full 1213-day runner was verified locally with `Run77_Uniform_Random_MIXED`
 and no detail logs: 4,294,325 contacts, 3 rotations, hash
 `0x79f5809385358043`, ~58 s including 30-day snapshots.
 
+Start the read-only web API and dashboard:
+
+```sh
+cargo run --release -p automata-web -- \
+  --bind 127.0.0.1:8080 --data-dir data/v3
+```
+
+The server exposes `GET /api/health`, `/api/runs`, `/api/runs/<key>`,
+`/api/runs/<key>/reports`, `/api/events` (SSE), `/files/runs/<key>/<file>`,
+`/plots/<file>` and serves `web/dist` (or a built-in dashboard) at `/`.
+It never runs a simulation: long runs stay in `automata-cli`/systemd.
+`AUTOMATA_WEB_TOKEN` protects the API, files and plots with a bearer token;
+the dashboard itself is public so it can ask for the token.
+
 Benchmark harness for the core prototype (writes `bench-results.csv` by
 default):
 

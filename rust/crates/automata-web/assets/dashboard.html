@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>automata v3 — прогоны</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1117;
+      --panel: #161b22;
+      --panel-2: #1c2330;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --purple: #bc8cff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+    header .sub { color: var(--muted); font-size: 12px; }
+    header .spacer { flex: 1; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
+    .dot.ok { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .dot.err { background: var(--red); }
+    main { padding: 24px; max-width: 1500px; margin: 0 auto; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+    .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    .card .value { font-size: 24px; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    button, input {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 7px; padding: 7px 11px; font: inherit;
+    }
+    button { cursor: pointer; }
+    button:hover { border-color: var(--accent); }
+    input { min-width: 220px; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    th { color: var(--muted); font-size: 12px; font-weight: 600; background: var(--panel-2); position: sticky; top: 0; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: #1b2230; }
+    tbody tr:last-child td { border-bottom: none; }
+    .num { font-variant-numeric: tabular-nums; text-align: right; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid; }
+    .badge.completed { color: var(--green); border-color: #238636; background: #12261a; }
+    .badge.running { color: var(--yellow); border-color: #9e6a03; background: #2a2110; }
+    .badge.failed { color: var(--red); border-color: #da3633; background: #2a1214; }
+    .badge.pending { color: var(--muted); border-color: var(--border); background: #161b22; }
+    .progress { width: 120px; height: 6px; background: #21262d; border-radius: 999px; overflow: hidden; }
+    .progress > span { display: block; height: 100%; background: var(--accent); }
+    .hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); }
+    .detail { margin-top: 20px; display: none; }
+    .detail.visible { display: block; }
+    .detail h2 { font-size: 16px; margin: 0 0 10px; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 900px) { .detail-grid { grid-template-columns: 1fr; } }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; overflow: auto; }
+    pre { margin: 0; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); max-height: 420px; overflow: auto; }
+    .reports a { color: var(--accent); display: block; padding: 3px 0; }
+    .empty { color: var(--muted); padding: 24px; text-align: center; }
+    .error { color: var(--red); padding: 12px; border: 1px solid #da3633; background: #2a1214; border-radius: 8px; margin-bottom: 12px; display: none; }
+    .error.visible { display: block; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="dot" id="status-dot"></span>
+    <div>
+      <h1>automata v3</h1>
+      <div class="sub" id="subtitle">загрузка прогонов…</div>
+    </div>
+    <div class="spacer"></div>
+    <input id="token" type="password" placeholder="токен доступа (если задан)" autocomplete="off">
+    <button id="refresh">Обновить</button>
+  </header>
+
+  <main>
+    <div class="error" id="error"></div>
+
+    <div class="cards">
+      <div class="card"><div class="label">Всего прогонов</div><div class="value" id="total">—</div></div>
+      <div class="card"><div class="label">Завершено</div><div class="value" id="completed">—</div></div>
+      <div class="card"><div class="label">В работе</div><div class="value" id="running">—</div></div>
+      <div class="card"><div class="label">Взаимодействий</div><div class="value" id="interactions">—</div></div>
+    </div>
+
+    <div class="toolbar">
+      <span class="sub" id="updated">—</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>№</th>
+          <th>Сценарий</th>
+          <th>Статус</th>
+          <th>Прогресс</th>
+          <th class="num">Дни</th>
+          <th class="num">Контакты</th>
+          <th class="num">Успех</th>
+          <th class="num">Отказ</th>
+          <th>Хеш</th>
+          <th class="num">Время, с</th>
+        </tr>
+      </thead>
+      <tbody id="runs">
+        <tr><td colspan="10" class="empty">Прогонов пока нет</td></tr>
+      </tbody>
+    </table>
+
+    <section class="detail" id="detail">
+      <h2 id="detail-title"></h2>
+      <div class="detail-grid">
+        <div class="panel"><pre id="manifest"></pre></div>
+        <div class="panel reports" id="reports"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const state = { runs: [], selected: null };
+    const $ = (id) => document.getElementById(id);
+    const tokenInput = $("token");
+    tokenInput.value = localStorage.getItem("automata-token") || "";
+    tokenInput.addEventListener("change", () => {
+      localStorage.setItem("automata-token", tokenInput.value.trim());
+      refresh();
+    });
+
+    function authQuery() {
+      const token = tokenInput.value.trim();
+      return token ? "?token=" + encodeURIComponent(token) : "";
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[character]));
+    }
+
+    function formatNumber(value) {
+      return Number(value || 0).toLocaleString("ru-RU");
+    }
+
+    function formatTime(unix) {
+      if (!unix) return "—";
+      return new Date(unix * 1000).toLocaleString("ru-RU");
+    }
+
+    function statusBadge(status) {
+      const labels = {
+        completed: "завершён", running: "в работе", failed: "ошибка", pending: "ожидает"
+      };
+      return `<span class="badge ${escapeHtml(status)}">${escapeHtml(labels[status] || status)}</span>`;
+    }
+
+    async function api(path) {
+      const response = await fetch(path + authQuery(), { cache: "no-store" });
+      if (response.status === 401) throw new Error("Нужен токен доступа (введите его справа сверху)");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    }
+
+    async function refresh() {
+      try {
+        const data = await api("/api/runs");
+        state.runs = data.runs || [];
+        render();
+        $("error").classList.remove("visible");
+        $("status-dot").className = "dot ok";
+        $("subtitle").textContent = `${state.runs.length} прогонов · данные из манифестов`;
+      } catch (error) {
+        $("error").textContent = error.message;
+        $("error").classList.add("visible");
+        $("status-dot").className = "dot err";
+        $("subtitle").textContent = "нет связи с API";
+      }
+    }
+
+    function render() {
+      const runs = state.runs;
+      $("total").textContent = runs.length;
+      $("completed").textContent = runs.filter((run) => run.status === "completed").length;
+      $("running").textContent = runs.filter((run) => run.status === "running").length;
+      $("interactions").textContent = formatNumber(runs.reduce((sum, run) => sum + run.interactions, 0));
+      $("updated").textContent = "обновлено " + new Date().toLocaleTimeString("ru-RU");
+
+      const body = $("runs");
+      if (!runs.length) {
+        body.innerHTML = '<tr><td colspan="10" class="empty">Прогонов пока нет</td></tr>';
+        return;
+      }
+      body.innerHTML = runs.map((run) => `
+        <tr data-key="${escapeHtml(run.run_number)}">
+          <td class="num">${run.run_number}</td>
+          <td>${escapeHtml(run.scenario_name)}</td>
+          <td>${statusBadge(run.status)}</td>
+          <td><div class="progress" title="${Math.round(run.progress * 100)}%"><span style="width:${Math.round(run.progress * 100)}%"></span></div></td>
+          <td class="num">${run.days_completed} / ${run.days_total}</td>
+          <td class="num">${formatNumber(run.interactions)}</td>
+          <td class="num">${formatNumber(run.successes)}</td>
+          <td class="num">${formatNumber(run.refusals)}</td>
+          <td><span class="hash">${escapeHtml(run.final_hash)}</span></td>
+          <td class="num">${Number(run.wall_seconds || 0).toFixed(1)}</td>
+        </tr>
+      `).join("");
+      body.querySelectorAll("tr[data-key]").forEach((row) => {
+        row.addEventListener("click", () => showDetail(row.dataset.key));
+      });
+    }
+
+    async function showDetail(key) {
+      state.selected = key;
+      try {
+        const data = await api("/api/runs/" + encodeURIComponent(key));
+        const run = data.run;
+        $("detail").classList.add("visible");
+        $("detail-title").textContent = `${run.run_number} · ${run.scenario_name}`;
+        $("manifest").textContent = JSON.stringify(data.manifest, null, 2);
+        const reports = await api("/api/runs/" + encodeURIComponent(key) + "/reports");
+        const items = reports.reports || [];
+        $("reports").innerHTML = items.length
+          ? items.map((report) => `<a href="${escapeHtml(report.url)}${authQuery()}" target="_blank" rel="noopener">${escapeHtml(report.name)} <span class="hash">(${formatNumber(report.bytes)} Б)</span></a>`).join("")
+          : '<div class="empty">Отчётов пока нет</div>';
+      } catch (error) {
+        $("error").textContent = error.message;
+        $("error").classList.add("visible");
+      }
+    }
+
+    $("refresh").addEventListener("click", refresh);
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>

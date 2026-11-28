@@ -205,6 +205,12 @@ impl Manifest {
         self.fields.get(key).map(String::as_str)
     }
 
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.fields
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+    }
+
     pub fn set(&mut self, key: impl Into<String>, value: impl Into<String>) {
         self.fields.insert(key.into(), value.into());
     }
