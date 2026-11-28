@@ -112,11 +112,16 @@ cargo run --release -p automata-cli -- batch \
 `CLICKHOUSE_TIMEOUT_MS`; the password is never printed.  Without a reachable
 server the runner keeps writing CSV and warns, unless
 `--clickhouse-required` is set.  Use `--no-interactions`, `--no-states` or
-`--no-relations` for a state-only verification run.
+`--no-relations` for a state-only verification run, and `--no-csv` for a
+ClickHouse-only batch where the CSV mirror would not fit on disk.
 
 The full 1213-day runner was verified locally with `Run77_Uniform_Random_MIXED`
 and no detail logs: 4,294,325 contacts, 3 rotations, hash
 `0x79f5809385358043`, ~58 s including 30-day snapshots.
+
+The first production run, `Run55_Erudition_EMPTY` (seed 42, EMPTY), wrote
+1.7 GB of CSV and all ClickHouse tables: 4,229,700 contacts, 3 rotations,
+hash `0x52d5455802abff2f`, 223 s with 8 threads and 30-day checkpoints.
 
 Start the read-only web API and dashboard:
 

@@ -37,6 +37,7 @@ pub struct BatchOptions {
     pub log_interactions: bool,
     pub log_states: bool,
     pub log_relations: bool,
+    pub csv_enabled: bool,
     /// Restrict the batch to these run numbers.  `None` means 55–108.
     pub run_numbers: Option<Vec<u16>>,
 }
@@ -58,6 +59,7 @@ impl BatchOptions {
             log_interactions: true,
             log_states: true,
             log_relations: true,
+            csv_enabled: true,
             run_numbers: None,
         }
     }
@@ -188,6 +190,7 @@ pub fn run_batch(options: &BatchOptions) -> Result<BatchOutcome, BatchError> {
         run_options.log_interactions = options.log_interactions;
         run_options.log_states = options.log_states;
         run_options.log_relations = options.log_relations;
+        run_options.csv_enabled = options.csv_enabled;
 
         match runner::run(&run_options) {
             Ok(outcome) => outcomes.push(outcome),

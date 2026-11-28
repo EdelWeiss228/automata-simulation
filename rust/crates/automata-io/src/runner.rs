@@ -126,6 +126,9 @@ pub struct RunOptions {
     pub log_interactions: bool,
     pub log_states: bool,
     pub log_relations: bool,
+    /// Write the CSV mirror next to ClickHouse.  Disable for large batches
+    /// where ClickHouse is the authoritative store.
+    pub csv_enabled: bool,
     pub clickhouse: Option<ClickHouseConfig>,
     pub clickhouse_required: bool,
     pub verbose: bool,
@@ -144,6 +147,7 @@ impl RunOptions {
             log_interactions: true,
             log_states: true,
             log_relations: true,
+            csv_enabled: true,
             clickhouse: None,
             clickhouse_required: false,
             verbose: true,
@@ -446,10 +450,12 @@ impl Session {
         if self.manifest.days_completed()? == 0 && self.options.log_states {
             let mut buffer = String::new();
             append_states(&self.university, &self.run_id_text, 0, 0, &mut buffer);
-            self.states_csv.write_raw(&buffer)?;
-            self.states_csv.flush()?;
-            self.manifest
-                .set_u64("csv_states_bytes", self.states_csv.len());
+            if self.options.csv_enabled {
+                self.states_csv.write_raw(&buffer)?;
+                self.states_csv.flush()?;
+                self.manifest
+                    .set_u64("csv_states_bytes", self.states_csv.len());
+            }
             if let Some(client) = &self.clickhouse {
                 client.insert("agent_states", &STATE_COLUMNS_FULL, &buffer)?;
             }
@@ -523,18 +529,20 @@ impl Session {
                 }
             }
 
-            if self.options.log_interactions {
-                self.interactions_csv.write_raw(&interaction_buffer)?;
+            if self.options.csv_enabled {
+                if self.options.log_interactions {
+                    self.interactions_csv.write_raw(&interaction_buffer)?;
+                }
+                if self.options.log_states {
+                    self.states_csv.write_raw(&state_buffer)?;
+                }
+                if self.options.log_relations {
+                    self.relations_csv.write_raw(&relation_buffer)?;
+                }
+                self.interactions_csv.flush()?;
+                self.states_csv.flush()?;
+                self.relations_csv.flush()?;
             }
-            if self.options.log_states {
-                self.states_csv.write_raw(&state_buffer)?;
-            }
-            if self.options.log_relations {
-                self.relations_csv.write_raw(&relation_buffer)?;
-            }
-            self.interactions_csv.flush()?;
-            self.states_csv.flush()?;
-            self.relations_csv.flush()?;
 
             if let Some(client) = &self.clickhouse {
                 if self.options.log_interactions {
@@ -718,10 +726,12 @@ impl Session {
         if buffer.is_empty() {
             return Ok(());
         }
-        self.registry_csv.write_raw(&buffer)?;
-        self.registry_csv.flush()?;
-        self.manifest
-            .set_u64("csv_registry_bytes", self.registry_csv.len());
+        if self.options.csv_enabled {
+            self.registry_csv.write_raw(&buffer)?;
+            self.registry_csv.flush()?;
+            self.manifest
+                .set_u64("csv_registry_bytes", self.registry_csv.len());
+        }
         if let Some(client) = &self.clickhouse {
             client.insert("agent_registry", &REGISTRY_COLUMNS, &buffer)?;
         }
@@ -1290,6 +1300,31 @@ mod tests {
         }
 
         fs::remove_dir_all(&baseline_directory).unwrap();
+        fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[test]
+    fn csv_can_be_disabled_for_clickhouse_only_runs() {
+        let directory = temporary_directory("no-csv");
+        let mut options = short_options(&directory, 2);
+        options.csv_enabled = false;
+        let outcome = run(&options).expect("run");
+        assert!(outcome.completed);
+
+        for file in [
+            INTERACTIONS_FILE,
+            STATES_FILE,
+            RELATIONS_FILE,
+            REGISTRY_FILE,
+        ] {
+            let text = fs::read_to_string(directory.join(file)).expect("csv");
+            assert_eq!(
+                text.lines().count(),
+                1,
+                "{file} should contain only the header"
+            );
+        }
+
         fs::remove_dir_all(&directory).unwrap();
     }
 

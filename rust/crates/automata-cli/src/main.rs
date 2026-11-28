@@ -52,6 +52,7 @@ struct Options {
     log_interactions: bool,
     log_states: bool,
     log_relations: bool,
+    csv_enabled: bool,
 }
 
 impl Default for Options {
@@ -81,6 +82,7 @@ impl Default for Options {
             log_interactions: true,
             log_states: true,
             log_relations: true,
+            csv_enabled: true,
         }
     }
 }
@@ -343,6 +345,7 @@ fn run_one_scenario(options: &Options) -> Result<(), String> {
     run_options.log_interactions = options.log_interactions;
     run_options.log_states = options.log_states;
     run_options.log_relations = options.log_relations;
+    run_options.csv_enabled = options.csv_enabled;
     if options.clickhouse || options.clickhouse_required {
         run_options.clickhouse = Some(ClickHouseConfig::from_env());
     }
@@ -370,6 +373,7 @@ fn run_batch(options: &Options) -> Result<(), String> {
     batch.log_interactions = options.log_interactions;
     batch.log_states = options.log_states;
     batch.log_relations = options.log_relations;
+    batch.csv_enabled = options.csv_enabled;
     batch.run_numbers = options.run_numbers.clone();
     if options.clickhouse || options.clickhouse_required {
         batch.clickhouse = Some(ClickHouseConfig::from_env());
@@ -520,6 +524,9 @@ fn parse_args() -> Result<Options, String> {
             }
             "--no-relations" => {
                 options.log_relations = false;
+            }
+            "--no-csv" => {
+                options.csv_enabled = false;
             }
             other => return Err(format!("unknown argument: {other}")),
         }
@@ -742,6 +749,7 @@ fn print_usage() {
            --no-interactions     skip the interactions CSV/table\n\
            --no-states           skip the daily emotion CSV/table\n\
            --no-relations        skip the daily relation CSV/table\n\
+           --no-csv              ClickHouse-only run (no CSV mirror)\n\
          \n\
          Key-value output is stable text suitable for a benchmark script.\n\
          CSV output is directly appendable to a machine-readable timings table."
