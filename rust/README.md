@@ -132,6 +132,18 @@ It never runs a simulation: long runs stay in `automata-cli`/systemd.
 `AUTOMATA_WEB_TOKEN` protects the API, files and plots with a bearer token;
 the dashboard itself is public so it can ask for the token.
 
+Build the React/Vite frontend (source in `web/`, output in `web/dist/`):
+
+```sh
+cd web
+npm install
+npm run build
+```
+
+For development, `npm run dev` proxies `/api`, `/files` and `/plots` to
+`127.0.0.1:8080`; run `automata-web` in another terminal.  Without a built
+`web/dist`, the Rust binary serves its embedded dashboard instead.
+
 Benchmark harness for the core prototype (writes `bench-results.csv` by
 default):
 

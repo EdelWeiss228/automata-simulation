@@ -28,6 +28,10 @@ scripts/*.json
 # Rust
 rust/target/
 
+# Web
+web/node_modules/
+web/dist/
+
 # IDEs & System
 .DS_Store
 .vscode/
